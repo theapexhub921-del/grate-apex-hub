@@ -6,6 +6,7 @@ import { Alert, Platform, Share, StyleSheet, View } from 'react-native';
 import { Text } from '@/components/ui/text';
 
 import { Avatar } from '@/components/ui/avatar';
+import { PersonAvatar } from '@/components/social/profile-card';
 import { VerifiedBadge } from '@/components/ui/verified-badge';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
@@ -236,7 +237,7 @@ export function CommunityPostsFeed({ authorId, showComposer = true }: { authorId
         <View style={styles.postDetailSheet}>
           {selectedPost ? <PostCard post={selectedPost} socialPeople={social.people} ownId={user?.id ?? social.userId} ownName={displayName || 'You'} verticalActions onOpen={() => {}} onLike={() => void like(selectedPost)} onComment={() => void openPost(selectedPost)} onReshare={() => void repost(selectedPost)} onShare={() => void sharePost(selectedPost)} onReport={() => report('post', selectedPost.id, `post by ${selectedPost.author_name ? `@${selectedPost.author_name}` : 'a learner'}`)} onDelete={() => confirmDeletePost(selectedPost)} /> : null}
           <View style={styles.commentSheet}>
-          {comments.map((comment) => { const author = social.people.find((person) => person.userId === comment.author_id); return <View key={comment.id} style={styles.comment}><View style={styles.commentHead}><Text style={styles.commentAuthor}>{comment.author_id === social.userId ? 'You' : author ? personName(author) : comment.author_name ? `@${comment.author_name}` : 'Username pending'}</Text><Button label="Report" variant="ghost" size="sm" onPress={() => report('comment', comment.id, `comment by ${comment.author_name ? `@${comment.author_name}` : 'a learner'}`)} /></View><Text style={styles.body}>{comment.body}</Text></View>; })}
+          {comments.map((comment) => { const author = social.people.find((person) => person.userId === comment.author_id); return <View key={comment.id} style={styles.comment}><View style={styles.commentHead}><View style={styles.commentWho}><PersonAvatar uid={comment.author_id} uri={author?.avatarUrl ?? null} name={author ? personName(author) : comment.author_name ?? 'Learner'} size={26} /><Text style={styles.commentAuthor}>{comment.author_id === social.userId ? 'You' : author ? personName(author) : comment.author_name ? `@${comment.author_name}` : 'Username pending'}</Text><VerifiedBadge username={comment.author_name} uid={comment.author_id} size={13} /></View><Button label="Report" variant="ghost" size="sm" onPress={() => report('comment', comment.id, `comment by ${comment.author_name ? `@${comment.author_name}` : 'a learner'}`)} /></View><Text style={styles.body}>{comment.body}</Text></View>; })}
           {!comments.length ? <Text style={styles.muted}>Be the first to comment.</Text> : null}
           <MentionInput people={social.people} value={commentDraft} onChangeText={setCommentDraft} maxLength={2000} placeholder="Add a comment…" placeholderTextColor={colors.textTertiary} accessibilityLabel="Write a comment" style={styles.input} />
           <Button label="Comment" size="sm" onPress={() => void sendComment()} loading={busy} disabled={!commentDraft.trim() || busy} />
@@ -272,7 +273,7 @@ function PostCard({ post, socialPeople, ownId, ownName, onOpen, onLike, onCommen
     <Card style={[styles.postCard, verticalActions && styles.postDetailCard]}>
       <View style={verticalActions ? styles.postDetailLayout : undefined}>
       <View style={verticalActions ? styles.postDetailContent : styles.postContent}>
-      <View style={styles.postHead}><Interactive onPress={() => router.push(post.author_id && post.author_id !== ownId ? routes.profile(post.author_id) : ('/profile' as never))} accessibilityRole="link" accessibilityLabel={`View ${name}'s profile`} style={styles.postAuthor}><Avatar uri={friend?.avatarUrl ?? null} name={name} size={42} ring="subtle" /><View style={styles.flex}><View style={styles.nameRow}><Text style={styles.author}>{name}</Text><VerifiedBadge username={post.author_name} uid={post.author_id} /></View><Text style={styles.muted}>{new Date(post.created_at).toLocaleString()}</Text></View></Interactive>{post.reshared_post_id ? <Pill label="Reposted" /> : null}{post.author_id === ownId ? <Button label="Delete" size="sm" variant="ghost" icon={<Icon name="trash" size={16} color={colors.error} />} onPress={onDelete} accessibilityLabel="Delete post" /> : null}</View>
+      <View style={styles.postHead}><View style={styles.postAuthor}><PersonAvatar uid={post.author_id} uri={friend?.avatarUrl ?? null} name={name} size={42} ring="subtle" /><Interactive onPress={() => router.push(post.author_id && post.author_id !== ownId ? routes.profile(post.author_id) : ('/profile' as never))} accessibilityRole="link" accessibilityLabel={`View ${name}'s profile`} style={styles.flex}><View style={styles.nameRow}><Text style={styles.author}>{name}</Text><VerifiedBadge username={post.author_name} uid={post.author_id} /></View><Text style={styles.muted}>{new Date(post.created_at).toLocaleString()}</Text></Interactive></View>{post.reshared_post_id ? <Pill label="Reposted" /> : null}{post.author_id === ownId ? <Button label="Delete" size="sm" variant="ghost" icon={<Icon name="trash" size={16} color={colors.error} />} onPress={onDelete} accessibilityLabel="Delete post" /> : null}</View>
       {post.body ? <Interactive onPress={onOpen} accessibilityRole="button" accessibilityLabel="Open post" style={styles.postBodyOpen}><Text style={styles.body}>{post.body}</Text></Interactive> : null}
       {post.reshared_post_id ? (
         <View style={styles.reshareBox}>
@@ -344,6 +345,7 @@ function createStyles(colors: ThemeColors) {
     comment: { gap: 4, paddingVertical: 7, borderBottomWidth: 1, borderBottomColor: colors.divider },
     commentAuthor: { ...Type.caption, fontWeight: '800', color: colors.primaryText },
     commentHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+    commentWho: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 8 },
     empty: { gap: 9, alignItems: 'center', padding: 20 },
     emptyTitle: { ...Type.title3, color: colors.text, textAlign: 'center' },
     errorCard: { gap: 8 },

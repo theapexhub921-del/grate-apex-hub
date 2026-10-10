@@ -342,6 +342,9 @@ const emerald: ThemeColors = {
 };
 export const Colors = { light, dark, apex, violet, black, pink, emerald };
 
+/** Read-receipt blues (messages): the one that stands out most on the bubble is used. */
+export const ReadReceiptBlues = ['#53BDEB', '#BFE9FF', '#1D8CF8', '#0A4FA8'] as const;
+
 export type ColorSchemeName = keyof typeof Colors;
 export type ThemeColor = keyof ThemeColors;
 

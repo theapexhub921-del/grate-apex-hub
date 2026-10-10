@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { Avatar } from '@/components/ui/avatar';
+import { PersonAvatar } from '@/components/social/profile-card';
 import { VerifiedBadge } from '@/components/ui/verified-badge';
 import { Interactive } from '@/components/ui/interactive';
 import { Text } from '@/components/ui/text';
@@ -65,13 +66,13 @@ export function FeedSideRail() {
         const done = followed.includes(person.userId);
         return (
           <View key={person.userId} style={styles.person}>
-            <Interactive onPress={() => router.push(routes.profile(person.userId))} accessibilityRole="link" accessibilityLabel={`View ${personName(person)}'s profile`} style={styles.meLink}>
-              <Avatar uri={person.avatarUrl} name={personName(person)} size={36} />
-              <View style={styles.flex}>
+            <View style={styles.meLink}>
+              <PersonAvatar uid={person.userId} uri={person.avatarUrl} name={personName(person)} size={36} />
+              <Interactive onPress={() => router.push(routes.profile(person.userId))} accessibilityRole="link" accessibilityLabel={`View ${personName(person)}'s profile`} style={styles.flex}>
                 <View style={styles.nameRow}><Text style={styles.personName} numberOfLines={1}>{person.username ?? personName(person)}</Text><VerifiedBadge username={person.username} uid={person.userId} size={13} /></View>
                 <Text style={styles.sub} numberOfLines={1}>{person.reason ?? 'Suggested for you'}</Text>
-              </View>
-            </Interactive>
+              </Interactive>
+            </View>
             <Interactive onPress={() => void follow(person)} disabled={done} accessibilityRole="button" accessibilityLabel={done ? 'Following' : `Follow ${personName(person)}`} style={styles.textButton}>
               <Text style={[styles.link, { color: done ? colors.textTertiary : colors.primaryText }]}>{done ? 'Following' : person.relationship === 'incoming' ? 'Follow back' : 'Follow'}</Text>
             </Interactive>

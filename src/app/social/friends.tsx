@@ -4,7 +4,8 @@ import { StyleSheet, Switch, View } from 'react-native';
 import { Text, TextInput } from '@/components/ui/text';
 
 import { BackLink } from '@/components/learning/nav-bits';
-import { Avatar } from '@/components/ui/avatar';
+import { PersonAvatar, PersonLink } from '@/components/social/profile-card';
+import { VerifiedBadge } from '@/components/ui/verified-badge';
 import { Button } from '@/components/ui/button';
 import { Pill } from '@/components/ui/pill';
 import { PageHeader, Screen } from '@/components/ui/screen';
@@ -321,12 +322,12 @@ function PersonRow({ person, first, compact }: { person: SocialPerson; first: bo
 
   return (
     <View style={[styles.row, !first && styles.rowDivider]}>
-      <Avatar uri={person.avatarUrl} name={name} size={compact ? 38 : 44} ring={person.relationship === 'friends' ? 'subtle' : 'none'} status={person.isOnline ? 'online' : null} />
-      <View style={styles.rowInfo}>
-        <Text style={styles.rowName} numberOfLines={1}>{name}</Text>
+      <PersonAvatar uid={person.userId} uri={person.avatarUrl} name={name} size={compact ? 38 : 44} ring={person.relationship === 'friends' ? 'subtle' : 'none'} status={person.isOnline ? 'online' : null} />
+      <PersonLink uid={person.userId} label={name} style={styles.rowInfo}>
+        <View style={styles.nameLine}><Text style={styles.rowName} numberOfLines={1}>{name}</Text><VerifiedBadge username={person.username} uid={person.userId} size={14} /></View>
         <Text style={styles.rowDetail} numberOfLines={1}>{detail}</Text>
         {error ? <Text style={styles.error}>{error}</Text> : null}
-      </View>
+      </PersonLink>
       {actions}
     </View>
   );
@@ -376,6 +377,7 @@ function createStyles(colors: ThemeColors) {
     row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 16 },
     rowDivider: { borderTopWidth: 1, borderTopColor: colors.divider },
     rowInfo: { flex: 1, minWidth: 0 },
+    nameLine: { flexDirection: 'row', alignItems: 'center', gap: 5, minWidth: 0 },
     rowName: { fontSize: 15, fontWeight: '700', color: colors.text },
     rowDetail: { fontSize: 13, color: colors.textSecondary, marginTop: 2 },
     actions: { flexDirection: 'row', alignItems: 'center', gap: 8 },

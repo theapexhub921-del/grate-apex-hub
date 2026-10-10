@@ -3,7 +3,8 @@ import { StyleSheet, View } from 'react-native';
 import { Text } from '@/components/ui/text';
 
 import { BackLink } from '@/components/learning/nav-bits';
-import { Avatar } from '@/components/ui/avatar';
+import { PersonAvatar } from '@/components/social/profile-card';
+import { VerifiedBadge } from '@/components/ui/verified-badge';
 import { Button } from '@/components/ui/button';
 import { Card, Interactive } from '@/components/ui/interactive';
 import { PageHeader, Screen } from '@/components/ui/screen';
@@ -32,9 +33,9 @@ export default function MessagesScreen() {
           accessibilityLabel={`Message ${personName(friend)}`}
           style={styles.friend}
         >
-          <Avatar uri={friend.avatarUrl} name={personName(friend)} size={46} ring="subtle" />
+          <PersonAvatar uid={friend.userId} uri={friend.avatarUrl} name={personName(friend)} size={46} ring="subtle" />
           <View style={styles.friendCopy}>
-            <Text style={styles.name}>{personName(friend)}</Text>
+            <View style={styles.nameLine}><Text style={styles.name}>{personName(friend)}</Text><VerifiedBadge username={friend.username} uid={friend.userId} size={14} /></View>
             <Text style={styles.detail}>{friend.username ? `@${friend.username}` : 'Username pending'}</Text>
           </View>
           <Text style={[styles.open, { color: colors.primaryText }]}>Message ›</Text>
@@ -54,6 +55,7 @@ function createStyles(colors: ThemeColors) {
   return StyleSheet.create({
     friend: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderRadius: 16, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, marginBottom: 8 },
     friendCopy: { flex: 1, gap: 3 },
+    nameLine: { flexDirection: 'row', alignItems: 'center', gap: 5 },
     name: { ...Type.headline, color: colors.text },
     detail: { ...Type.caption, color: colors.textSecondary },
     open: { ...Type.caption, fontWeight: '800' },

@@ -3,7 +3,7 @@ import { router, useFocusEffect } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
 import { Text } from '@/components/ui/text';
 
-import { Avatar } from '@/components/ui/avatar';
+import { PersonAvatar, PersonLink } from '@/components/social/profile-card';
 import { Button } from '@/components/ui/button';
 import { Card, Interactive } from '@/components/ui/interactive';
 import { Pill } from '@/components/ui/pill';
@@ -85,8 +85,8 @@ export function WeeklyLeagueCard() {
         return (
           <View key={entry.user_id} style={[styles.leagueRow, entry.is_viewer && styles.leagueMe]}>
           <Text style={styles.place}>{entry.league_position}</Text>
-            <Avatar uri={entry.avatar_url} name={name} size={30} />
-            <Text style={[styles.name, entry.is_viewer && styles.success]} numberOfLines={1}>{name}</Text>
+            <PersonAvatar uid={entry.user_id} uri={entry.avatar_url} name={name} size={30} />
+            <PersonLink uid={entry.is_viewer ? null : entry.user_id} label={name} style={styles.nameBox}><Text style={[styles.name, entry.is_viewer && styles.success]} numberOfLines={1}>{name}</Text></PersonLink>
             <Text style={styles.score}>{entry.lifetime_xp} XP</Text>
           </View>
         );
@@ -206,6 +206,7 @@ function createStyles(colors: ThemeColors) {
     leagueRow: { minHeight: 40, flexDirection: 'row', alignItems: 'center', gap: 9, paddingHorizontal: 6 },
     leagueMe: { borderRadius: Radius.md, backgroundColor: colors.primarySubtle },
     place: { ...Type.caption, width: 22, color: colors.textTertiary, textAlign: 'center' },
+    nameBox: { flex: 1, minWidth: 0 },
     name: { ...Type.caption, color: colors.text, flex: 1 }, score: { ...Type.caption, color: colors.textSecondary, fontWeight: '800' },
     challengeList: { gap: 8, marginTop: 6 },
     challengeRow: { borderTopWidth: 1, borderTopColor: colors.divider, paddingTop: 10 },

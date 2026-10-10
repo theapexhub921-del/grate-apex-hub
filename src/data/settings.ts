@@ -59,6 +59,8 @@ type SettingsData = {
   friendRequestPermission: MessagingPermission;
   discoverable: boolean;
   shareOnlineStatus: boolean;
+  /** Show and send read receipts (blue ticks) in messages. */
+  readReceipts: boolean;
   answerBounceEnabled: boolean;
   /** The original app's theme (The Originals; Hybrid when its family is 'originals'). */
   legacyTheme: string;
@@ -89,12 +91,13 @@ const defaultSettings: SettingsData = {
   friendRequestPermission: 'everyone',
   discoverable: true,
   shareOnlineStatus: false,
+  readReceipts: true,
   answerBounceEnabled: true,
   legacyTheme: 'dark', // the original app's default
   themeFamily: null,
 };
 
-type PrivacySettings = Pick<SettingsData, 'profileVisibility' | 'activityVisible' | 'messagingPermission' | 'friendRequestPermission' | 'discoverable' | 'shareOnlineStatus'>;
+type PrivacySettings = Pick<SettingsData, 'profileVisibility' | 'activityVisible' | 'messagingPermission' | 'friendRequestPermission' | 'discoverable' | 'shareOnlineStatus' | 'readReceipts'>;
 const defaultPrivacySettings: PrivacySettings = {
   profileVisibility: defaultSettings.profileVisibility,
   activityVisible: defaultSettings.activityVisible,
@@ -102,6 +105,7 @@ const defaultPrivacySettings: PrivacySettings = {
   friendRequestPermission: defaultSettings.friendRequestPermission,
   discoverable: defaultSettings.discoverable,
   shareOnlineStatus: defaultSettings.shareOnlineStatus,
+  readReceipts: defaultSettings.readReceipts,
 };
 let cachedPrivacySettings: PrivacySettings = { ...defaultPrivacySettings };
 
@@ -114,6 +118,7 @@ function getPrivacySnapshot(): PrivacySettings {
       friendRequestPermission: settings.friendRequestPermission,
       discoverable: settings.discoverable,
       shareOnlineStatus: settings.shareOnlineStatus,
+      readReceipts: settings.readReceipts,
     };
   }
   return cachedPrivacySettings;
@@ -181,6 +186,7 @@ async function loadSettings() {
       friendRequestPermission: data?.friendRequestPermission === 'friends' ? 'friends' : 'everyone',
       discoverable: data?.discoverable !== false,
       shareOnlineStatus: data?.shareOnlineStatus === true,
+      readReceipts: data?.readReceipts !== false,
       answerBounceEnabled: data?.answerBounceEnabled !== false,
       legacyTheme: isLegacyThemeId(data?.legacyTheme) ? data.legacyTheme : defaultSettings.legacyTheme,
       // (Before 2026-10-10 only Hybrid had a family: 'originals' meant legacy.)
@@ -234,6 +240,7 @@ async function saveSettings() {
               friendRequestPermission: settings.friendRequestPermission,
               discoverable: settings.discoverable,
               shareOnlineStatus: settings.shareOnlineStatus,
+              readReceipts: settings.readReceipts,
             },
           },
           updatedAt: Date.now(),
@@ -305,6 +312,7 @@ export async function syncSettingsFromAccount(userId: string) {
             : settings.friendRequestPermission,
       discoverable: typeof privacy?.discoverable === 'boolean' ? privacy.discoverable : settings.discoverable,
       shareOnlineStatus: privacy?.shareOnlineStatus === true,
+      readReceipts: privacy?.readReceipts !== false,
       answerBounceEnabled:
         typeof notifications?.answerBounceEnabled === 'boolean'
           ? notifications.answerBounceEnabled
@@ -342,12 +350,18 @@ export async function setPrivacyPreference<
     | 'messagingPermission'
     | 'friendRequestPermission'
     | 'discoverable'
-    | 'shareOnlineStatus',
+    | 'shareOnlineStatus'
+    | 'readReceipts',
 >(key: K, value: SettingsData[K]) {
   await ensureSettingsLoaded();
   settings = { ...settings, [key]: value };
   notify();
   await saveSettings();
+  if (key === 'readReceipts') {
+    const userId = auth.currentUser?.uid;
+    // Others' apps read this: read receipts apply only when both share them.
+    if (userId) await setDoc(doc(db, 'users', userId), { readReceipts: value }, { merge: true }).catch(() => {});
+  }
   if (key === 'activityVisible') {
     const userId = auth.currentUser?.uid;
     if (userId) {

@@ -2,7 +2,7 @@ import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { Avatar } from '@/components/ui/avatar';
+import { PersonAvatar } from '@/components/social/profile-card';
 import { VerifiedBadge } from '@/components/ui/verified-badge';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
@@ -76,7 +76,7 @@ export function LeagueCard() {
               style={[styles.row, row.isMe && styles.rowMe]}
             >
               <Text style={styles.place}>{position}</Text>
-              <Avatar name={row.username ?? '?'} size={30} />
+              <PersonAvatar uid={row.userId} name={row.username ?? '?'} size={30} />
               <Text style={[styles.name, row.isMe && styles.nameMe]} numberOfLines={1}>{row.isMe ? 'You' : row.username ? `@${row.username}` : 'Learner'}</Text>
               <VerifiedBadge username={row.username} uid={row.userId} size={13} />
               {zone === 'promoted' ? <Icon name="chevronUp" size={14} color={colors.success} strokeWidth={2.6} /> : zone === 'relegated' ? <Icon name="chevronDown" size={14} color={colors.error} strokeWidth={2.6} /> : null}

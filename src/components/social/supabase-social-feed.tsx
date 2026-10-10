@@ -9,6 +9,7 @@ import Svg, { Circle, Defs, LinearGradient, Stop } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Avatar } from '@/components/ui/avatar';
+import { PersonAvatar } from '@/components/social/profile-card';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
 import { Card } from '@/components/ui/interactive';
@@ -314,7 +315,7 @@ function ActivityCard({ item }: { item: FriendActivity }) {
   const styles = useThemedStyles(createStyles);
   return (
     <Card style={styles.activityCard}>
-      <Avatar uri={item.avatarUrl} name={item.name} size={42} ring="subtle" />
+      <PersonAvatar uid={item.userId} uri={item.avatarUrl} name={item.name} size={42} ring="subtle" />
       <View style={styles.activityBody}>
         <Text style={styles.activityText}><Text style={styles.name}>{item.name}</Text> {activityText(item)}</Text>
         <Text style={styles.when}>{timeAgo(item.at)}</Text>

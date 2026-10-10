@@ -8,6 +8,7 @@ import { AchievementWatcher } from '@/components/achievements/achievement-watche
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import AppTabs from '@/components/app-tabs';
 import { AppUpdateWatcher } from '@/components/app-update-watcher';
+import { ProfileCardHost } from '@/components/social/profile-card';
 import { CoinGiftSync } from '@/components/coin-gift-sync';
 import { ExperienceSync } from '@/components/experience/experience-sync';
 import { LearningSync } from '@/components/learning/learning-sync';
@@ -179,6 +180,7 @@ export default function TabLayout() {
               <LearningSync />
               <CoinGiftSync />
               <AppUpdateWatcher />
+              <ProfileCardHost />
               <AchievementWatcher />
               <DeviceNotificationBridge />
             </AppGuard>

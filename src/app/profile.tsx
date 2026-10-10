@@ -10,6 +10,7 @@ import { VerifiedBadge } from '@/components/ui/verified-badge';
 import { AchievementBadge } from '@/components/achievements/achievement-badge';
 import { ApexCoinWalletCard } from '@/components/apex-coin-wallet-card';
 import { AvatarPicker } from '@/components/avatar/avatar-picker';
+import { PersonAvatar, PersonLink } from '@/components/social/profile-card';
 import { AnimatedNumber } from '@/components/ui/animated-number';
 import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -143,11 +144,11 @@ export default function ProfileScreen() {
       />
       {friends.length ? friends.slice(0, 3).map((friend) => (
         <View key={friend.userId} style={styles.friendRow}>
-          <Avatar uri={friend.avatarUrl} name={personName(friend)} size={40} status={friend.isOnline ? 'online' : null} />
-          <View style={styles.friendText}>
-            <Text style={styles.friendName}>{personName(friend)}</Text>
+          <PersonAvatar uid={friend.userId} uri={friend.avatarUrl} name={personName(friend)} size={40} status={friend.isOnline ? 'online' : null} />
+          <PersonLink uid={friend.userId} label={personName(friend)} style={styles.friendText}>
+            <View style={styles.nameLine}><Text style={styles.friendName}>{personName(friend)}</Text><VerifiedBadge username={friend.username} uid={friend.userId} size={14} /></View>
             <Text style={styles.friendHandle}>{`${friend.username ? `Username: @${friend.username}` : 'Username: —'}${friend.isOnline ? ' · Online' : ''}`}</Text>
-          </View>
+          </PersonLink>
           {friend.totalXp !== null ? <Text style={styles.friendXp}>{friend.totalXp} XP</Text> : null}
         </View>
       )) : (
@@ -297,13 +298,13 @@ function RecommendedFriendRow({ person }: { person: SocialRecommendation }) {
   return (
     <View style={styles.recommendationWrap}>
       <View style={styles.friendRow}>
-        <Avatar uri={person.avatarUrl} name={personName(person)} size={40} />
-        <View style={styles.friendText}>
-          <Text style={styles.friendName} numberOfLines={1}>{personName(person)}</Text>
+        <PersonAvatar uid={person.userId} uri={person.avatarUrl} name={personName(person)} size={40} />
+        <PersonLink uid={person.userId} label={personName(person)} style={styles.friendText}>
+          <View style={styles.nameLine}><Text style={styles.friendName} numberOfLines={1}>{personName(person)}</Text><VerifiedBadge username={person.username} uid={person.userId} size={14} /></View>
           <Text style={styles.friendHandle} numberOfLines={1}>
             {`${person.username ? `Username: @${person.username}` : 'Username: —'}${person.sameClass ? ' · Same class' : person.sharedConnections ? ` · ${person.sharedConnections} mutual ${person.sharedConnections === 1 ? 'connection' : 'connections'}` : ''}`}
           </Text>
-        </View>
+        </PersonLink>
         <Button label={sent ? 'Requested' : 'Add'} size="sm" variant={sent ? 'secondary' : 'primary'} onPress={() => void addFriend()} loading={busy} disabled={sent || busy} />
       </View>
       {error ? <Text style={styles.recommendationError}>{error}</Text> : null}
@@ -394,6 +395,7 @@ function createStyles(colors: ThemeColors) {
     noMargin: { marginBottom: 0 },
     friendRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 3 },
     friendText: { flex: 1, minWidth: 0, gap: 2 },
+    nameLine: { flexDirection: 'row', alignItems: 'center', gap: 5, minWidth: 0 },
     friendName: { fontSize: 13.5, fontWeight: '800', color: colors.text },
     friendHandle: { fontSize: 11.5, color: colors.textTertiary },
     friendXp: { fontSize: 11.5, fontWeight: '800', color: colors.accentText },

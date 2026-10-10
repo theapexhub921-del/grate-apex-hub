@@ -614,3 +614,58 @@ export async function getStreakFreezeBalance(): Promise<{ available: number }> {
 export async function recordStreakActivityWithFreeze(todayKey: any): Promise<number> {
   return 1;
 }
+
+// ─── Read receipts and presence (sent ✓ · delivered ✓✓ · read ✓✓ blue) ─────
+// The chat document's `seen` map (the original app's read receipts) says when
+// each member last opened the chat; the other member's `appActiveAt` (written
+// by their app while it is open) says whether a message could have arrived.
+
+export type MessageStatus = 'sent' | 'delivered' | 'read';
+export type ConversationMeta = {
+  otherId: string | null;
+  /** When the other member last opened this chat (ms), if read receipts apply. */
+  otherSeenAt: number | null;
+  /** When the other member's app was last open (ms). */
+  otherActiveAt: number | null;
+  /** Shown only when they share it (Settings → Privacy). */
+  otherOnline: boolean;
+  otherLastSeen: number | null;
+};
+
+const millisOf = (value: unknown) => {
+  const v = value as { toMillis?: () => number } | number | null | undefined;
+  if (typeof v === 'number') return v;
+  return v && typeof v.toMillis === 'function' ? v.toMillis() : null;
+};
+
+export async function loadConversationMeta(conversationId: string, mine: { readReceipts: boolean; shareOnlineStatus: boolean }): Promise<ConversationMeta> {
+  const me = await signedInUserId();
+  const chat = (await getDoc(doc(db, 'chats', conversationId)).catch(() => null))?.data() ?? {};
+  const otherId = ((chat.members ?? []) as string[]).find((member) => member !== me) ?? null;
+  const other = otherId ? (await getDoc(doc(db, 'users', otherId)).catch(() => null))?.data() ?? {} : {};
+  const theirReceipts = other.readReceipts !== false;
+  const lastSeen = typeof other.lastSeen === 'number' ? other.lastSeen : null;
+  return {
+    otherId,
+    // Like other messaging apps: read receipts show only when both share them.
+    otherSeenAt: mine.readReceipts && theirReceipts && otherId ? millisOf((chat.seen ?? {})[otherId]) : null,
+    otherActiveAt: typeof other.appActiveAt === 'number' ? other.appActiveAt : null,
+    // Online and last seen are shown only to learners who share their own.
+    otherOnline: mine.shareOnlineStatus && other.isOnline === true && lastSeen !== null && Date.now() - lastSeen < 2 * 60_000,
+    otherLastSeen: mine.shareOnlineStatus ? lastSeen : null,
+  };
+}
+
+export function messageStatus(message: { created_at: string }, meta: ConversationMeta): MessageStatus {
+  const at = Date.parse(message.created_at);
+  if (meta.otherSeenAt !== null && meta.otherSeenAt >= at) return 'read';
+  if ((meta.otherActiveAt !== null && meta.otherActiveAt >= at) || meta.otherOnline) return 'delivered';
+  return 'sent';
+}
+
+/** Marks the chat as read by me (only when my read receipts are on). */
+export async function markConversationSeen(conversationId: string, readReceipts: boolean) {
+  if (!readReceipts) return;
+  const me = await signedInUserId();
+  await updateDoc(doc(db, 'chats', conversationId), { [`seen.${me}`]: serverTimestamp() }).catch(() => {});
+}

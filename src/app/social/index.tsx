@@ -6,7 +6,7 @@ import Svg, { Circle, Defs, LinearGradient, Line, Path, Stop } from 'react-nativ
 
 import { AnimatedNumber } from '@/components/ui/animated-number';
 import { Button } from '@/components/ui/button';
-import { Avatar } from '@/components/ui/avatar';
+import { PersonAvatar, PersonLink } from '@/components/social/profile-card';
 import { IconButton } from '@/components/ui/icon-button';
 import { NotificationBell } from '@/components/notifications';
 import { Icon, type IconName } from '@/components/ui/icon';
@@ -157,7 +157,7 @@ export default function SocialScreen() {
           {board.slice(0, 6).map((entry, index) => (
             <View key={entry.id} style={styles.boardRow}>
               <Text style={styles.boardPlace}>{index + 1}</Text>
-              <Text style={[styles.boardName, entry.me && styles.boardMe]} numberOfLines={1}>{entry.name}</Text>
+              <PersonLink uid={entry.me ? null : entry.id} label={entry.name} style={styles.boardNameBox}><Text style={[styles.boardName, entry.me && styles.boardMe]} numberOfLines={1}>{entry.name}</Text></PersonLink>
               <Text style={styles.boardXp}>{entry.xp} XP</Text>
             </View>
           ))}
@@ -182,8 +182,8 @@ export default function SocialScreen() {
       </View>
       {friends.length ? friends.map((friend) => (
         <View key={friend.userId} style={styles.friendStreakRow}>
-          <Avatar uri={friend.avatarUrl} name={personName(friend)} size={36} ring={friend.streak ? 'gold' : 'subtle'} />
-          <Text style={styles.boardName} numberOfLines={1}>{personName(friend)}</Text>
+          <PersonAvatar uid={friend.userId} uri={friend.avatarUrl} name={personName(friend)} size={36} ring={friend.streak ? 'gold' : 'subtle'} />
+          <PersonLink uid={friend.userId} label={personName(friend)} style={styles.boardNameBox}><Text style={styles.boardName} numberOfLines={1}>{personName(friend)}</Text></PersonLink>
           <Text style={styles.boardXp}>{friend.streak ?? 0} days</Text>
         </View>
       )) : <Text style={styles.note}>Connect with classmates to see their current learning streaks here.</Text>}
@@ -312,6 +312,7 @@ function createStyles(colors: ThemeColors) {
     boardLabel: { fontSize: 11, fontWeight: '800', letterSpacing: 0.8, color: colors.textSecondary },
     boardRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
     boardPlace: { ...Type.numeral, fontSize: 13, width: 18, color: colors.textTertiary },
+    boardNameBox: { flex: 1, minWidth: 0 },
     boardName: { flex: 1, minWidth: 0, fontSize: 14, fontWeight: '600', color: colors.text },
     boardMe: { fontWeight: '800', color: colors.primaryText },
     boardXp: { ...Type.numeral, fontSize: 13, color: colors.textSecondary },
