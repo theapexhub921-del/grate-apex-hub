@@ -13,6 +13,7 @@ import { collection, doc, getDoc, getDocs, limit, query, setDoc, where } from 'f
 
 import { getLeagueOutcome, type LeagueOutcome } from '@/data/ranks';
 import { auth, db } from '@/lib/firebase';
+import { getProgressSnapshot, waitForProgressSync } from '@/data/progress';
 
 export const LEAGUE_TIERS = [
   { name: 'Bronze', emoji: '🥉', color: '#C07A3C' },
@@ -27,7 +28,7 @@ export const LEAGUE_TIERS = [
   { name: 'Diamond', emoji: '💎', color: '#4FD1E8' },
 ] as const;
 
-export type LeagueEntry = { week: string; tier: number; startXp: number; prev?: { week: string; tier: number; weeklyXp: number; position: number; size: number; outcome: LeagueOutcome } };
+export type LeagueEntry = { week: string; tier: number; startXp: number; weeklyXp?: number; prev?: { week: string; tier: number; weeklyXp: number; position: number; size: number; outcome: LeagueOutcome } };
 export type LeagueRow = { userId: string; username: string | null; weeklyXp: number; isMe: boolean };
 
 /** Monday 00:00 (local) of the week containing `time`, as 'YYYY-MM-DD'. */
@@ -80,7 +81,9 @@ async function tierRows(week: string, tier: number, me: string): Promise<LeagueR
   for (const item of live) {
     const entry = item.data().league as LeagueEntry;
     const now = xp.get(item.id);
-    rows.set(item.id, { userId: item.id, username: (item.data().username as string) ?? now?.username ?? null, weeklyXp: Math.max(0, (now?.xp ?? 0) - (Number(entry.startXp) || 0)), isMe: item.id === me });
+    // A start point of 0 with no weekly figure is an entry made before XP had loaded: count 0 until that learner's app corrects it, never their lifetime XP.
+    const trusted = Number(entry.startXp) > 0 || typeof entry.weeklyXp === 'number';
+    rows.set(item.id, { userId: item.id, username: (item.data().username as string) ?? now?.username ?? null, weeklyXp: trusted ? Math.max(0, (now?.xp ?? 0) - (Number(entry.startXp) || 0)) : 0, isMe: item.id === me });
   }
   for (const item of moved?.docs ?? []) {
     const prev = (item.data().league as LeagueEntry).prev!;
@@ -116,7 +119,18 @@ export async function loadLeague(): Promise<LeagueView> {
     entry = { week, tier: nextTier(entry.tier, outcome), startXp: myXp, prev: { week: entry.week, tier: entry.tier, weeklyXp, position, size: ordered.length, outcome } };
     await setDoc(ref, { league: entry }, { merge: true });
   }
-  const rows = standings(await tierRows(week, entry.tier, uid));
-  if (!rows.some((row) => row.isMe)) rows.push({ userId: uid, username: mine.username ?? null, weeklyXp: Math.max(0, myXp - entry.startXp), isMe: true });
+  // My weekly XP comes from my own XP history (earned since Monday), so it is
+  // never mixed up with lifetime XP; the start point others use is corrected to
+  // match (it was 0 for anyone who joined before their XP had loaded).
+  await waitForProgressSync().catch(() => {});
+  const monday = new Date(); monday.setHours(0, 0, 0, 0); monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+  const ledgerWeekly = getProgressSnapshot().xpLedger.filter((item) => item.at >= monday.getTime()).reduce((sum, item) => sum + Math.max(0, item.amount), 0);
+  const fixedStart = Math.max(0, myXp - ledgerWeekly);
+  if (myXp > 0 && (fixedStart !== entry.startXp || entry.weeklyXp !== ledgerWeekly)) {
+    entry = { ...entry, startXp: fixedStart, weeklyXp: ledgerWeekly };
+    await setDoc(ref, { league: entry }, { merge: true }).catch(() => {});
+  }
+  const rows = standings((await tierRows(week, entry.tier, uid)).map((row) => (row.isMe ? { ...row, weeklyXp: ledgerWeekly } : row)));
+  if (!rows.some((row) => row.isMe)) rows.push({ userId: uid, username: mine.username ?? null, weeklyXp: ledgerWeekly, isMe: true });
   return { week, tier: entry.tier, endsAt: weekEnds(), rows: standings(rows), prev: entry.prev && entry.prev.week !== week ? entry.prev : null };
 }

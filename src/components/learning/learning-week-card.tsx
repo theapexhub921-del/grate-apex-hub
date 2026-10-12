@@ -99,7 +99,7 @@ function Stat({ icon, value, label }: { icon: IconName; value: number; label: st
     <View style={styles.stat}>
       <Icon name={icon} size={15} color={gold ? colors.accentText : colors.primaryText} filled={gold} />
       <AnimatedNumber value={value} style={styles.value} />
-      <Text style={styles.statLabel}>{label}</Text>
+      <Text style={styles.statLabel} numberOfLines={1}>{label}</Text>
     </View>
   );
 }
@@ -111,7 +111,7 @@ function createStyles(colors: ThemeColors) {
     title: { ...Type.title3, color: colors.text },
     note: { fontSize: 12.5, lineHeight: 18, color: colors.textSecondary },
     stats: { flexDirection: 'row', gap: 8 },
-    stat: { flex: 1, minWidth: 0, gap: 4, padding: 12, borderRadius: 14, backgroundColor: colors.surfaceMuted },
+    stat: { flex: 1, minWidth: 0, gap: 4, paddingVertical: 10, paddingHorizontal: 8, borderRadius: 14, backgroundColor: colors.surfaceMuted },
     value: { ...Type.numeral, fontSize: 20, color: colors.text },
     statLabel: { fontSize: 11, fontWeight: '700', color: colors.textSecondary },
     chart: { height: 116, gap: 6 },

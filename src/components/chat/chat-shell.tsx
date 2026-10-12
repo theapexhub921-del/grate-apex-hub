@@ -14,24 +14,30 @@ import { useTheme, useThemedStyles } from '@/hooks/use-theme';
 
 // Messages like Instagram / WhatsApp on the web: on a computer, the chats list
 // on the left and the open chat on the right; on a phone, one at a time.
-export function ChatShell({ friendId, name }: { friendId?: string | null; name?: string | null }) {
+export function ChatShell({ friendId, groupId, name }: { friendId?: string | null; groupId?: string | null; name?: string | null }) {
   const styles = useThemedStyles(createStyles);
   const colors = useTheme();
   const { width, height } = useWindowDimensions();
   const wide = width >= 900;
   const open = (id: string, label: string) => {
     const href = `/social/message?friend=${encodeURIComponent(id)}&name=${encodeURIComponent(label)}` as Href;
-    if (wide && friendId) router.replace(href);
+    if (wide && (friendId || groupId)) router.replace(href);
     else router.push(href);
   };
+  const openGroup = (id: string, label: string) => {
+    const href = `/social/message?group=${encodeURIComponent(id)}&name=${encodeURIComponent(label)}` as Href;
+    if (wide && (friendId || groupId)) router.replace(href);
+    else router.push(href);
+  };
+  const thread = groupId ? <ChatThread key={`g:${groupId}`} groupId={groupId} name={name} /> : friendId ? <ChatThread key={`f:${friendId}`} friendId={friendId} name={name} /> : null;
   const paneHeight = Math.max(480, height - (wide ? 70 : 150));
 
   if (!wide) {
     return (
       <Screen width="prose">
-        <BackLink fallback={(friendId ? '/social/messages' : '/social') as never} />
+        <BackLink fallback={(friendId || groupId ? '/social/messages' : '/social') as never} />
         <Card style={[styles.pane, { height: paneHeight }]}>
-          {friendId ? <ChatThread friendId={friendId} name={name} /> : <ChatList onOpen={open} />}
+          {thread ?? <ChatList onOpen={open} onOpenGroup={openGroup} />}
         </Card>
       </Screen>
     );
@@ -39,10 +45,10 @@ export function ChatShell({ friendId, name }: { friendId?: string | null; name?:
   return (
     <Screen width="wide">
       <Card style={[styles.shell, { height: paneHeight }]}>
-        <View style={styles.side}><ChatList activeId={friendId} onOpen={open} /></View>
+        <View style={styles.side}><ChatList activeId={groupId ?? friendId} onOpen={open} onOpenGroup={openGroup} /></View>
         <View style={styles.main}>
-          {friendId ? (
-            <ChatThread friendId={friendId} name={name} />
+          {thread ? (
+            thread
           ) : (
             <View style={styles.empty}>
               <View style={styles.emptyIcon}><Icon name="comment" size={36} color={colors.primaryText} /></View>

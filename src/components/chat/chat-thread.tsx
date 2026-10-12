@@ -1,12 +1,16 @@
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Linking, PanResponder, Platform, ScrollView, StyleSheet, TextInput as RNTextInput, View } from 'react-native';
+import { ActivityIndicator, Linking, Platform, ScrollView, StyleSheet, TextInput as RNTextInput, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import Svg, { Path } from 'react-native-svg';
 
 import { ReportSheet, type ReportTarget } from '@/components/social/report-sheet';
 import { openProfileCard, PersonAvatar } from '@/components/social/profile-card';
+import { GroupInfoSheet } from '@/components/chat/group-info';
+import { Avatar } from '@/components/ui/avatar';
+import { router } from 'expo-router';
+import { deleteGroupMessage, getGroup, type GroupInfo, listGroupMessages, reactToGroupMessage, sendGroupMessage } from '@/data/group-chat';
 import { clock, useVoiceRecorder, voiceNotesSupported, VoiceNotePlayer } from '@/components/social/voice-note';
 import { Button } from '@/components/ui/button';
 import { Icon, type IconName } from '@/components/ui/icon';
@@ -29,6 +33,8 @@ import { announceMessage } from '@/lib/web-push';
 const EMOJI = ['😀', '😂', '🥹', '😍', '😎', '🤔', '😴', '😭', '🔥', '❤️', '👍', '🙏', '🎉', '📚', '🧠', '💯', '✅', '🩺'];
 const STATUS_LABEL: Record<MessageStatus, string> = { sent: 'Sent', delivered: 'Delivered', read: 'Seen' };
 const isWeb = Platform.OS === 'web';
+// Swipe right to reply on touch screens (phones and tablets, in the app or the browser).
+const canSwipe = !isWeb || (typeof window !== 'undefined' && ('ontouchstart' in window || (navigator.maxTouchPoints ?? 0) > 0));
 const now = () => Date.now();
 
 function ago(at: number) {
@@ -50,7 +56,7 @@ function dayLabel(at: number) {
 }
 
 /** A conversation with a friend, like WhatsApp and Instagram messages. */
-export function ChatThread({ friendId, name, compact }: { friendId: string; name?: string | null; compact?: boolean }) {
+export function ChatThread({ friendId = '', groupId, name }: { friendId?: string; groupId?: string | null; name?: string | null }) {
   const styles = useThemedStyles(createStyles);
   const colors = useTheme();
   const { user } = useAuth();
@@ -58,7 +64,10 @@ export function ChatThread({ friendId, name, compact }: { friendId: string; name
   const privacy = usePrivacyPreferences();
   const prefs = useChatPrefs();
   const friend = social.people.find((person) => person.userId === friendId);
-  const title = friend ? personName(friend) : name || 'Friend';
+  const [group, setGroup] = useState<GroupInfo | null>(null);
+  const [groupInfo, setGroupInfo] = useState(false);
+  const isGroup = Boolean(groupId);
+  const title = isGroup ? group?.name ?? name ?? 'Group' : friend ? personName(friend) : name || 'Friend';
   const [chatId, setChatId] = useState<string | null>(null);
   const [messages, setMessages] = useState<CommunityMessage[]>([]);
   const [meta, setMeta] = useState<ConversationMeta | null>(null);
@@ -80,6 +89,13 @@ export function ChatThread({ friendId, name, compact }: { friendId: string; name
 
   const refresh = useCallback(async (id: string) => {
     try {
+      if (groupId) {
+        const [list, info] = await Promise.all([listGroupMessages(id), getGroup(id)]);
+        setMessages(list);
+        setGroup(info);
+        setError(info ? null : 'This group could not be found.');
+        return;
+      }
       const [list, info] = await Promise.all([listConversationMessages(id), loadConversationMeta(id, privacy).catch(() => null)]);
       setMessages(list);
       setMeta(info);
@@ -90,16 +106,16 @@ export function ChatThread({ friendId, name, compact }: { friendId: string; name
     } finally {
       setLoading(false);
     }
-  }, [privacy, user?.id]);
+  }, [privacy, user?.id, groupId]);
 
   useEffect(() => {
     let live = true;
     queueMicrotask(() => { if (live) { setLoading(true); setMessages([]); setReply(null); } });
-    getOrCreateFriendConversation(friendId)
+    (groupId ? Promise.resolve(groupId) : getOrCreateFriendConversation(friendId))
       .then(async (id) => { if (!live) return; setChatId(id); await refresh(id); })
       .catch((caught) => { if (live) { setError(caught instanceof Error ? caught.message : 'Could not open this conversation.'); setLoading(false); } });
     return () => { live = false; };
-  }, [friendId, refresh]);
+  }, [friendId, groupId, refresh]);
 
   useEffect(() => {
     if (!chatId) return;
@@ -112,9 +128,9 @@ export function ChatThread({ friendId, name, compact }: { friendId: string; name
   const shown = search.trim() ? visible.filter((message) => message.body.toLowerCase().includes(search.trim().toLowerCase())) : visible;
   const pinnedId = chatId ? prefs.pinned[chatId] : undefined;
   const pinned = pinnedId ? visible.find((message) => message.id === pinnedId) : undefined;
-  const streak = user ? friendStreak(messages, user.id, friendId) : 0;
+  const streak = user && !isGroup ? friendStreak(messages, user.id, friendId) : 0;
   const typing = Boolean(meta?.otherTyping && now() - meta.otherTyping < 7000);
-  const presence = typing ? 'typing…' : meta?.otherOnline ? 'Active now' : meta?.otherLastSeen ? `Active ${ago(meta.otherLastSeen)}` : 'Messages with your friend';
+  const presence = isGroup ? `${group?.memberUids.length ?? 0} members${group?.description ? ` · ${group.description}` : ''}` : typing ? 'typing…' : meta?.otherOnline ? 'Active now' : meta?.otherLastSeen ? `Active ${ago(meta.otherLastSeen)}` : 'Messages with your friend';
   const last = visible[visible.length - 1];
   const lastMine = last && last.sender_id === user?.id ? last : null;
   const byId = new Map(messages.map((message) => [message.id, message]));
@@ -129,8 +145,9 @@ export function ChatThread({ friendId, name, compact }: { friendId: string; name
     if (!note) return;
     setBusy(true);
     try {
-      await sendVoiceNote(chatId, await uploadVoiceNote(note.blob), note.seconds);
-      void announceMessage(chatId, friendId);
+      const url = await uploadVoiceNote(note.blob);
+      if (isGroup) await sendGroupMessage(chatId, '', { audio: { url, seconds: note.seconds } });
+      else { await sendVoiceNote(chatId, url, note.seconds); void announceMessage(chatId, friendId); }
       await refresh(chatId);
     } catch (caught) {
       setNotice(caught instanceof Error ? caught.message : 'Could not send this recording.');
@@ -145,8 +162,8 @@ export function ChatThread({ friendId, name, compact }: { friendId: string; name
     setBusy(true);
     setNotice(null);
     try {
-      await sendChatMessage(chatId, draft, { reply, ...extras });
-      void announceMessage(chatId, friendId);
+      if (isGroup) await sendGroupMessage(chatId, draft, { reply, ...extras });
+      else { await sendChatMessage(chatId, draft, { reply, ...extras }); void announceMessage(chatId, friendId); }
       setDraft('');
       setReply(null);
       await refresh(chatId);
@@ -218,7 +235,8 @@ export function ChatThread({ friendId, name, compact }: { friendId: string; name
     if (!chatId) return;
     setMenu(null);
     try {
-      await deleteCommunityMessage(chatId, message.id);
+      if (isGroup) await deleteGroupMessage(chatId, message.id);
+      else await deleteCommunityMessage(chatId, message.id);
       await refresh(chatId);
     } catch {
       setNotice('That message could not be deleted.');
@@ -230,25 +248,38 @@ export function ChatThread({ friendId, name, compact }: { friendId: string; name
     setMenu(null);
     const current = message.reactions?.[user.id];
     setMessages((list) => list.map((item) => (item.id === message.id ? { ...item, reactions: { ...(item.reactions ?? {}), ...(current === emoji ? { [user.id]: '' } : { [user.id]: emoji }) } } : item)));
-    try { await reactToMessage(chatId, message.id, current === emoji ? null : emoji); } catch { setNotice('Your reaction could not be saved.'); }
+    try { await (isGroup ? reactToGroupMessage : reactToMessage)(chatId, message.id, current === emoji ? null : emoji); } catch { setNotice('Your reaction could not be saved.'); }
     void refresh(chatId);
+  }
+
+  function nameOfUid(uid: string) {
+    if (uid === user?.id) return 'You';
+    const person = social.people.find((p) => p.userId === uid);
+    if (person) return personName(person);
+    const fromGroup = group?.members[uid];
+    return fromGroup ? `@${fromGroup}` : title;
+  }
+  function senderName(message: CommunityMessage & { author_name?: string | null }) {
+    if (message.sender_id === user?.id) return 'You';
+    const person = social.people.find((p) => p.userId === message.sender_id);
+    return person ? personName(person) : message.author_name ? `@${message.author_name}` : nameOfUid(message.sender_id);
   }
 
   // ── Rendering ──
   return (
     <View style={styles.thread}>
       <View style={styles.header}>
-        <PersonAvatar uid={friendId} uri={friend?.avatarUrl ?? null} name={title} size={44} status={meta?.otherOnline ? 'online' : null} />
+        {isGroup ? <Avatar name={title} size={44} ring="gold" /> : <PersonAvatar uid={friendId} uri={friend?.avatarUrl ?? null} name={title} size={44} status={meta?.otherOnline ? 'online' : null} />}
         <View style={styles.headText}>
           <View style={styles.nameRow}>
             <Text style={styles.headName} numberOfLines={1}>{title}</Text>
-            <VerifiedBadge username={friend?.username} uid={friendId} size={15} />
+            {isGroup ? null : <VerifiedBadge username={friend?.username} uid={friendId} size={15} />}
             {streak > 0 ? <Text style={styles.streak} accessibilityLabel={`${streak}-day friend streak`}>🔥 {streak}</Text> : null}
           </View>
           <Text style={[styles.presence, typing && styles.typing]} numberOfLines={1}>{presence}</Text>
         </View>
         <Interactive onPress={() => { setSearching((value) => !value); setSearch(''); }} accessibilityRole="button" accessibilityLabel="Search in this chat" style={styles.headButton}><Icon name="search" size={20} color={colors.text} /></Interactive>
-        <Interactive onPress={() => openProfileCard(friendId)} accessibilityRole="button" accessibilityLabel={`${title}'s profile`} style={styles.headButton}><Icon name="info" size={20} color={colors.text} /></Interactive>
+        <Interactive onPress={() => (isGroup ? setGroupInfo(true) : openProfileCard(friendId))} accessibilityRole="button" accessibilityLabel={isGroup ? 'Group info' : `${title}'s profile`} style={styles.headButton}><Icon name="info" size={20} color={colors.text} /></Interactive>
       </View>
       {searching ? <TextInput value={search} onChangeText={setSearch} placeholder="Search messages" placeholderTextColor={colors.textTertiary} accessibilityLabel="Search messages" style={styles.search} autoFocus /> : null}
       {pinned ? (
@@ -263,7 +294,7 @@ export function ChatThread({ friendId, name, compact }: { friendId: string; name
         {error ? <Text style={styles.empty}>{error} Messages work between friends who follow each other.</Text> : null}
         {!loading && !error && !visible.length ? (
           <View style={styles.hello}>
-            <PersonAvatar uid={friendId} uri={friend?.avatarUrl ?? null} name={title} size={88} ring="gold" />
+            {isGroup ? <Avatar name={title} size={88} ring="gold" /> : <PersonAvatar uid={friendId} uri={friend?.avatarUrl ?? null} name={title} size={88} ring="gold" />}
             <Text style={styles.helloName}>{title}</Text>
             <Text style={styles.empty}>Say hello or share what you’re studying.</Text>
           </View>
@@ -280,13 +311,14 @@ export function ChatThread({ friendId, name, compact }: { friendId: string; name
           return (
             <View key={message.id}>
               {newDay ? <Text style={styles.day}>{dayLabel(at)}</Text> : null}
-              <SwipeToReply onReply={() => startReply(message)} enabled={!isWeb}>
+              <SwipeToReply onReply={() => startReply(message)} enabled={canSwipe}>
                 <View style={[styles.row, mine ? styles.rowMine : styles.rowTheirs]}>
-                  {!mine ? <View style={styles.avatarSlot}>{lastOfGroup ? <PersonAvatar uid={friendId} uri={friend?.avatarUrl ?? null} name={title} size={28} /> : null}</View> : null}
+                  {!mine ? <View style={styles.avatarSlot}>{lastOfGroup ? <PersonAvatar uid={message.sender_id} uri={isGroup ? null : friend?.avatarUrl ?? null} name={senderName(message)} size={28} /> : null}</View> : null}
                   <View style={[styles.stack, mine && styles.stackMine]}>
+                    {isGroup && !mine && (!prev || prev.sender_id !== message.sender_id) ? <Text style={styles.sender}>{senderName(message)}</Text> : null}
                     <Interactive
                       onLongPress={() => setMenu(message)}
-                      onPress={isWeb ? undefined : () => setMenu(message)}
+                      onPress={canSwipe ? () => setMenu(message) : undefined}
                       accessibilityLabel={`${mine ? 'You' : title}: ${previewOf(message)}. Actions`}
                       style={({ hovered }) => [styles.bubbleWrap, hovered && styles.hovered]}
                     >
@@ -296,7 +328,7 @@ export function ChatThread({ friendId, name, compact }: { friendId: string; name
                             {message.fwd ? <Text style={[styles.fwd, mine && styles.mineSoft]}>↪ Forwarded</Text> : null}
                             {message.reply ? (
                               <View style={[styles.quote, mine ? styles.quoteMine : styles.quoteTheirs]}>
-                                <Text style={[styles.quoteWho, mine && styles.mineText]}>{message.reply.from === user?.id ? 'You' : title}</Text>
+                                <Text style={[styles.quoteWho, mine && styles.mineText]}>{message.reply.from === user?.id ? 'You' : nameOfUid(message.reply.from)}</Text>
                                 <Text style={[styles.quoteText, mine && styles.mineSoft]} numberOfLines={2}>{replied ? previewOf(replied) : message.reply.text}</Text>
                               </View>
                             ) : null}
@@ -321,7 +353,7 @@ export function ChatThread({ friendId, name, compact }: { friendId: string; name
                             <View style={styles.meta}>
                               {chatId && isStarred(prefs, chatId, message.id) ? <Icon name="star" size={11} color={mine ? colors.onPrimaryMuted : colors.accentText} filled /> : null}
                               <Text style={[styles.time, mine && styles.mineSoft]}>{new Date(at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</Text>
-                              {mine && meta ? <Ticks status={messageStatus(message, meta)} color={colors.onPrimaryMuted} read={readBlue} /> : null}
+                              {mine && meta && !isGroup ? <Ticks status={messageStatus(message, meta)} color={colors.onPrimaryMuted} read={readBlue} /> : null}
                             </View>
                           </View>
                           {isWeb && hovered ? (
@@ -341,7 +373,7 @@ export function ChatThread({ friendId, name, compact }: { friendId: string; name
             </View>
           );
         })}
-        {lastMine && meta && !search ? <Text style={styles.seen}>{STATUS_LABEL[messageStatus(lastMine, meta)]}{messageStatus(lastMine, meta) === 'read' && meta.otherSeenAt ? ` ${ago(meta.otherSeenAt)}` : ''}</Text> : null}
+        {lastMine && meta && !search && !isGroup ? <Text style={styles.seen}>{STATUS_LABEL[messageStatus(lastMine, meta)]}{messageStatus(lastMine, meta) === 'read' && meta.otherSeenAt ? ` ${ago(meta.otherSeenAt)}` : ''}</Text> : null}
         {typing ? <View style={styles.typingBubble}><Text style={styles.typingDots}>• • •</Text></View> : null}
       </ScrollView>
 
@@ -412,13 +444,14 @@ export function ChatThread({ friendId, name, compact }: { friendId: string; name
               ))}
             </View>
             <MenuRow icon="reply" label="Reply" onPress={() => startReply(menu)} />
+            {isGroup && menu.sender_id !== user?.id ? <MenuRow icon="comment" label={`Reply privately to ${senderName(menu)}`} onPress={() => { setMenu(null); router.push({ pathname: '/social/message', params: { friend: menu.sender_id, name: senderName(menu) } } as never); }} /> : null}
             <MenuRow icon="forward" label="Forward" onPress={() => { setForward(menu); setMenu(null); }} />
             {menu.body && isWeb ? <MenuRow icon="copy" label="Copy" onPress={() => void copy(menu)} /> : null}
             <MenuRow icon="star" label={chatId && isStarred(prefs, chatId, menu.id) ? 'Unstar' : 'Star'} onPress={() => { toggleStar(chatId!, menu.id); setMenu(null); }} />
             <MenuRow icon="pin" label={pinnedId === menu.id ? 'Unpin' : 'Pin'} onPress={() => { togglePin(chatId!, menu.id); setMenu(null); }} />
             <MenuRow icon="trash" label="Delete for me" onPress={() => { hideMessage(chatId!, menu.id); setMenu(null); }} />
             {menu.sender_id === user?.id ? <MenuRow icon="trash" label="Delete for everyone" danger onPress={() => void deleteForEveryone(menu)} /> : (
-              <MenuRow icon="warning" label="Report" danger onPress={() => { setReport({ type: 'user', id: menu.sender_id, label: `message from ${title}: “${previewOf(menu).slice(0, 60)}”` }); setMenu(null); }} />
+              <MenuRow icon="warning" label="Report" danger onPress={() => { setReport({ type: 'user', id: menu.sender_id, label: `message from ${senderName(menu)}${isGroup ? ` in ${title}` : ''}: “${previewOf(menu).slice(0, 60)}”` }); setMenu(null); }} />
             )}
           </View>
         ) : null}
@@ -440,6 +473,7 @@ export function ChatThread({ friendId, name, compact }: { friendId: string; name
       </Sheet>
 
       {/* Forward to a friend */}
+      {isGroup && group ? <GroupInfoSheet visible={groupInfo} group={group} onClose={() => setGroupInfo(false)} onChanged={() => chatId && void refresh(chatId)} onReport={() => { setGroupInfo(false); setReport({ type: 'user', id: group.ownerUid, label: `group “${group.name}”` }); }} /> : null}
       <ForwardSheet message={forward} onClose={() => setForward(null)} onDone={(count) => { setForward(null); setNotice(`Forwarded to ${count} chat${count === 1 ? '' : 's'}.`); }} />
       <ReportSheet target={report} reporter={user?.profile?.username ?? null} onClose={() => setReport(null)} onHide={() => {}} onDone={() => { setReport(null); setNotice('Thanks — the team will review it.'); }} />
     </View>
@@ -517,20 +551,57 @@ function MenuRow({ icon, label, onPress, danger }: { icon: IconName; label: stri
   );
 }
 
-/** Swipe a message to the right to reply (phones). */
+/** Swipe a message to the right to reply (phones and tablets): follows the finger, a reply arrow appears, let go past it to reply. */
 function SwipeToReply({ children, onReply, enabled }: { children: React.ReactNode; onReply: () => void; enabled: boolean }) {
+  const colors = useTheme();
   const x = useSharedValue(0);
-  const [responder] = useState(() =>
-    PanResponder.create({
-      onMoveShouldSetPanResponder: (_, g) => enabled && g.dx > 12 && Math.abs(g.dy) < 10,
-      onPanResponderMove: (_, g) => { x.value = Math.max(0, Math.min(70, g.dx)); },
-      onPanResponderRelease: (_, g) => { if (g.dx > 55) onReply(); x.value = withSpring(0); },
-      onPanResponderTerminate: () => { x.value = withSpring(0); },
-    })
-  );
+  const start = useRef<{ x: number; y: number; locked: boolean | null } | null>(null);
+  const [pulled, setPulled] = useState(false);
   const style = useAnimatedStyle(() => ({ transform: [{ translateX: x.value }] }));
-  return <Animated.View style={style} {...(enabled ? responder.panHandlers : {})}>{children}</Animated.View>;
+  const hint = useAnimatedStyle(() => ({ opacity: Math.min(1, x.value / 50), transform: [{ scale: 0.6 + Math.min(0.4, x.value / 150) }] }));
+  if (!enabled) return <View>{children}</View>;
+  const point = (event: { nativeEvent: { touches?: ArrayLike<{ pageX: number; pageY: number }>; pageX?: number; pageY?: number } }) => {
+    const touch = event.nativeEvent.touches?.[0];
+    return { x: touch?.pageX ?? event.nativeEvent.pageX ?? 0, y: touch?.pageY ?? event.nativeEvent.pageY ?? 0 };
+  };
+  return (
+    <View
+      onTouchStart={(event) => { const p = point(event); start.current = { ...p, locked: null }; }}
+      onTouchMove={(event) => {
+        const s0 = start.current;
+        if (!s0) return;
+        const p = point(event);
+        const dx = p.x - s0.x;
+        const dy = p.y - s0.y;
+        // Decide once: a sideways swipe (reply) or a vertical scroll.
+        if (s0.locked === null && (Math.abs(dx) > 8 || Math.abs(dy) > 8)) s0.locked = Math.abs(dx) > Math.abs(dy) && dx > 0;
+        if (!s0.locked) return;
+        const next = Math.max(0, Math.min(80, dx));
+        x.set(next);
+        if ((next > 55) !== pulled) setPulled(next > 55);
+      }}
+      onTouchEnd={() => {
+        if (x.get() > 55) onReply();
+        x.set(withSpring(0));
+        start.current = null;
+        setPulled(false);
+      }}
+      onTouchCancel={() => { x.set(withSpring(0)); start.current = null; setPulled(false); }}
+    >
+      <Animated.View style={[swipeStyles.hint, hint]} pointerEvents="none">
+        <View style={[swipeStyles.hintCircle, { backgroundColor: pulled ? colors.primary : colors.surfaceMuted }]}>
+          <Icon name="reply" size={16} color={pulled ? colors.onPrimary : colors.textSecondary} />
+        </View>
+      </Animated.View>
+      <Animated.View style={style}>{children}</Animated.View>
+    </View>
+  );
 }
+
+const swipeStyles = StyleSheet.create({
+  hint: { position: 'absolute', left: 4, top: 0, bottom: 0, justifyContent: 'center' },
+  hintCircle: { width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
+});
 
 function Ticks({ status, color, read }: { status: MessageStatus; color: string; read: string }) {
   const tint = status === 'read' ? read : color;
@@ -569,6 +640,7 @@ function createStyles(colors: ThemeColors) {
     rowMine: { justifyContent: 'flex-end' },
     rowTheirs: { justifyContent: 'flex-start' },
     avatarSlot: { width: 28 },
+    sender: { fontSize: 12, fontWeight: '700', color: colors.primaryText, marginLeft: 10, marginBottom: 2 },
     stack: { maxWidth: '78%', alignItems: 'flex-start' },
     stackMine: { alignItems: 'flex-end' },
     bubbleWrap: { borderRadius: 20 },

@@ -3,6 +3,9 @@ import { useCallback, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { PersonAvatar } from '@/components/social/profile-card';
+import { NewGroupSheet } from '@/components/chat/group-info';
+import { Avatar } from '@/components/ui/avatar';
+import { listMyGroups, type GroupSummary } from '@/data/group-chat';
 import { Icon } from '@/components/ui/icon';
 import { Interactive } from '@/components/ui/interactive';
 import { Sheet } from '@/components/ui/sheet';
@@ -29,7 +32,7 @@ function when(at: number) {
 // The chats list (like Instagram / WhatsApp): you, a new-message button,
 // search, friends to start a chat with, then every chat with its last message,
 // time, unread dot and friend streak.
-export function ChatList({ activeId, onOpen }: { activeId?: string | null; onOpen: (friendId: string, name: string) => void }) {
+export function ChatList({ activeId, onOpen, onOpenGroup }: { activeId?: string | null; onOpen: (friendId: string, name: string) => void; onOpenGroup: (groupId: string, name: string) => void }) {
   const styles = useThemedStyles(createStyles);
   const colors = useTheme();
   const { user } = useAuth();
@@ -37,6 +40,8 @@ export function ChatList({ activeId, onOpen }: { activeId?: string | null; onOpe
   const [chats, setChats] = useState<ConversationSummary[] | null>(null);
   const [query, setQuery] = useState('');
   const [compose, setCompose] = useState(false);
+  const [newGroup, setNewGroup] = useState(false);
+  const [groups, setGroups] = useState<GroupSummary[]>([]);
   const [, setTick] = useState(0);
   const friends = social.people.filter((person) => person.relationship === 'friends');
   const requests = social.people.filter((person) => person.relationship === 'incoming').length;
@@ -45,9 +50,10 @@ export function ChatList({ activeId, onOpen }: { activeId?: string | null; onOpe
   useFocusEffect(useCallback(() => {
     let live = true;
     const load = async () => {
-      const list = await listMyConversations(40).catch(() => [] as ConversationSummary[]);
+      const [list, mine] = await Promise.all([listMyConversations(40).catch(() => [] as ConversationSummary[]), listMyGroups().catch(() => [] as GroupSummary[])]);
       if (!live) return;
       setChats(list);
+      setGroups(mine);
       // Friend streaks for the first chats (cached for 10 minutes).
       for (const chat of list.slice(0, 12)) {
         const hit = streaks.get(chat.id);
@@ -68,6 +74,9 @@ export function ChatList({ activeId, onOpen }: { activeId?: string | null; onOpe
     return person ? personName(person) : fallback ? `@${fallback}` : 'Friend';
   };
   const shown = (chats ?? []).filter((chat) => !q || nameOf(chat.otherId, chat.otherName).toLowerCase().includes(q) || chat.lastText.toLowerCase().includes(q));
+  const shownGroups = groups.filter((group) => !q || group.name.toLowerCase().includes(q));
+  // Chats and groups together, newest first (like WhatsApp).
+  const rows = [...shown.map((chat) => ({ kind: 'chat' as const, at: chat.lastAt, chat })), ...shownGroups.map((group) => ({ kind: 'group' as const, at: group.lastAt, group }))].sort((a, b) => b.at - a.at);
   const chatting = new Set((chats ?? []).map((chat) => chat.otherId));
   const starters = friends.filter((friend) => !q || personName(friend).toLowerCase().includes(q)).sort((a, b) => Number(b.isOnline) - Number(a.isOnline));
 
@@ -99,7 +108,21 @@ export function ChatList({ activeId, onOpen }: { activeId?: string | null; onOpe
       </View>
       <ScrollView style={styles.rows}>
         {chats === null ? <Text style={styles.muted}>Loading your chats…</Text> : null}
-        {shown.map((chat) => {
+        {rows.map((entry) => {
+          if (entry.kind === 'group') {
+            const group = entry.group;
+            const active = group.id === activeId;
+            return (
+              <Interactive key={group.id} onPress={() => onOpenGroup(group.id, group.name)} accessibilityRole="link" accessibilityLabel={`Group ${group.name}`} style={({ hovered }) => [styles.row, (active || hovered) && styles.rowActive]}>
+                <Avatar name={group.name} size={52} ring="gold" />
+                <View style={styles.rowText}>
+                  <Text style={styles.name} numberOfLines={1}>{group.name}</Text>
+                  <Text style={styles.preview} numberOfLines={1}>{group.lastFrom === user?.id ? 'You: ' : group.lastName ? `${group.lastName}: ` : ''}{group.lastText} · {when(group.lastAt)}</Text>
+                </View>
+              </Interactive>
+            );
+          }
+          const chat = entry.chat;
           const person = known.get(chat.otherId);
           const label = nameOf(chat.otherId, chat.otherName);
           const streak = streaks.get(chat.id)?.value ?? 0;
@@ -119,10 +142,14 @@ export function ChatList({ activeId, onOpen }: { activeId?: string | null; onOpe
             </Interactive>
           );
         })}
-        {chats && !shown.length ? <Text style={styles.muted}>{q ? 'No chats match.' : friends.length ? 'No chats yet — tap a friend above to say hello.' : 'Follow classmates; when they follow you back you can message each other.'}</Text> : null}
+        {chats && !rows.length ? <Text style={styles.muted}>{q ? 'No chats match.' : friends.length ? 'No chats yet — tap a friend above to say hello.' : 'Follow classmates; when they follow you back you can message each other.'}</Text> : null}
       </ScrollView>
 
       <Sheet visible={compose} onClose={() => setCompose(false)} title="New message" width={420}>
+        <Interactive onPress={() => { setCompose(false); setNewGroup(true); }} accessibilityRole="button" style={styles.composeRow}>
+          <View style={styles.groupIcon}><Icon name="social" size={20} color={colors.onPrimary} /></View>
+          <Text style={styles.name}>New group</Text>
+        </Interactive>
         {friends.map((friend) => (
           <Interactive key={friend.userId} onPress={() => { setCompose(false); onOpen(friend.userId, personName(friend)); }} style={styles.composeRow} accessibilityLabel={`Message ${personName(friend)}`}>
             <PersonAvatar uid={friend.userId} uri={friend.avatarUrl} name={personName(friend)} size={40} />
@@ -134,6 +161,7 @@ export function ChatList({ activeId, onOpen }: { activeId?: string | null; onOpe
         ))}
         {!friends.length ? <Text style={styles.muted}>You can message friends who follow you back.</Text> : null}
       </Sheet>
+      <NewGroupSheet visible={newGroup} onClose={() => setNewGroup(false)} />
     </View>
   );
 }
@@ -166,6 +194,7 @@ function createStyles(colors: ThemeColors) {
     previewUnread: { color: colors.text, fontWeight: '700' },
     dot: { width: 9, height: 9, borderRadius: 5, backgroundColor: colors.primary },
     muted: { fontSize: 13, color: colors.textTertiary, padding: 16, textAlign: 'center' },
+    groupIcon: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primary },
     composeRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 8 },
   });
 }

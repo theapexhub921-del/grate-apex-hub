@@ -17,6 +17,7 @@ import { SectionHeader } from '@/components/ui/screen';
 import { VideoPlayer } from '@/components/ui/video-player';
 import { Sheet } from '@/components/ui/sheet';
 import { findLesson, getTopic } from '@/data/curriculum';
+import { markStorySeen, useSeenStories } from '@/data/story-views';
 import { createCommunityStory, deleteCommunityStory, listLiveStories, type CommunityMedia, type CommunityStory } from '@/data/community';
 import { personName, refreshSocial, type FriendActivity, type SocialPerson, useSocial } from '@/data/social';
 import { useAvatarUrl, useDisplayName } from '@/data/user';
@@ -43,6 +44,7 @@ export function SocialActivityFeed({ children, showActivity = true }: { children
   const friends = social.people.filter((person) => person.relationship === 'friends');
   const myStories = useMemo(() => stories.filter((story) => story.author_id === social.userId).sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at)), [stories, social.userId]);
   const myStory = myStories[myStories.length - 1];
+  const seenStories = useSeenStories();
   const friendStoryGroups = useMemo(() => {
     const groups = new Map<string, CommunityStory[]>();
     for (const story of stories) {
@@ -53,9 +55,13 @@ export function SocialActivityFeed({ children, showActivity = true }: { children
     }
     return [...groups.entries()]
       .map(([authorId, items]) => ({ authorId, items: items.sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at)) }))
-      .sort((a, b) => Date.parse(b.items[b.items.length - 1].created_at) - Date.parse(a.items[a.items.length - 1].created_at));
-  }, [stories, social.userId]);
+      .map((group) => ({ ...group, seen: group.items.every((story) => seenStories.has(story.id)) }))
+      // Unwatched first (newest first), then watched — like Instagram and WhatsApp.
+      .sort((a, b) => Number(a.seen) - Number(b.seen) || Date.parse(b.items[b.items.length - 1].created_at) - Date.parse(a.items[a.items.length - 1].created_at));
+  }, [stories, social.userId, seenStories]);
+  const mySeen = myStories.length > 0 && myStories.every((story) => seenStories.has(story.id));
   const selectedStory = storySequence[storyIndex] ?? null;
+  useEffect(() => { if (selectedStory) markStorySeen(selectedStory.id); }, [selectedStory]);
 
   async function refreshStories() {
     setStoryError(null);
@@ -79,7 +85,9 @@ export function SocialActivityFeed({ children, showActivity = true }: { children
 
   function openStorySequence(sequence: CommunityStory[]) {
     setStorySequence(sequence);
-    setStoryIndex(0);
+    // Start at the first story not watched yet.
+    const firstNew = sequence.findIndex((story) => !seenStories.has(story.id));
+    setStoryIndex(firstNew > 0 ? firstNew : 0);
   }
 
   function closeStorySequence() {
@@ -185,17 +193,17 @@ export function SocialActivityFeed({ children, showActivity = true }: { children
             style={styles.friendItem}
           >
             <View style={styles.storyAvatarWrap}>
-              <StoryAvatar uri={avatarUrl} name={displayName || 'You'} hasStory={Boolean(myStory)} />
+              <StoryAvatar uri={avatarUrl} name={displayName || 'You'} hasStory={Boolean(myStory)} seen={mySeen} />
               {myStory ? <View style={styles.postedMark}><Icon name="check" size={10} color={colors.onPrimary} /></View> : <View style={styles.addBadge}><Icon name="plus" size={12} color={colors.primaryText} /></View>}
             </View>
             <Text style={styles.friendName} numberOfLines={1}>Your story</Text>
           </Pressable>
-          {friendStoryGroups.map(({ authorId, items }) => {
+          {friendStoryGroups.map(({ authorId, items, seen }) => {
             const friend = social.people.find((person) => person.userId === authorId);
             const name = friend ? personName(friend) : 'Username pending';
             return (
               <Pressable key={authorId} onPress={() => openStorySequence(items)} accessibilityRole="button" accessibilityLabel={`View ${items.length} ${items.length === 1 ? 'story' : 'stories'} from ${name}`} style={styles.friendItem}>
-                <StoryAvatar uri={friend?.avatarUrl ?? null} name={name} hasStory />
+                <StoryAvatar uri={friend?.avatarUrl ?? null} name={name} hasStory seen={seen} />
                 <Text style={styles.friendName} numberOfLines={1}>{name}</Text>
               </Pressable>
             );
@@ -288,13 +296,16 @@ function storyAuthorName(story: CommunityStory, people: readonly SocialPerson[],
   return story.author_name ? `@${story.author_name}` : 'Username pending';
 }
 
-function StoryAvatar({ uri, name, hasStory }: { uri?: string | null; name: string; hasStory: boolean }) {
+function StoryAvatar({ uri, name, hasStory, seen }: { uri?: string | null; name: string; hasStory: boolean; seen?: boolean }) {
   const styles = useThemedStyles(createStyles);
   const colors = useTheme();
   const ringId = `storyRing${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
   return (
     <View style={styles.storyAvatarOuter}>
-      {hasStory ? (
+      {hasStory && seen ? (
+        // Watched: a thin grey ring, the glow goes off.
+        <Svg pointerEvents="none" style={StyleSheet.absoluteFill} viewBox="0 0 64 64"><Circle cx="32" cy="32" r="29.5" fill="none" stroke={colors.borderStrong} strokeWidth="2" /></Svg>
+      ) : hasStory ? (
         <Svg pointerEvents="none" style={StyleSheet.absoluteFill}>
           <Defs>
             <LinearGradient id={ringId} x1="0" y1="1" x2="1" y2="0">
