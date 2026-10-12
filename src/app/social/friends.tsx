@@ -24,6 +24,7 @@ import {
 } from '@/data/social';
 import { useTheme, useThemedStyles } from '@/hooks/use-theme';
 import { blockCommunityUser, reportCommunityContent } from '@/data/community';
+import { nextUsernameChange, USERNAME_CHANGE_DAYS } from '@/lib/accounts';
 
 // '/social' is the Social hub (social/index.tsx). Cast because the
 // generated route types can lag behind newly added routes.
@@ -107,13 +108,22 @@ function UsernameCard({ username }: { username: string | null }) {
   const [value, setValue] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // A username can be changed again 30 days after a change (the shared rules enforce it too).
+  const [nextChange, setNextChange] = useState<Date | null>(null);
+  useEffect(() => {
+    let live = true;
+    void nextUsernameChange().then((date) => { if (live) setNextChange(date); });
+    return () => { live = false; };
+  }, [username]);
 
   async function save() {
     setBusy(true);
     setError(null);
     try {
+      const had = Boolean(username);
       await setUsername(value);
       setEditing(false);
+      if (had) setNextChange(await nextUsernameChange());
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Please try again.');
     } finally {
@@ -127,9 +137,13 @@ function UsernameCard({ username }: { username: string | null }) {
         <View style={styles.rowInfo}>
           <Text style={styles.cardLabel}>YOUR USERNAME</Text>
           <Text style={styles.username}>@{username}</Text>
-          <Text style={styles.rowDetail}>Classmates can find you by this name.</Text>
+          <Text style={styles.rowDetail}>
+            {nextChange
+              ? `Classmates can find you by this name. You can change it again on ${nextChange.toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })}.`
+              : 'Classmates can find you by this name.'}
+          </Text>
         </View>
-        <Button label="Change" variant="secondary" size="sm" onPress={() => { setValue(username); setEditing(true); }} />
+        <Button label="Change" variant="secondary" size="sm" disabled={Boolean(nextChange)} onPress={() => { setValue(username); setEditing(true); }} accessibilityLabel={nextChange ? 'Change username (not available yet)' : 'Change username'} />
       </View>
     );
   }
@@ -137,7 +151,7 @@ function UsernameCard({ username }: { username: string | null }) {
   return (
     <View style={styles.card}>
       <Text style={styles.cardLabel}>{username ? 'CHANGE YOUR USERNAME' : 'CHOOSE A USERNAME'}</Text>
-      <Text style={styles.rowDetail}>So classmates can find you. 3–20 lowercase letters, numbers or underscores.</Text>
+      <Text style={styles.rowDetail}>So classmates can find you. 3–20 lowercase letters, numbers or underscores.{username ? ` After a change you can’t change it again for ${USERNAME_CHANGE_DAYS} days.` : ''}</Text>
       <View style={styles.inputRow}>
         <TextInput
           value={value}

@@ -12,7 +12,7 @@ export type ExploreCategory = 'concept' | 'connection' | 'research' | 'grateapex
 
 // Internal destinations an Explore item may link to.
 // Only screens that already exist in the app belong here.
-export type ExploreActionHref = '/' | '/social/friends' | '/progress' | '/learn' | '/profile';
+export type ExploreActionHref = '/' | '/social/friends' | '/progress' | '/learn' | '/profile' | `/learn/lesson?lesson=${string}`;
 
 export type ExploreAction = {
   label: string;
@@ -318,9 +318,9 @@ export const EXPLORE_GUIDE: readonly ExploreGuideEntry[] = [
   { title: 'Feed', detail: 'Stories and posts from people: photos, videos and study moments that you can like, comment on and reshare.', status: 'available' },
   { title: 'HB1 courses', detail: 'All 13 HB1 Semester 1 and Semester 2 courses from the original app: lessons read one section at a time with tappable key words, figures and study aids, then practice from the original question banks.', status: 'available' },
   { title: 'Practice question types', detail: 'Multiple choice, type the answer, true or false and matching rounds, plus timed Apex Challenges for every course.', status: 'available' },
-  { title: 'Profiles and follows', detail: 'Tap anyone to see their profile, followers, following and posts. Follow them, follow back, and message once you follow each other.', status: 'available' },
+  { title: 'Profiles and follows', detail: 'Tap anyone’s picture or name for their profile card: posts, followers, following, level and bio. Follow, follow back, and message once you follow each other. Gold and blue ticks mark verified accounts.', status: 'available' },
   { title: 'Study', detail: 'Follow the course structure, study lessons, answer quizzes and revisit concepts through spaced review.', status: 'available' },
-  { title: 'Connect', detail: 'Find classmates, manage friend requests, use study groups, text-first conferences, messages and the friend feed. Live voice calls are a separate planned feature.', status: 'available' },
+  { title: 'Connect', detail: 'Opens on your messages: recent chats with unread ones marked, friends to start a chat with, or a quick way to find classmates. Below: your learning this week, the league, battles, study groups and friend activity.', status: 'available' },
   { title: 'You', detail: 'Show your name and avatar alongside your learning identity and achievements.', status: 'available' },
   { title: 'Experiences and themes', detail: 'Choose The Originals, Originate or Hybrid, and any newer or legacy theme. Each experience draws a theme its own way; legacy themes unlock as you level up.', status: 'available' },
   { title: 'Apex Coin gifts', detail: 'Send Apex Coins to friends who follow you back — coins only, never XP. Switches on once the database rules are updated.', status: 'coming-soon' },
@@ -329,13 +329,14 @@ export const EXPLORE_GUIDE: readonly ExploreGuideEntry[] = [
   { title: 'Learning power-ups', detail: 'Earn XP boosts from completed lessons, quizzes, streak milestones and one successful app share per day; the strongest stored boost applies to your next lesson or quiz. Achievement levels give timed boosts that you activate, each lasting at most an hour.', status: 'available' },
   { title: 'Achievements', detail: 'Every milestone from the original app plus GrAte Apex Hub’s own, each with five levels. Each new level gives a timed XP boost.', status: 'available' },
   { title: 'Install and share the app', detail: 'Install GrAte Apex Hub from a mobile or desktop browser and share the app with classmates from Settings.', status: 'available' },
-  { title: 'Leagues', detail: 'See standings by total XP against learners at your rank, from the shared leaderboard. Weekly standings with promotion and relegation are coming soon.', status: 'limited' },
+  { title: 'Leagues', detail: 'Weekly leagues with everyone in your tier, from Bronze to Diamond, ranked by XP earned this week. Every Monday the top 20% move up a league and the bottom 20% move down.', status: 'available' },
   { title: 'Learning streak', detail: 'Track consecutive days with a meaningful learning activity.', status: 'available' },
   { title: 'Friend streaks, freezes and restores', detail: 'View friends’ streaks. Earning and using streak freezes and recovering a lapsed streak are being rebuilt.', status: 'limited' },
   { title: 'Weekly challenges', detail: 'Complete five lessons in a calendar week to earn a streak freeze. The reward is not connected yet.', status: 'coming-soon' },
-  { title: 'Friend battles', detail: 'Challenge a friend to a topic battle. Battles need a server referee so results can’t be changed, which is still being built.', status: 'coming-soon' },
+  { title: 'Friend battles', detail: 'Challenge a friend to a timed 10-question battle on a course from Connect. You both answer the same questions and the winner earns XP.', status: 'available' },
   { title: 'Study groups and discussions', detail: 'Create private groups, add friends who follow you back, and hold text discussions with group members.', status: 'available' },
-  { title: 'Messages', detail: 'Send text messages to friends who follow each other. Only the two of you can read a conversation.', status: 'available' },
+  { title: 'Messages', detail: 'Text and voice notes with friends who follow each other. One tick means sent, two ticks delivered, blue ticks read, and the chat shows when they’re online or last seen. Read receipts and online status can be turned off in Settings → Privacy.', status: 'available' },
+  { title: 'Explore every Monday', detail: 'Explore refreshes itself each Monday: medical concepts and clinical connections from your course lessons, and the newest peer-reviewed reviews and trials on rotating themes, each with its abstract and a link to the paper.', status: 'available' },
   { title: 'Table Conferences', detail: 'Scheduled text-first study sessions with friends are being rebuilt on the shared database.', status: 'coming-soon' },
   { title: 'Live voice calls', detail: 'Planned friend and group study calls. Calling needs connection infrastructure that is still being set up.', status: 'coming-soon' },
   { title: 'Study Plans', detail: 'Pick published topics and follow a generated lesson path. Plans are private to you.', status: 'available' },

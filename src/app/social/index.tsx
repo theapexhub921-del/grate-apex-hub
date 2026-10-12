@@ -2,7 +2,6 @@ import { router } from 'expo-router';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Text } from '@/components/ui/text';
 
-import { Button } from '@/components/ui/button';
 import { PersonAvatar, PersonLink } from '@/components/social/profile-card';
 import { NotificationBell } from '@/components/notifications';
 import { Icon, type IconName } from '@/components/ui/icon';
@@ -24,6 +23,13 @@ import { useTheme, useThemedStyles } from '@/hooks/use-theme';
 // The voice tutor remains the only Connect feature still in development.
 const comingSoon: { id: string; icon: IconName; title: string; description: string }[] = [
   { id: 'tutor', icon: 'sparkle', title: 'AI tutor and GrAte Apex Hub voice', description: 'Open the voice study preview from Study. Lecture-file grounding is still in development.' },
+];
+
+// Shortcuts under Messages: evenly spaced tiles (they wrap on phones).
+const QUICK_ACTIONS: { label: string; detail: string; icon: IconName; href: string }[] = [
+  { label: 'Study groups', detail: 'Join or start a group and discuss topics together.', icon: 'social', href: '/social/groups' },
+  { label: 'Table conferences', detail: 'Plan a study session with friends.', icon: 'connection', href: '/social/conferences' },
+  { label: 'Find classmates', detail: 'Search by username or name and follow.', icon: 'profile', href: '/social/friends' },
 ];
 
 // Social — the academic community. Your own week is real; classmate
@@ -142,9 +148,16 @@ export default function SocialScreen() {
       <PageHeader title="Connect" subtitle="Find classmates, message friends and study together." right={<NotificationBell />} />
       <RecentMessagesCard />
       <View style={styles.quickActions}>
-        <Button label="Study groups" variant="secondary" icon={<Icon name="social" size={16} color={colors.text} />} onPress={() => router.push('/social/groups' as never)} />
-        <Button label="Table conferences" variant="secondary" icon={<Icon name="connection" size={16} color={colors.text} />} onPress={() => router.push('/social/conferences' as never)} />
-        <Button label="Find classmates" variant="secondary" icon={<Icon name="profile" size={16} color={colors.text} />} onPress={() => router.push('/social/friends')} />
+        {QUICK_ACTIONS.map((item) => (
+          <PressableCard key={item.label} onPress={() => router.push(item.href as never)} accessibilityLabel={item.label} style={styles.quickTile}>
+            <View style={styles.quickIcon}><Icon name={item.icon} size={18} color={colors.primaryText} /></View>
+            <View style={styles.flex}>
+              <Text style={styles.quickTitle}>{item.label}</Text>
+              <Text style={styles.note} numberOfLines={2}>{item.detail}</Text>
+            </View>
+            <Icon name="chevronRight" size={16} color={colors.textTertiary} />
+          </PressableCard>
+        ))}
       </View>
       <Columns
         sideWidth={width >= 1180 ? 380 : 340}
@@ -206,7 +219,10 @@ function createStyles(colors: ThemeColors) {
     circleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 14 },
     circleText: { fontSize: 14, fontWeight: '700', color: colors.text },
     soonRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-    quickActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 16 },
+    quickActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 16, marginBottom: 18 },
+    quickTile: { flexGrow: 1, flexBasis: 240, flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14 },
+    quickIcon: { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primarySubtle },
+    quickTitle: { ...Type.headline, color: colors.text },
     friendStreakRow: { flexDirection: 'row', alignItems: 'center', gap: 9, paddingVertical: 5 },
     soonIcon: { width: 38, height: 38, borderRadius: 12, backgroundColor: colors.primarySubtle, alignItems: 'center', justifyContent: 'center' },
     soonTitle: { fontSize: 14, fontWeight: '800', color: colors.text },

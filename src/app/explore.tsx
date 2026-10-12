@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Linking, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Text } from '@/components/ui/text';
 
@@ -21,6 +21,9 @@ import { useTheme, useThemedStyles } from '@/hooks/use-theme';
 import { EXPLORE_TEAM, getExploreAnnouncements, getItemsByCategory, type ExploreAnnouncement, type ExploreItem } from '@/data/explore';
 import { ABOUT_US } from '@/data/about';
 import { useWeeklyExploreSession } from '@/data/weekly-explore';
+import { weeklyCoursePicks } from '@/data/weekly-explore-picks';
+import { type LiveResearch, useWeeklyResearch } from '@/data/weekly-research';
+import { useNow } from '@/data/learning/use-learning';
 
 function DiscoveryCard({ item }: { item: ExploreItem }) {
   const styles = useThemedStyles(createStyles);
@@ -67,6 +70,35 @@ function DiscoveryCard({ item }: { item: ExploreItem }) {
   );
 }
 
+/** A paper from this week's research (Europe PMC): shown as published, with the authors' abstract. */
+function LiveResearchCard({ item }: { item: LiveResearch }) {
+  const styles = useThemedStyles(createStyles);
+  const colors = useTheme();
+  const [expanded, setExpanded] = useState(false);
+  const date = item.date ? new Date(`${item.date}T00:00:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+  return (
+    <Card style={styles.discoveryCard}>
+      <View style={styles.discoveryTop}><Pill label={item.theme} tone="primary" /><Pill label={item.design} /></View>
+      <Text style={styles.featureTitle}>{item.title}</Text>
+      <Text style={styles.featureDescription}>{[item.journal, date].filter(Boolean).join(' · ')}{item.authors ? `
+${item.authors}` : ''}</Text>
+      {expanded ? (
+        <View style={styles.discoveryDetails}>
+          {item.abstract ? <View style={styles.detailBlock}><Text style={styles.detailLabel}>Abstract (from the authors)</Text><Text style={styles.featureDescription}>{item.abstract}</Text></View> : null}
+          <Text style={styles.researchCaveat}>Chosen automatically from Europe PMC this week and shown as published. It is not clinical guidance or course material.</Text>
+          <Interactive onPress={() => void Linking.openURL(item.url)} accessibilityRole="link" style={styles.sourceLink}>
+            <Icon name="book" size={14} color={colors.primaryText} /><Text style={styles.sourceText}>Read the paper on Europe PMC</Text>
+          </Interactive>
+        </View>
+      ) : null}
+      <Interactive onPress={() => setExpanded((value) => !value)} accessibilityRole="button" accessibilityLabel={`${expanded ? 'Collapse' : 'Read'} ${item.title}`} style={styles.discoveryToggle}>
+        <Text style={styles.discoveryToggleText}>{expanded ? 'Show less' : 'Read the abstract'}</Text>
+        <Icon name={expanded ? 'chevronUp' : 'chevronDown'} size={16} color={colors.primaryText} />
+      </Interactive>
+    </Card>
+  );
+}
+
 function AnnouncementCard({ item }: { item: ExploreAnnouncement }) {
   const styles = useThemedStyles(createStyles);
   const label = item.status === 'available' ? 'Available' : item.status === 'preview' ? 'Preview' : 'Coming soon';
@@ -88,6 +120,11 @@ export default function ExploreScreen() {
   const [noEmailApp, setNoEmailApp] = useState(false);
   const emailUs = () => void openContactEmail().then((opened) => setNoEmailApp(!opened));
   const weeklyItems = weeklySession?.items ?? [];
+  // Refreshed every Monday: course concepts and connections, and live research.
+  const now = useNow();
+  const week = useMemo(() => weeklyCoursePicks(now), [now]);
+  const research = useWeeklyResearch();
+  const updated = new Date(`${week.week}T00:00:00`).toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'short' });
   const upcoming = weeklySession ? new Date(`${weeklySession.week_start}T00:00:00`) > new Date() : false;
   const weekLabel = weeklySession
     ? new Date(`${weeklySession.week_start}T00:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
@@ -102,14 +139,17 @@ export default function ExploreScreen() {
 
       {weeklySession ? <SectionHeader title={`${upcoming ? 'Next week' : 'This week'} · ${weeklySession.title}`} subtitle={`${weeklySession.summary} Begins ${weekLabel}.`} style={styles.section} /> : null}
 
-      <SectionHeader title="Medical concepts" subtitle="A quick way into useful ideas that sit across the curriculum." style={styles.firstSection} />
-      <View style={styles.featureGrid}>{[...getItemsByCategory('concept'), ...weeklyItems.filter((item) => item.category === 'concept')].map((item) => <DiscoveryCard key={item.id} item={item} />)}</View>
+      <View style={styles.weekPill}><Pill label={`This week · updated ${updated}`} tone="gold" /><Text style={styles.weekNote}>New concepts, connections and research every Monday.</Text></View>
+      <SectionHeader title="Medical concepts" subtitle="This week’s ideas from your course lessons, plus a few that sit across the curriculum." style={styles.firstSection} />
+      <View style={styles.featureGrid}>{[...week.concepts, ...getItemsByCategory('concept'), ...weeklyItems.filter((item) => item.category === 'concept')].map((item) => <DiscoveryCard key={item.id} item={item} />)}</View>
 
       <SectionHeader title="Connections" subtitle="Follow a mechanism from foundational science to what it can mean in a clinical setting." style={styles.section} />
-      <View style={styles.featureGrid}>{[...getItemsByCategory('connection'), ...weeklyItems.filter((item) => item.category === 'connection')].map((item) => <DiscoveryCard key={item.id} item={item} />)}</View>
+      <View style={styles.featureGrid}>{[...week.connections, ...getItemsByCategory('connection'), ...weeklyItems.filter((item) => item.category === 'connection')].map((item) => <DiscoveryCard key={item.id} item={item} />)}</View>
 
-      <SectionHeader title="Emerging research" subtitle="Peer-reviewed findings, dated and labelled by study design. Research here is supplemental and does not replace course material." style={styles.section} />
-      <View style={styles.featureGrid}>{[...getItemsByCategory('research'), ...weeklyItems.filter((item) => item.category === 'research')].map((item) => <DiscoveryCard key={item.id} item={item} />)}</View>
+      <SectionHeader title="Emerging research" subtitle="The newest peer-reviewed reviews and trials on this week’s themes (from Europe PMC), dated and labelled by study design. Research here is supplemental and does not replace course material." style={styles.section} />
+      {research.status === 'loading' ? <Text style={styles.weekNote}>Finding this week’s research…</Text> : null}
+      {research.status === 'offline' ? <Text style={styles.weekNote}>This week’s research couldn’t be loaded right now — showing earlier summaries.</Text> : null}
+      <View style={styles.featureGrid}>{research.items.map((item) => <LiveResearchCard key={item.id} item={item} />)}{[...getItemsByCategory('research'), ...weeklyItems.filter((item) => item.category === 'research')].map((item) => <DiscoveryCard key={item.id} item={item} />)}</View>
 
       <View style={[styles.introGrid, styles.section]}>
         <Card style={styles.introCard}>
@@ -289,6 +329,8 @@ function createStyles(colors: ThemeColors) {
     flex: { flex: 1, minWidth: 0 },
     section: { marginTop: 34 },
     firstSection: { marginTop: 4 },
+    weekPill: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 10, marginTop: 4, marginBottom: 6 },
+    weekNote: { fontSize: 13, color: colors.textSecondary, marginBottom: 8 },
     introGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 14, alignItems: 'stretch' },
     startGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 4 },
     startTile: { flexBasis: '47%', flexGrow: 1, minWidth: 200, flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12, borderRadius: 14, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceMuted },

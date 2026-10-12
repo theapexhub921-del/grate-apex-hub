@@ -186,3 +186,17 @@ export async function saveClassSelection(selection: ClassSelection) {
     throw new Error('Your class selection could not be saved. Please check your connection and try again.');
   }
 }
+
+export const USERNAME_CHANGE_DAYS = 30;
+
+/** When the signed-in learner may next change their username (null = any time now). The rules enforce the same 30 days. */
+export async function nextUsernameChange(): Promise<Date | null> {
+  await auth.authStateReady();
+  const user = auth.currentUser;
+  if (!user) return null;
+  const data = (await getDoc(doc(db, 'users', user.uid)).catch(() => null))?.data();
+  const changedAt = (data?.usernameChangedAt as { toMillis?: () => number } | undefined)?.toMillis?.();
+  if (!changedAt) return null;
+  const next = changedAt + USERNAME_CHANGE_DAYS * 86_400_000;
+  return next > Date.now() ? new Date(next) : null;
+}

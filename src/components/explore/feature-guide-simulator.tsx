@@ -24,14 +24,14 @@ const GROUPS: readonly Group[] = [
   { id: 'progress', label: 'Progress and rewards', icon: 'xp', titles: ['XP and ranks', 'Achievements', 'Learning power-ups', 'Learning streak', 'Leagues', 'Friend streaks, freezes and restores', 'Weekly challenges', 'Apex Coin gifts'] },
   { id: 'social', label: 'Social', icon: 'social', titles: ['Feed', 'Posts, reactions, comments and reshares', 'Profiles and follows', 'Connect', 'Messages', 'Study groups and discussions', 'Friend battles', 'Table Conferences', 'Live voice calls'] },
   { id: 'planning', label: 'Planning', icon: 'calendar', titles: ['Study Plans', 'Timetable', 'Goals', 'Notifications'] },
-  { id: 'app', label: 'The app', icon: 'settings', titles: ['You', 'Experiences and themes', 'Settings', 'Install and share the app', 'Widgets and personalization'] },
+  { id: 'app', label: 'The app', icon: 'settings', titles: ['You', 'Explore every Monday', 'Experiences and themes', 'Settings', 'Install and share the app', 'Widgets and personalization'] },
 ];
 
 const ICONS: Record<string, IconName> = {
   Study: 'learn', 'HB1 courses': 'course', 'Practice question types': 'lesson', 'Profiles and follows': 'profile', 'Apex Challenge': 'challenge', 'Past Question Bank': 'book', 'XP and ranks': 'rank', Achievements: 'achievement',
   'Learning power-ups': 'sparkle', 'Learning streak': 'streak', Leagues: 'chart', 'Friend streaks, freezes and restores': 'streak',
   'Weekly challenges': 'calendar', 'Apex Coin gifts': 'xp', Feed: 'home', 'Posts, reactions, comments and reshares': 'heart', Connect: 'social',
-  Messages: 'mail', 'Study groups and discussions': 'social', 'Friend battles': 'challenge', 'Table Conferences': 'clock', 'Live voice calls': 'announcement',
+  Messages: 'comment', 'Explore every Monday': 'research', 'Study groups and discussions': 'social', 'Friend battles': 'challenge', 'Table Conferences': 'clock', 'Live voice calls': 'announcement',
   'Study Plans': 'course', Timetable: 'calendar', Goals: 'mastery', Notifications: 'bell', You: 'profile', 'Experiences and themes': 'sparkle',
   Settings: 'settings', 'Install and share the app': 'upload', 'Widgets and personalization': 'grid',
 };
