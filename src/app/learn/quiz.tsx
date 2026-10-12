@@ -24,7 +24,6 @@ import { useProgress } from '@/data/progress';
 import { ensureQuestionHistoryLoaded } from '@/data/question-history';
 import { type AttemptKind, type CustomQuizSettings, ensureQuizHistoryLoaded, getQuizHistory } from '@/data/quiz-history';
 import { useTheme, useThemedStyles } from '@/hooks/use-theme';
-import { isLocalPreview } from '@/lib/local-preview';
 import { param, routes } from '@/lib/routes';
 import type { Href } from 'expo-router';
 
@@ -67,8 +66,6 @@ export default function QuizRoute() {
     custom && customLessonIds?.length
       ? { lessonIds: customLessonIds, size: customSize ?? 10, feedback, secondsPerQuestion: perQuestionSeconds }
       : undefined;
-
-  if (custom && !isLocalPreview()) return <Redirect href={routes.learn()} />;
 
   if (param(params.challenge) === 'apex' || (!lessonId && !topicId && !practice && param(params.course))) {
     return <Redirect href={routes.apex(param(params.course))} />;

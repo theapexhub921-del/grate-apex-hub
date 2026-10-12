@@ -206,6 +206,17 @@ export default function LearnScreen() {
           fullWidth
         />
       </Card>
+      <Card style={styles.reviewCard}>
+        <View style={styles.reviewHeader}>
+          <View style={styles.reviewIcon}>
+            <Icon name="edit" size={18} color={colors.primaryText} />
+          </View>
+          <Text style={styles.kicker}>CUSTOM QUIZ</Text>
+        </View>
+        <Text style={styles.reviewTitle}>Build your own quiz</Text>
+        <Text style={styles.reviewText}>Pick the lessons, how many questions, feedback after each or at the end, and an optional timer for a drill.</Text>
+        <Button label="Create a custom quiz" variant="secondary" fullWidth onPress={() => router.push(routes.customQuizBuilder())} />
+      </Card>
       <Card style={styles.reviewCard} tone="outline">
         <View style={styles.reviewHeader}>
           <View style={styles.reviewIcon}>

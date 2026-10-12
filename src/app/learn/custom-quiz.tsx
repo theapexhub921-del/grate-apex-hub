@@ -1,4 +1,4 @@
-import { Redirect, router } from 'expo-router';
+import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Text } from '@/components/ui/text';
@@ -14,7 +14,6 @@ import { InlineNotice } from '@/components/ui/state-views';
 import { Type, type ThemeColors } from '@/constants/theme';
 import { getLessonQuestions, publishedTopics } from '@/data/curriculum';
 import { useTheme, useThemedStyles } from '@/hooks/use-theme';
-import { isLocalPreview } from '@/lib/local-preview';
 import { routes } from '@/lib/routes';
 
 const QUESTION_COUNTS = [5, 10, 15, 20, 25] as const;
@@ -49,8 +48,6 @@ export default function CustomQuizBuilderScreen() {
     return Array.from(ids);
   }, [selectedLessonIds]);
 
-  if (!isLocalPreview()) return <Redirect href={routes.learn()} />;
-
   function toggleLesson(lessonId: string) {
     setSelectedLessonIds((current) =>
       current.includes(lessonId) ? current.filter((id) => id !== lessonId) : [...current, lessonId]
@@ -79,10 +76,10 @@ export default function CustomQuizBuilderScreen() {
 
   return (
     <Screen width="learning">
-      <BackLink fallback={routes.explore()} />
+      <BackLink fallback={routes.learn()} />
       <PageHeader
-        eyebrow="Local preview"
-        title="Custom practice"
+        eyebrow="Study"
+        title="Custom quiz"
         subtitle="Build a quiz from the lecture questions in the lessons you choose."
       />
 
@@ -185,7 +182,7 @@ export default function CustomQuizBuilderScreen() {
           disabled={availableQuestionIds.length === 0}
         />
       </View>
-      <Text style={styles.previewNote}>Local preview only · results are saved in local practice history.</Text>
+      <Text style={styles.previewNote}>Your answers count toward your quiz history and spaced review.</Text>
     </Screen>
   );
 }

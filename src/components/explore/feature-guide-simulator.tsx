@@ -20,7 +20,7 @@ import { useTheme, useThemedStyles } from '@/hooks/use-theme';
 type Group = { id: string; label: string; icon: IconName; titles: readonly string[] };
 
 const GROUPS: readonly Group[] = [
-  { id: 'learn', label: 'Learning', icon: 'learn', titles: ['Study', 'HB1 courses', 'HB2 courses', 'Practice question types', 'Apex Challenge', 'Past Question Bank'] },
+  { id: 'learn', label: 'Learning', icon: 'learn', titles: ['Study', 'HB1 courses', 'HB2 courses', 'Custom quizzes', 'Practice question types', 'Apex Challenge', 'Past Question Bank'] },
   { id: 'progress', label: 'Progress and rewards', icon: 'xp', titles: ['XP and ranks', 'Achievements', 'Learning power-ups', 'Learning streak', 'Leagues', 'Friend streaks, freezes and restores', 'Weekly challenges', 'Apex Coin gifts'] },
   { id: 'social', label: 'Social', icon: 'social', titles: ['Feed', 'Posts, reactions, comments and reshares', 'Profiles and follows', 'Connect', 'Messages', 'Study groups and discussions', 'Friend battles', 'Table Conferences', 'Live voice calls'] },
   { id: 'planning', label: 'Planning', icon: 'calendar', titles: ['Study Plans', 'Timetable', 'Goals', 'Notifications'] },
@@ -28,7 +28,7 @@ const GROUPS: readonly Group[] = [
 ];
 
 const ICONS: Record<string, IconName> = {
-  Study: 'learn', 'HB1 courses': 'course', 'HB2 courses': 'biochemistry', 'Practice question types': 'lesson', 'Profiles and follows': 'profile', 'Apex Challenge': 'challenge', 'Past Question Bank': 'book', 'XP and ranks': 'rank', Achievements: 'achievement',
+  Study: 'learn', 'HB1 courses': 'course', 'HB2 courses': 'biochemistry', 'Custom quizzes': 'edit', 'Practice question types': 'lesson', 'Profiles and follows': 'profile', 'Apex Challenge': 'challenge', 'Past Question Bank': 'book', 'XP and ranks': 'rank', Achievements: 'achievement',
   'Learning power-ups': 'sparkle', 'Learning streak': 'streak', Leagues: 'chart', 'Friend streaks, freezes and restores': 'streak',
   'Weekly challenges': 'calendar', 'Apex Coin gifts': 'xp', Feed: 'home', 'Posts, reactions, comments and reshares': 'heart', Connect: 'social',
   Messages: 'comment', 'Explore every Monday': 'research', 'Study groups and discussions': 'social', 'Friend battles': 'challenge', 'Table Conferences': 'clock', 'Live voice calls': 'announcement',
