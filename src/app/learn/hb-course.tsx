@@ -15,6 +15,9 @@ import { Text } from '@/components/ui/text';
 import { Type, type ThemeColors } from '@/constants/theme';
 import { legacyCourse, loadCourseSets, loadLegacyLessons, loadLegacySectionProgress, type LegacyLessonMeta, plainText } from '@/data/legacy-study';
 import { useProgress } from '@/data/progress';
+import { useNow } from '@/data/learning/use-learning';
+import { legacyQuestionMemory, legacyReviewFor } from '@/data/legacy-review';
+import { useQuestionHistory } from '@/data/question-history';
 import { useTheme, useThemedStyles } from '@/hooks/use-theme';
 import { param, routes } from '@/lib/routes';
 
@@ -28,6 +31,10 @@ export default function LegacyCourseScreen() {
   const params = useLocalSearchParams<{ course?: string | string[] }>();
   const course = legacyCourse(param(params.course));
   const progress = useProgress();
+  const history = useQuestionHistory();
+  const now = useNow();
+  // The original questions in the same spaced-review engine (HB2 questions are in Study → Spaced review).
+  const review = useMemo(() => (course && !course.subject ? legacyReviewFor(course.id, legacyQuestionMemory(history), now) : null), [course, history, now]);
   const [lessons, setLessons] = useState<LegacyLessonMeta[] | null>(null);
   const [sets, setSets] = useState<{ id: string; name: string; count: number }[] | null>(null);
   const [sectionsRead, setSectionsRead] = useState<Record<string, number>>({});
@@ -72,6 +79,19 @@ export default function LegacyCourseScreen() {
           </View> : null}
         </View>
       </Card>
+
+      {review && review.tracked > 0 ? (
+        <Card style={styles.reviewCard}>
+          <View style={styles.reviewText}>
+            <Text style={styles.reviewTitle}>Spaced review</Text>
+            <Text style={styles.summary}>{review.due.length ? `${review.due.length} question${review.due.length === 1 ? ' is' : 's are'} due to come back.` : 'Nothing is due right now.'} {review.missed.length ? `${review.missed.length} answered wrongly last time.` : ''}</Text>
+          </View>
+          <View style={styles.actions}>
+            <Button label={review.due.length ? `Review ${Math.min(20, review.due.length)} due` : 'Nothing due'} size="sm" disabled={!review.due.length} onPress={() => router.push(routes.legacyPractice({ course: course.id, review: 'due' }))} />
+            <Button label="Fix your mistakes" size="sm" variant="secondary" disabled={!review.missed.length} onPress={() => router.push(routes.legacyPractice({ course: course.id, review: 'missed' }))} />
+          </View>
+        </Card>
+      ) : null}
 
       <SectionHeader title="Lessons" subtitle={lessons.length ? `${lessons.length} lessons in order · ${done} completed` : undefined} style={styles.section} />
       {lessons.length === 0 ? (
@@ -162,6 +182,9 @@ function createStyles(colors: ThemeColors) {
     section: { marginTop: 28 },
     group: { ...Type.overline, color: colors.textSecondary, marginTop: 14, marginBottom: 2, marginLeft: 48 },
     empty: { gap: 6, padding: 18 },
+    reviewCard: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: 16, marginTop: 16 },
+    reviewText: { flex: 1, minWidth: 220, gap: 4 },
+    reviewTitle: { ...Type.headline, color: colors.text },
     path: { gap: 0 },
     pathRow: { flexDirection: 'row', gap: 14 },
     rail: { width: 34, alignItems: 'center' },

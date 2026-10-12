@@ -17,6 +17,8 @@ import { dayKey } from '@/data/learning/time';
 import { XP_RULES } from '@/data/learning/xp-rules';
 import { bankQuestions, buildPractice, legacyCourse, loadLegacyBank, loadLegacyLessonList } from '@/data/legacy-study';
 import { buildLocalPractice, hb2LessonById, hb2Sets } from '@/data/hb2-study';
+import { legacyQuestionMemory, legacyReviewFor } from '@/data/legacy-review';
+import { useQuestionHistory } from '@/data/question-history';
 import { getLessonQuizBank } from '@/data/curriculum';
 import { awardXp } from '@/data/progress';
 import { isAnswerCorrect, type Question } from '@/data/questions';
@@ -35,6 +37,9 @@ export default function LegacyPracticeScreen() {
   const lessonId = param(params.lesson);
   const setId = param(params.set);
   const apex = param(params.apex) === '1';
+  const review = param(params.review) === 'due' ? 'due' : param(params.review) === 'missed' ? 'missed' : null;
+  const history = useQuestionHistory();
+  const [reviewIds] = useState(() => (review && course ? new Set(legacyReviewFor(course.id, legacyQuestionMemory(history), Date.now())[review]) : null));
   const attempt = param(params.attempt) ?? 'first';
   const [questions, setQuestions] = useState<Question[] | null>(null);
   const [title, setTitle] = useState('');
@@ -77,16 +82,20 @@ export default function LegacyPracticeScreen() {
           const set = bank.sets.find((item) => item.id === setId);
           source = all.filter((q) => q.set === setId);
           label = set ? `${course.name} · ${set.name}` : label;
+        } else if (reviewIds) {
+          // Spaced review of the original questions (data/legacy-review.ts).
+          source = all.filter((q) => reviewIds.has(q.id));
+          label = `${course.name} · ${review === 'due' ? 'Due for review' : 'Fix your mistakes'}`;
         }
         if (apex) label = `${course.name} · Apex Challenge`;
-        const count = apex ? APEX.questionsPerRun : setId ? Math.min(30, source.length) : lessonId ? 15 : 20;
-        if (source.length === 0) throw new Error('There are no questions here yet.');
+        const count = apex ? APEX.questionsPerRun : setId ? Math.min(30, source.length) : reviewIds ? Math.min(20, source.length) : lessonId ? 15 : 20;
+        if (source.length === 0) throw new Error(reviewIds ? 'Nothing to review here right now — well done.' : 'There are no questions here yet.');
         setTitle(label);
         setQuestions(buildPractice(source, { course: course.id, lessonId }, count, seed));
       })
       .catch((problem) => { if (live) setError(problem instanceof Error ? problem.message : 'The questions could not be loaded.'); });
     return () => { live = false; };
-  }, [course, lessonId, setId, apex, seed]);
+  }, [course, lessonId, setId, apex, seed, reviewIds, review]);
 
   const items = useMemo(() => (questions ?? []).map((question) => ({ question })), [questions]);
 

@@ -54,9 +54,9 @@ export const routes = {
       : fallback('legacyCourse', '/learn'),
   legacyLesson: (lessonId: string | null | undefined, section?: number) =>
     valid(lessonId) ? (`/learn/hb-lesson${query({ lesson: lessonId, section })}` as Href) : fallback('legacyLesson', '/learn'),
-  legacyPractice: (options: { course: string; lesson?: string; set?: string; apex?: boolean }) =>
+  legacyPractice: (options: { course: string; lesson?: string; set?: string; apex?: boolean; review?: 'due' | 'missed' }) =>
     valid(options.course)
-      ? (`/learn/hb-practice${query({ course: options.course, lesson: options.lesson, set: options.set, apex: options.apex ? 1 : undefined, attempt: Date.now() })}` as Href)
+      ? (`/learn/hb-practice${query({ course: options.course, lesson: options.lesson, set: options.set, apex: options.apex ? 1 : undefined, review: options.review, attempt: Date.now() })}` as Href)
       : fallback('legacyPractice', '/learn'),
 
   course: (courseId: string | null | undefined) =>

@@ -316,7 +316,7 @@ const announcements: readonly ExploreAnnouncement[] = [
 
 export const EXPLORE_GUIDE: readonly ExploreGuideEntry[] = [
   { title: 'Feed', detail: 'Stories and posts from people: photos, videos and study moments that you can like, comment on and reshare.', status: 'available' },
-  { title: 'HB1 courses', detail: 'All 13 HB1 Semester 1 and Semester 2 courses from the original app: lessons read one section at a time with tappable key words, figures and study aids, then practice from the original question banks.', status: 'available' },
+  { title: 'HB1 courses', detail: 'All 13 HB1 Semester 1 and Semester 2 courses from the original app: lessons read one section at a time with tappable key words, figures and study aids, then practice from the original question banks. Your answers go through the same spaced-review engine as the rest of Study: due questions come back, and wrong ones wait in Fix your mistakes.', status: 'available' },
   { title: 'HB2 courses', detail: 'Anatomy, Physiology and Biochemistry for HB2 Semester 1 in the same study style as HB1: lessons read one section at a time with tappable key words and study aids, then mixed-type practice and an Apex Challenge. Biochemistry is ready; Anatomy and Physiology lessons are being prepared from the lecture files.', status: 'limited' },
   { title: 'Custom quizzes', detail: 'Build your own quiz in Study: choose lessons, the number of questions, feedback after each answer or at the end, and an optional per-question timer for a drill.', status: 'available' },
   { title: 'Practice question types', detail: 'Multiple choice, type the answer, true or false and matching rounds, plus timed Apex Challenges for every course.', status: 'available' },
