@@ -177,7 +177,7 @@ export function DesktopSidebar({ docked }: { docked: boolean }) {
             tabIndex={shown ? 0 : -1}
             onHoverIn={() => setHovered('identity')}
             onHoverOut={() => setHovered(null)}
-            style={[styles.identity, hovered === 'identity' && styles.navItemHovered]}
+            style={[styles.identity, collapsed && styles.identitySlim, hovered === 'identity' && !collapsed && styles.navItemHovered]}
           >
             <Avatar uri={avatarUrl} name={displayName} size={34} ring="gold" />
             <View style={[styles.identityText, collapsed && styles.hiddenBlock]}>
@@ -322,6 +322,8 @@ function createStyles(colors: ThemeColors) {
       borderRadius: 12,
       ...webStyle({ cursor: 'pointer', outlineStyle: 'none' }),
     },
+    // Slim rail: just the round picture.
+    identitySlim: { flex: 0, padding: 0, borderRadius: 999, alignSelf: 'center' },
     identityText: { flex: 1, minWidth: 0 },
     footerName: { fontSize: 13, fontWeight: '700', color: colors.text },
     footerRank: { fontSize: 11, color: colors.textTertiary, marginTop: 1 },

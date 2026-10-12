@@ -239,7 +239,7 @@ export function LegacySidebar({ onNavigate }: { onNavigate: (route: string) => v
           })}
         </View>
         <View style={{ flex: 1 }} />
-        <View style={[styles.me, { backgroundColor: C.card, borderColor: C.border }, collapsed && styles.meSlim]}>
+        <View style={[styles.me, collapsed ? styles.meSlim : { backgroundColor: C.card, borderColor: C.border }]}>
           <View style={{ marginRight: collapsed ? 0 : 10 }}>
             <Avatar uri={avatarUrl} name={displayName} size={38} />
           </View>
@@ -277,7 +277,8 @@ const styles = StyleSheet.create({
   sideHandle: { width: 6, height: 40, borderRadius: 3, opacity: 0.3 },
   overlay: { position: 'absolute', left: 0, top: 0, bottom: 0, ...webStyle({ boxShadow: '0px 10px 40px rgba(0,0,0,0.25)' }) },
   sideInnerSlim: { paddingHorizontal: 10, alignItems: 'center' },
-  meSlim: { padding: 6, justifyContent: 'center' },
+  // Slim rail: just the round picture, no card around it.
+  meSlim: { padding: 0, justifyContent: 'center', borderWidth: 0, backgroundColor: 'transparent' },
   hidden: { display: 'none' },
   sideInner: { width: 249, flex: 1, paddingHorizontal: 16, paddingVertical: 22 },
   brand: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 6 },

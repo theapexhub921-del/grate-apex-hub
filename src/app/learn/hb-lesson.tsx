@@ -1,9 +1,11 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { type ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 
 import { LegacyBlocks, Rich, TermContext } from '@/components/learning/legacy-blocks';
 import { BackLink } from '@/components/learning/nav-bits';
+import { AidsPanel, FlashcardsPanel, GlossaryPanel, LessonToolTabs, StepsPanel, type ToolTab, type ToolTabInfo } from '@/components/learning/lesson-tools';
+import { cardsFor, glossaryOf } from '@/data/flashcards';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
 import { Card, Interactive, PressableCard } from '@/components/ui/interactive';
@@ -52,6 +54,10 @@ export default function LegacyLessonScreen() {
   const [error, setError] = useState<string | null>(null);
   const [term, setTerm] = useState<{ word: string; meaning: string } | null>(null);
   const [finished, setFinished] = useState<{ xp: number } | null>(null);
+  const [tab, setTab] = useState<ToolTab>('read');
+  // The lesson's study tools (data/flashcards.ts): its key words as a glossary and flashcards.
+  const glossary = useMemo(() => (body ? glossaryOf(body.sections) : []), [body]);
+  const cards = useMemo(() => (lessonId ? cardsFor(lessonId, glossary) : []), [lessonId, glossary]);
 
   useEffect(() => {
     if (!lessonId) return;
@@ -158,6 +164,24 @@ export default function LegacyLessonScreen() {
     </View>
   );
 
+  const extras = body.extras;
+  const tabs: ToolTabInfo[] = [
+    { id: 'read', label: 'Read', icon: 'book' },
+    ...(cards.length ? [{ id: 'cards' as const, label: `Flashcards (${cards.length})`, icon: 'reinforce' as const }] : []),
+    ...(glossary.length ? [{ id: 'glossary' as const, label: 'Glossary', icon: 'lesson' as const }] : []),
+    ...(extras?.mnemonics?.length ? [{ id: 'mnemonics' as const, label: 'Mnemonics', icon: 'sparkle' as const }] : []),
+    ...(extras?.facts?.length ? [{ id: 'facts' as const, label: 'Key facts', icon: 'info' as const }] : []),
+    ...(extras?.steps?.items?.length ? [{ id: 'steps' as const, label: plainText(extras.steps.title) || 'Steps', icon: 'chart' as const }] : []),
+    ...(questions > 0 && course ? [{ id: 'practice' as const, label: `Practice (${questions})`, icon: 'edit' as const }] : []),
+  ];
+  const panel =
+    tab === 'cards' ? <FlashcardsPanel cards={cards} />
+    : tab === 'glossary' ? <GlossaryPanel glossary={glossary} />
+    : tab === 'mnemonics' && extras?.mnemonics ? <AidsPanel title="Mnemonics" intro="Memory hooks for this lesson." groups={extras.mnemonics} />
+    : tab === 'facts' && extras?.facts ? <AidsPanel title="Key facts" intro="The points to remember from this lesson." groups={extras.facts} />
+    : tab === 'steps' && extras?.steps ? <StepsPanel steps={extras.steps} />
+    : reader;
+
   return (
     <Screen ref={scroll} width="wide">
       <BackLink fallback={course ? routes.legacyCourse(course.id) : routes.learn()} />
@@ -183,15 +207,23 @@ export default function LegacyLessonScreen() {
           </View>
         </PressableCard>
       ) : null}
+      <LessonToolTabs tabs={tabs} active={tab} onChange={(next) => {
+        if (next === 'practice') {
+          if (course) router.push(routes.legacyPractice({ course: course.id, lesson: meta.id }));
+          return;
+        }
+        setTab(next);
+        scroll.current?.scrollTo({ y: 0, animated: false });
+      }} />
       {wide ? (
         <View style={styles.columns}>
-          <View style={styles.main}>{reader}</View>
-          <View style={styles.side}>{outline}</View>
+          <View style={styles.main}>{panel}</View>
+          <View style={styles.side}>{tab === 'read' ? outline : null}</View>
         </View>
       ) : (
         <View style={styles.stack}>
-          {reader}
-          {outline}
+          {panel}
+          {tab === 'read' ? outline : null}
         </View>
       )}
       <Sheet visible={Boolean(term)} onClose={() => setTerm(null)} title={term?.word ?? ''}>
