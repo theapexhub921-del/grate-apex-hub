@@ -12,7 +12,7 @@ import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firesto
 
 import { auth, db } from '@/lib/firebase';
 
-export const VERIFIED_USERNAMES: readonly string[] = ['prince', 'theapexhub', 'originate', 'robotnik', 'stbretro', 'grate_apex', 'myuncletouchesme'];
+export const VERIFIED_USERNAMES: readonly string[] = ['prince', 'theapexhub', 'originate', 'robotnik', 'stbretro', 'grate_apex', 'myuncletouchesme', 'grate_apex02', 'stickyfingersretro', 'stickyfingers_retro'];
 export const BLUE_VERIFIED_USERNAMES: readonly string[] = ['bevelyn', 'amtul', 'akua'];
 
 export type VerifiedTier = 'gold' | 'blue';
@@ -44,12 +44,14 @@ function verifiedListUids() {
         listUids = null;
         return new Map<string, VerifiedTier>();
       }
+      // Firestore 'in' takes up to 30 values, so the spellings are looked up in batches.
       const spellings = usernameSpellings();
-      const [users, scores] = await Promise.all(
-        ['users', 'scores'].map((name) => getDocs(query(collection(db, name), where('username', 'in', spellings))).catch(() => null))
+      const batches = Array.from({ length: Math.ceil(spellings.length / 30) }, (_, index) => spellings.slice(index * 30, index * 30 + 30));
+      const snaps = await Promise.all(
+        ['users', 'scores'].flatMap((name) => batches.map((batch) => getDocs(query(collection(db, name), where('username', 'in', batch))).catch(() => null)))
       );
       const uids = new Map<string, VerifiedTier>();
-      for (const snap of [users, scores]) {
+      for (const snap of snaps) {
         for (const item of snap?.docs ?? []) {
           const tier = verifiedTierOf(item.data().username as string);
           if (tier && uids.get(item.id) !== 'gold') uids.set(item.id, tier);

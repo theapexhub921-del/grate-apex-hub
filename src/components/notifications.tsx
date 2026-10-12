@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { router, usePathname } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Text } from '@/components/ui/text';
@@ -19,6 +19,8 @@ import { useNotificationPreferences, usePushNotificationsPreference } from '@/da
 import { markSocialNotificationsRead, readSocialNotificationIds, socialAppNotifications, useSocial } from '@/data/social';
 import { useTheme, useThemedStyles } from '@/hooks/use-theme';
 import { showDeviceNotification } from '@/lib/device-notifications';
+import { useMessageNotifications } from '@/data/message-notifications';
+import { usePromotionNotifications } from '@/components/league-promotion';
 
 type Filter = 'all' | 'learning' | 'updates';
 
@@ -28,9 +30,13 @@ export function useNotifications() {
   const localRead = useReadNotifications();
   const preferences = useNotificationPreferences();
   const social = useSocial();
+  const messages = useMessageNotifications();
+  const promotions = usePromotionNotifications();
   const items = useMemo(
     () =>
       [
+        ...messages,
+        ...promotions,
         ...socialAppNotifications(social.notifications),
         ...buildNotifications({
           memory,
@@ -41,7 +47,7 @@ export function useNotifications() {
           now,
         }),
       ].filter((item) => preferences[preferenceFor(item)]).sort((a, b) => b.at - a.at),
-    [social.notifications, memory, events, progress.streak, progress.lastActivityDate, progress.xp, now, preferences]
+    [messages, promotions, social.notifications, memory, events, progress.streak, progress.lastActivityDate, progress.xp, now, preferences]
   );
   const read = useMemo(() => new Set([...localRead, ...readSocialNotificationIds(social.notifications)]), [localRead, social.notifications]);
   const unread = items.filter((item) => !read.has(item.id)).length;
@@ -49,6 +55,8 @@ export function useNotifications() {
 }
 
 export function preferenceFor(item: AppNotification) {
+  if (item.id.startsWith('msg:')) return 'messages' as const;
+  if (item.id.startsWith('league:')) return 'socialEngagement' as const;
   if (item.id.startsWith('inapp:')) return 'socialEngagement' as const;
   if (item.id.startsWith('social:')) return 'friendRequests' as const;
   if (item.group === 'updates') return 'announcements' as const;
@@ -59,10 +67,14 @@ export function preferenceFor(item: AppNotification) {
 // Delivers an alert at device level while the installed web app is in the
 // background. Existing unread items are deliberately not replayed on launch.
 export function DeviceNotificationBridge() {
+  const styles = useThemedStyles(createStyles);
+  const colors = useTheme();
+  const pathname = usePathname();
   const { items, read } = useNotifications();
   const enabled = usePushNotificationsPreference();
   const seen = useRef(new Set<string>());
   const started = useRef(false);
+  const [toast, setToast] = useState<AppNotification | null>(null);
 
   useEffect(() => {
     const unread = items.filter((item) => !read.has(item.id));
@@ -75,13 +87,37 @@ export function DeviceNotificationBridge() {
     for (const item of unread) {
       if (seen.current.has(item.id)) continue;
       seen.current.add(item.id);
-      if (enabled && typeof document !== 'undefined' && document.visibilityState !== 'visible') {
-        void showDeviceNotification(item);
-      }
+      const away = typeof document !== 'undefined' && document.visibilityState !== 'visible';
+      if (enabled && away) void showDeviceNotification(item);
+      // On screen: a short toast for new messages (not while already in that chat).
+      else if (!away && item.id.startsWith('msg:') && pathname !== '/social/message') queueMicrotask(() => setToast(item));
     }
-  }, [items, read, enabled]);
+  }, [items, read, enabled, pathname]);
 
-  return null;
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(null), 6000);
+    return () => clearTimeout(timer);
+  }, [toast]);
+
+  if (!toast) return null;
+  return (
+    <Interactive
+      onPress={() => { const href = toast.href; setToast(null); if (href) router.push(href); }}
+      accessibilityRole="alert"
+      accessibilityLabel={`${toast.title}. ${toast.body}`}
+      style={styles.toast}
+    >
+      <View style={styles.toastIcon}><Icon name={toast.icon} size={18} color={colors.onPrimary} /></View>
+      <View style={styles.toastText}>
+        <Text style={styles.toastTitle} numberOfLines={1}>{toast.title}</Text>
+        <Text style={styles.toastBody} numberOfLines={1}>{toast.body}</Text>
+      </View>
+      <Interactive onPress={() => setToast(null)} accessibilityRole="button" accessibilityLabel="Dismiss" style={styles.toastClose}>
+        <Icon name="close" size={16} color={colors.textSecondary} />
+      </Interactive>
+    </Interactive>
+  );
 }
 
 // Local read marks for derived notifications; social ones are also marked
@@ -194,6 +230,12 @@ function NotificationItem({ item, unread, now, first, onPress }: { item: AppNoti
 
 function createStyles(colors: ThemeColors) {
   return StyleSheet.create({
+    toast: { position: 'absolute', top: 14, alignSelf: 'center', zIndex: 70, width: 360, maxWidth: '92%', flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, borderRadius: 16, backgroundColor: colors.surfaceElevated, borderWidth: 1, borderColor: colors.border, boxShadow: `0px 10px 28px ${colors.shadowStrong}` },
+    toastIcon: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primary },
+    toastText: { flex: 1, minWidth: 0 },
+    toastTitle: { fontSize: 14, fontWeight: '800', color: colors.text },
+    toastBody: { fontSize: 13, color: colors.textSecondary },
+    toastClose: { padding: 6 },
     group: { gap: 8 },
     groupTitle: { ...Type.overline, color: colors.textTertiary },
     list: { borderRadius: 16, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.hairline, overflow: 'hidden' },

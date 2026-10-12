@@ -77,7 +77,14 @@ export function RecentMessagesCard() {
                 <Text style={[styles.time, chat.unread && styles.timeUnread]}>{when(chat.lastAt)}</Text>
               </View>
               <View style={styles.chatTop}>
-                <Text style={[styles.preview, chat.unread && styles.previewUnread]} numberOfLines={1}>{chat.lastFromMe ? `You: ${chat.lastText}` : chat.lastText}</Text>
+                {chat.lastText === 'Voice note' ? (
+                  <View style={styles.voicePreview} accessibilityLabel={chat.lastFromMe ? 'You sent a recording' : 'Recording'}>
+                    {chat.lastFromMe ? <Text style={styles.preview}>You:</Text> : null}
+                    <Icon name="mic" size={15} color={chat.unread ? colors.text : colors.textSecondary} />
+                  </View>
+                ) : (
+                  <Text style={[styles.preview, chat.unread && styles.previewUnread]} numberOfLines={1}>{chat.lastFromMe ? `You: ${chat.lastText}` : chat.lastText}</Text>
+                )}
                 {chat.unread ? <View style={styles.dot} /> : null}
               </View>
             </Interactive>
@@ -139,6 +146,7 @@ function createStyles(colors: ThemeColors) {
     timeUnread: { color: colors.primaryText, fontWeight: '700' },
     preview: { flex: 1, fontSize: 13.5, color: colors.textSecondary },
     previewUnread: { color: colors.text, fontWeight: '700' },
+    voicePreview: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 4 },
     dot: { width: 9, height: 9, borderRadius: 5, backgroundColor: colors.primary },
     start: { gap: 8 },
     kicker: { fontSize: 11.5, fontWeight: '800', letterSpacing: 0.6, color: colors.textTertiary },

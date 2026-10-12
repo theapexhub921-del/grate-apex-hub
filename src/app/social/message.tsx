@@ -1,6 +1,6 @@
 import { useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { Text } from '@/components/ui/text';
 
@@ -144,7 +144,7 @@ export default function DirectMessageScreen() {
   return (
     <Screen width="prose">
       <BackLink fallback={'/social/messages' as never} />
-      <PageHeader title={name ? `Chat with ${name}` : 'Direct message'} subtitle={presence ?? 'Messages and voice notes with your friend.'} />
+      <PageHeader title={name ? `Chat with ${name}` : 'Direct message'} subtitle={presence ?? 'Messages with your friend.'} />
       {error ? <InlineNotice tone="warning" title="Conversation unavailable" message={`${error} Direct messages work between friends who follow each other.`} /> : null}
       {loading ? <LoadingState label="Loading conversation" /> : null}
       <ScrollView ref={messagesRef} style={styles.messages} contentContainerStyle={styles.messageList} onContentSizeChange={() => messagesRef.current?.scrollToEnd({ animated: true })}>
@@ -174,14 +174,16 @@ export default function DirectMessageScreen() {
             <View style={styles.recDot} />
             <Text style={styles.recText}>Recording {clock(voice.seconds)} / {clock(VOICE_NOTE_MAX_SECONDS)}</Text>
             <Button label="Cancel" variant="ghost" size="sm" onPress={voice.cancel} />
-            <Button label="Send voice note" size="sm" icon={<Icon name="send" size={15} color={colors.onPrimary} />} onPress={() => void sendVoice()} />
+            <Button label="Send" size="sm" icon={<Icon name="send" size={15} color={colors.onPrimary} />} onPress={() => void sendVoice()} accessibilityLabel="Send recording" />
           </View>
         ) : (
           <>
             <MentionInput people={social.people} value={draft} onChangeText={setDraft} maxLength={500} multiline placeholder="Write a message…" placeholderTextColor={colors.textTertiary} accessibilityLabel="Write a message" style={styles.input} />
             <View style={styles.composerActions}>
               {canRecord ? (
-                <Button label={sendingVoice ? 'Sending…' : 'Voice note'} variant="secondary" icon={<Icon name="mic" size={16} color={colors.text} />} onPress={() => void voice.start()} loading={sendingVoice} disabled={!conversationId || sendingVoice} accessibilityLabel="Record a voice note" />
+                <Interactive onPress={() => void voice.start()} disabled={!conversationId || sendingVoice} accessibilityRole="button" accessibilityLabel="Record a voice note" style={[styles.micButton, sendingVoice && styles.micBusy]}>
+                  {sendingVoice ? <ActivityIndicator size="small" color={colors.primaryText} /> : <Icon name="mic" size={20} color={colors.text} />}
+                </Interactive>
               ) : null}
               <Button label="Send" icon={<Icon name="send" size={15} color={colors.onPrimary} />} onPress={() => void send()} loading={busy} disabled={!draft.trim() || busy || !conversationId} />
             </View>
@@ -238,7 +240,9 @@ function createStyles(colors: ThemeColors) {
     receipt: { alignSelf: 'flex-end', fontSize: 11, fontWeight: '700', color: colors.textTertiary, marginTop: -4, marginRight: 4 },
     empty: { ...Type.callout, color: colors.textTertiary, textAlign: 'center', marginTop: 30 },
     composer: { gap: 10 },
-    composerActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10 },
+    composerActions: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: 10 },
+    micButton: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.borderStrong, backgroundColor: colors.surfaceMuted },
+    micBusy: { opacity: 0.7 },
     recordingRow: { flexDirection: 'row', alignItems: 'center', gap: 10, flexWrap: 'wrap' },
     recDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.error },
     recText: { flex: 1, fontSize: 14, fontWeight: '700', color: colors.text },
