@@ -5,6 +5,7 @@
 //   questions.ts    — the topic question bank (quiz layer)
 import { contentTopics } from '@/data/content-catalog';
 import { buildTopic } from '@/data/topics/build';
+import { assertionReasonQuestions } from '@/data/topics/cardiovascular-physiology/assertion-reason';
 import { lessons } from '@/data/topics/cardiovascular-physiology/lessons';
 import { questions } from '@/data/topics/cardiovascular-physiology/questions';
 import { concepts, diagrams, discrepancies, TOPIC_ID } from '@/data/topics/cardiovascular-physiology/sources';
@@ -22,7 +23,7 @@ export const cardiovascularPhysiology = buildTopic({
   contentVersion: 2,
   concepts,
   lessons,
-  questions,
+  questions: [...questions, ...assertionReasonQuestions],
   discrepancies,
   diagrams,
 });

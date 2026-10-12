@@ -5,6 +5,7 @@
 //   questions.ts    — the topic question bank (quiz layer)
 import { contentTopics } from '@/data/content-catalog';
 import { buildTopic } from '@/data/topics/build';
+import { assertionReasonQuestions } from '@/data/topics/cholesterol-and-bile-biosynthesis/assertion-reason';
 import { lessons } from '@/data/topics/cholesterol-and-bile-biosynthesis/lessons';
 import { questions } from '@/data/topics/cholesterol-and-bile-biosynthesis/questions';
 import {
@@ -28,7 +29,7 @@ export const cholesterolAndBileBiosynthesis = buildTopic({
   contentVersion: 1,
   concepts,
   lessons,
-  questions,
+  questions: [...questions, ...assertionReasonQuestions],
   discrepancies,
   diagrams,
 });

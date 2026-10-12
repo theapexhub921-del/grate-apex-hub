@@ -5,6 +5,7 @@
 //   questions.ts    — the topic question bank (quiz layer)
 import { contentTopics } from '@/data/content-catalog';
 import { buildTopic } from '@/data/topics/build';
+import { assertionReasonQuestions } from '@/data/topics/hormones-endocrine-biochemistry/assertion-reason';
 import { lessons } from '@/data/topics/hormones-endocrine-biochemistry/lessons';
 import { questions } from '@/data/topics/hormones-endocrine-biochemistry/questions';
 import {
@@ -28,7 +29,7 @@ export const hormones = buildTopic({
   contentVersion: 1,
   concepts,
   lessons,
-  questions,
+  questions: [...questions, ...assertionReasonQuestions],
   discrepancies,
   diagrams,
 });

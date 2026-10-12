@@ -388,12 +388,13 @@ function createStyles(colors: ThemeColors) {
       overflow: 'hidden',
       ...elevation(colors, 1),
     },
-    row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 16 },
+    // Phones: when the buttons do not fit beside the name they move onto the next line.
+    row: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 16 },
     rowDivider: { borderTopWidth: 1, borderTopColor: colors.divider },
-    rowInfo: { flex: 1, minWidth: 0 },
+    rowInfo: { flex: 1, minWidth: 140 },
     nameLine: { flexDirection: 'row', alignItems: 'center', gap: 5, minWidth: 0 },
     rowName: { fontSize: 15, fontWeight: '700', color: colors.text },
     rowDetail: { fontSize: 13, color: colors.textSecondary, marginTop: 2 },
-    actions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    actions: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8, maxWidth: '100%' },
   });
 }

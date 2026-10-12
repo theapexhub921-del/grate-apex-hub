@@ -129,7 +129,9 @@ const softEnd = (color: string) => (/^#[0-9a-f]{6}$/i.test(color) ? `${color}cc`
 
 function createStyles(colors: ThemeColors) {
   return StyleSheet.create({
+    // Never wider than its container: on a phone a long label wraps instead of running off the screen.
     base: {
+      maxWidth: '100%',
       borderRadius: 14,
       alignItems: 'center',
       justifyContent: 'center',
@@ -147,12 +149,14 @@ function createStyles(colors: ThemeColors) {
       alignItems: 'center',
       justifyContent: 'center',
       gap: 8,
+      flexShrink: 1,
+      maxWidth: '100%',
     },
     fullWidth: { alignSelf: 'stretch' },
     sm: { minHeight: 36, paddingHorizontal: 14, paddingVertical: 7, borderRadius: 11 },
     md: { minHeight: 46, paddingHorizontal: 18, paddingVertical: 11 },
     lg: { minHeight: 54, paddingHorizontal: 24, paddingVertical: 14, borderRadius: 16 },
-    label: { fontWeight: '700', textAlign: 'center', letterSpacing: 0.1 },
+    label: { flexShrink: 1, fontWeight: '700', textAlign: 'center', letterSpacing: 0.1 },
     smLabel: { fontSize: 13 },
     mdLabel: { fontSize: 15 },
     lgLabel: { fontSize: 16 },

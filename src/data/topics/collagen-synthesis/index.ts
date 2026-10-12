@@ -6,6 +6,7 @@
 //                        are in more-questions.ts
 import { contentTopics } from '@/data/content-catalog';
 import { buildTopic } from '@/data/topics/build';
+import { assertionReasonQuestions } from '@/data/topics/collagen-synthesis/assertion-reason';
 import { lessons } from '@/data/topics/collagen-synthesis/lessons';
 import { questions } from '@/data/topics/collagen-synthesis/questions';
 import {
@@ -29,7 +30,7 @@ export const collagenAndElastin = buildTopic({
   contentVersion: 1,
   concepts,
   lessons,
-  questions,
+  questions: [...questions, ...assertionReasonQuestions],
   discrepancies,
   diagrams,
 });

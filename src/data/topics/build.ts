@@ -22,7 +22,7 @@ import type {
   SourceReference,
   Topic,
 } from '@/data/lesson-types';
-import { correctAnswerText, type Question, type QuestionSkill } from '@/data/questions';
+import type { Question, QuestionSkill } from '@/data/questions';
 
 // A lesson quiz aims for at least this many lesson-specific questions
 // when the lesson's material can support them (authoring check only).
@@ -295,6 +295,48 @@ export function tf<K extends string>(draft: {
   } as QuestionDraft<K>;
 }
 
+// Assertion–Reason: two real statements about the material (never "the
+// lesson says…"), shown with the five standard options in A–E order.
+// `answer` is how the two statements relate:
+//   'explains'       A. both true, and R explains A
+//   'true-unrelated' B. both true, but R does not explain A
+//   'a-true-r-false' C. A true, R false
+//   'a-false-r-true' D. A false, R true
+//   'both-false'     E. both false
+export type AssertionReasonAnswer = 'explains' | 'true-unrelated' | 'a-true-r-false' | 'a-false-r-true' | 'both-false';
+const ASSERTION_REASON_ANSWER: Record<AssertionReasonAnswer, number> = {
+  explains: 0,
+  'true-unrelated': 1,
+  'a-true-r-false': 2,
+  'a-false-r-true': 3,
+  'both-false': 4,
+};
+
+export function assertionReason<K extends string>(
+  id: string,
+  conceptId: K,
+  assertion: string,
+  reason: string,
+  answer: AssertionReasonAnswer,
+  explanation: string,
+  extra: { difficulty?: DifficultyLevel; sourceRefs?: SourceReference[] } = {}
+): QuestionDraft<K> {
+  return {
+    id,
+    type: 'choice',
+    conceptId,
+    prompt: `Assertion (A): ${assertion}\n\nReason (R): ${reason}`,
+    options: [...ASSERTION_REASONING_OPTIONS],
+    answer: ASSERTION_REASON_ANSWER[answer],
+    fixedOrder: true,
+    label: 'Assertion–Reason',
+    skill: 'pathway-reasoning',
+    difficulty: extra.difficulty ?? 'intermediate',
+    explanation,
+    sourceRefs: extra.sourceRefs,
+  } as QuestionDraft<K>;
+}
+
 export function buildTopic<K extends string>(draft: TopicDraft<K>): BuiltTopic {
   const { concepts, questions: questionDrafts, lessons, ...topicFields } = draft;
   const problems: string[] = [];
@@ -368,56 +410,10 @@ export function buildTopic<K extends string>(draft: TopicDraft<K>): BuiltTopic {
   }));
 
   const quizQuestions = questionDrafts.map((question) => toQuestion(question));
-  const assertionReasoningQuestions = builtLessons.flatMap((lesson) => {
-    const lessonQuestions = quizQuestions.filter((question) => question.lessonId === lesson.id);
-    const choiceQuestions = lessonQuestions.filter((question) => question.type === 'choice');
-    const sourceQuestions = choiceQuestions.length >= 5 ? choiceQuestions : lessonQuestions;
-
-    return Array.from({ length: Math.min(5, sourceQuestions.length) }, (_, index): Question => {
-      const question = sourceQuestions[index];
-      const alternate = sourceQuestions[(index + 1) % sourceQuestions.length];
-      const answer = correctAnswerText(question);
-      const distractor = question.type === 'choice'
-        ? question.options.find((option, optionIndex) => optionIndex !== question.answer) ?? `not ${answer}`
-        : `not ${answer}`;
-      const fact = `The lesson identifies “${answer}” as the correct answer to: “${question.prompt}”`;
-      const falseFact = `The lesson identifies “${distractor}” as the correct answer to: “${question.prompt}”`;
-      const explanation = question.explanation?.trim()
-        ? `The lesson explains: ${question.explanation.trim()}`
-        : `The lesson gives “${answer}” as the correct response.`;
-      const unrelatedFact = alternate.explanation?.trim()
-        ? `The lesson also explains: ${alternate.explanation.trim()}`
-        : `The lesson also tests “${correctAnswerText(alternate)}”.`;
-      const relation = index % 5;
-      const assertion = relation === 3 || relation === 4 ? falseFact : fact;
-      const reason = relation === 1 ? unrelatedFact : relation === 2 || relation === 4 ? falseFact : explanation;
-
-      return {
-        id: `${draft.id}:${lesson.id}:assertion-reasoning-${index + 1}`,
-        type: 'choice',
-        concept: question.concept,
-        conceptId: question.conceptId,
-        subject: draft.subject,
-        courseId: draft.courseId,
-        topicId: draft.id,
-        lessonId: lesson.id,
-        usage: 'quiz',
-        difficulty: question.difficulty,
-        skill: 'pathway-reasoning',
-        label: 'Assertion–Reasoning',
-        prompt: `Assertion: ${assertion}.\n\nReason: ${reason}.\n\nChoose the correct relationship between the Assertion and Reason.`,
-        options: [...ASSERTION_REASONING_OPTIONS],
-        answer: relation,
-        fixedOrder: true,
-        explanation: `Answer ${String.fromCharCode(65 + relation)}. ${relation === 0 ? 'Both statements are true, and the Reason supports the Assertion.' : relation === 1 ? 'Both statements are true, but the Reason describes a separate point from this lesson.' : relation === 2 ? 'The Assertion is true, but the Reason names an incorrect answer.' : relation === 3 ? 'The Assertion names an incorrect answer, while the Reason is true.' : 'Both statements name incorrect answers.'}`,
-        sourceRefs: question.sourceRefs,
-      };
-    });
-  });
   const learnQuestions = builtLessons.flatMap((lesson) =>
     (lesson.interactive ?? []).flatMap((step) => (step.type === 'ask' ? [step.question] : []))
   );
-  const questions = [...quizQuestions, ...assertionReasoningQuestions, ...learnQuestions];
+  const questions = [...quizQuestions, ...learnQuestions];
 
   // ── Authoring checks. They never stop the app; they print in development.
   const lessonIds = new Set(lessons.map((lesson) => lesson.id));
@@ -439,7 +435,7 @@ export function buildTopic<K extends string>(draft: TopicDraft<K>): BuiltTopic {
   for (const question of questions) problems.push(...checkQuestion(question));
 
   for (const lesson of builtLessons) {
-    const quizCount = [...quizQuestions, ...assertionReasoningQuestions].filter((question) => question.lessonId === lesson.id).length;
+    const quizCount = quizQuestions.filter((question) => question.lessonId === lesson.id).length;
     if (quizCount < TARGET_QUIZ_QUESTIONS_PER_LESSON) {
       problems.push(
         `Lesson "${lesson.id}" has ${quizCount} quiz questions (target ${TARGET_QUIZ_QUESTIONS_PER_LESSON}; quizzes top up from earlier lessons)`

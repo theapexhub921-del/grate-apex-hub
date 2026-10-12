@@ -5,6 +5,7 @@
 //   questions.ts, more-questions.ts — the topic question bank (quiz layer)
 import { contentTopics } from '@/data/content-catalog';
 import { buildTopic } from '@/data/topics/build';
+import { assertionReasonQuestions } from '@/data/topics/fatty-acid-biosynthesis/assertion-reason';
 import { lessons } from '@/data/topics/fatty-acid-biosynthesis/lessons';
 import { moreQuestions } from '@/data/topics/fatty-acid-biosynthesis/more-questions';
 import { questions } from '@/data/topics/fatty-acid-biosynthesis/questions';
@@ -29,7 +30,7 @@ export const fattyAcidBiosynthesis = buildTopic({
   contentVersion: 2,
   concepts,
   lessons,
-  questions: [...questions, ...moreQuestions],
+  questions: [...questions, ...moreQuestions, ...assertionReasonQuestions],
   discrepancies,
   diagrams,
 });
