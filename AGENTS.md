@@ -137,6 +137,8 @@ Social (real friends) is in `src/data/social.ts`, backed by `supabase/migrations
 
 Database changes go in `supabase/migrations/` (the live project is `dkmossrgptfgutkqefws`); apply them only with the owner's approval.
 
+Lecture diagrams (tappable images) are in `src/data/figures/` (one file per topic, registered in `index.ts`); the pictures are slide crops in `public/figures/<topic>/`. A reading section shows one with `figure: '<id>'` ("Explore" / "Test yourself", `src/components/learning/figure-view.tsx`); `spotQuestion()` in `src/data/topics/build.ts` makes "what is the marked part?" quiz questions (labels covered, never in Apex). `tests/figures.test.mjs` checks every image and reference.
+
 Progress functionality is currently in:
 
 `src/data/progress.ts`

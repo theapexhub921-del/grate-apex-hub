@@ -17,6 +17,7 @@ import type {
   DifficultyLevel,
   InteractiveStep,
   Lesson,
+  LessonFigure,
   RecallPrompt,
   SourceReference,
   Topic,
@@ -130,6 +131,7 @@ export type QuestionExtra = {
   clinical?: boolean;
   objective?: string;
   sourceRefs?: SourceReference[];
+  figure?: { id: string; spot?: string }; // a lecture diagram (data/figures/)
 };
 
 const SKILL_LABEL: Partial<Record<QuestionSkill, string>> = {
@@ -148,6 +150,32 @@ const SKILL_LABEL: Partial<Record<QuestionSkill, string>> = {
 function withExtra<K extends string>(base: Record<string, unknown>, extra: QuestionExtra, fallbackSkill: QuestionSkill) {
   const skill = extra.skill ?? fallbackSkill;
   return { label: SKILL_LABEL[skill], ...base, ...extra, skill } as unknown as QuestionDraft<K>;
+}
+
+// "What is the marked part?" on a lecture diagram (data/figures/): the
+// right spot's label, other labels from the same diagram as distractors.
+export function spotQuestion<K extends string>(
+  id: string,
+  conceptId: K,
+  figure: LessonFigure,
+  spotId: string,
+  wrongSpotIds: string[],
+  extra: QuestionExtra = {}
+): QuestionDraft<K> {
+  const spotOf = (spot: string) => {
+    const found = figure.spots.find((item) => item.id === spot);
+    if (!found) throw new Error(`${figure.id}: no spot "${spot}"`);
+    return found;
+  };
+  const target = spotOf(spotId);
+  return mcq(id, conceptId, `${figure.title}: what is the marked part?`, target.label, wrongSpotIds.map((spot) => spotOf(spot).label), {
+    skill: 'terminology',
+    label: 'Diagram',
+    sourceRefs: figure.sourceRefs,
+    explanation: [`The lecture diagram labels this part “${target.label}”.`, target.note].filter(Boolean).join(' '),
+    ...extra,
+    figure: { id: figure.id, spot: spotId },
+  });
 }
 
 // Single-answer multiple choice: the correct option first, then distractors.

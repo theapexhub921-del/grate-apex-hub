@@ -47,6 +47,9 @@ type QuestionBase = {
   reviewEligible?: boolean; // default true
   version?: number; // bump when the question's meaning changes
   sourceRefs?: SourceReference[];
+  // A lecture diagram shown with the question, its printed labels hidden
+  // and `spot` (if set) marked — "What is the highlighted structure?"
+  figure?: { id: string; spot?: string };
 };
 
 export type ChoiceQuestion = QuestionBase & {
@@ -249,6 +252,7 @@ export const APEX_LIMITS = { prompt: 120, option: 48, options: 4 } as const;
 export function isApexEligible(question: Question) {
   if (question.type !== 'choice') return false;
   if (question.reviewEligible === false) return false;
+  if (question.figure) return false; // a diagram needs more than 10 seconds
   if (question.prompt.length > APEX_LIMITS.prompt) return false;
   if (question.options.length > APEX_LIMITS.options) return false;
   return question.options.every((option) => option.length <= APEX_LIMITS.option);

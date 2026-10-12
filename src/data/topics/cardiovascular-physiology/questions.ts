@@ -6,7 +6,8 @@
 // brain weight in air or the Monro–Kellie CSF volume (slides differ), and
 // any speaker-note annotation. Options are shuffled at quiz time.
 // IDs: qN-xx, N = lesson.
-import { fill, match, mcq, multi, order, tf, type QuestionDraft } from '@/data/topics/build';
+import { chestLeads, circleOfWillis, conduction, coronaryArteries, ecg, fetalCirculation, heart, jvp, limbLeads, starlingCurves } from '@/data/figures/cardiovascular-physiology';
+import { fill, match, mcq, multi, order, spotQuestion, tf, type QuestionDraft } from '@/data/topics/build';
 import type { ConceptId } from '@/data/topics/cardiovascular-physiology/sources';
 
 type Q = QuestionDraft<ConceptId>;
@@ -270,4 +271,47 @@ const lesson9: Q[] = [
   mcq('q9-22', 'heart-block', 'Fainting from low cerebral flow in complete heart block is called…', 'Stokes–Adams syndrome', ['Cushing’s reflex', 'Vasovagal syncope', 'Wenckebach phenomenon'], { explanation: 'Slide 20.', skill: 'terminology' }),
 ];
 
-export const questions: Q[] = [...lesson1, ...lesson2, ...lesson3, ...lesson4, ...lesson5, ...lesson6, ...lesson7, ...lesson8, ...lesson9];
+// ─── Lecture diagrams (data/figures/) ───────────────────────────────
+// "What is the marked part?" — the slide's own labels are covered.
+const diagrams: Q[] = [
+  spotQuestion('fig-heart-aorta', 'heart-function', heart, 'aorta', ['pulmonic-valve', 'right-atrium', 'tricuspid']),
+  spotQuestion('fig-heart-tricuspid', 'heart-function', heart, 'tricuspid', ['right-ventricle', 'supportive', 'left-ventricle']),
+  spotQuestion('fig-heart-left-ventricle', 'heart-function', heart, 'left-ventricle', ['mitral', 'aortic-valve', 'left-atrium']),
+  spotQuestion('fig-heart-mitral', 'heart-function', heart, 'mitral', ['aortic-valve', 'left-atrium', 'pulmonary-artery']),
+  spotQuestion('fig-heart-pulmonary-artery', 'heart-function', heart, 'pulmonary-artery', ['aorta', 'pulmonic-valve', 'right-atrium']),
+  spotQuestion('fig-conduction-sa-node', 'conduction-system', conduction, 'sa-node', ['av-node', 'bundle-of-his', 'bundle-branches']),
+  spotQuestion('fig-conduction-av-node', 'conduction-system', conduction, 'av-node', ['bundle-of-his', 'bundle-branches', 'purkinje']),
+  spotQuestion('fig-conduction-bundle-of-his', 'conduction-system', conduction, 'bundle-of-his', ['bundle-branches', 'purkinje', 'right-atrium']),
+  spotQuestion('fig-conduction-purkinje', 'conduction-system', conduction, 'purkinje', ['right-atrium', 'left-atrium', 'left-ventricle']),
+  spotQuestion('fig-jvp-a', 'jvp-waves', jvp, 'a', ['c', 'x', 'v']),
+  spotQuestion('fig-jvp-x', 'jvp-waves', jvp, 'x', ['v', 'y', 'a']),
+  spotQuestion('fig-jvp-v', 'jvp-waves', jvp, 'v', ['y', 'a', 'c']),
+  spotQuestion('fig-jvp-y', 'jvp-waves', jvp, 'y', ['a', 'c', 'x']),
+  spotQuestion('fig-starling-curves-exercise', 'frank-starling', starlingCurves, 'exercise', ['rest', 'failure', 'shock']),
+  spotQuestion('fig-starling-curves-failure', 'frank-starling', starlingCurves, 'failure', ['shock', 'contractility', 'exercise']),
+  spotQuestion('fig-starling-curves-shock', 'frank-starling', starlingCurves, 'shock', ['contractility', 'exercise', 'rest']),
+  spotQuestion('fig-circle-of-willis-basilar', 'cerebral-supply', circleOfWillis, 'basilar', ['internal-carotid', 'middle-cerebral', 'circle']),
+  spotQuestion('fig-circle-of-willis-internal-carotid', 'cerebral-supply', circleOfWillis, 'internal-carotid', ['middle-cerebral', 'circle', 'basilar']),
+  spotQuestion('fig-coronary-arteries-rca', 'coronary-circulation', coronaryArteries, 'rca', ['left-main', 'circumflex', 'marginal']),
+  spotQuestion('fig-coronary-arteries-lad', 'coronary-circulation', coronaryArteries, 'lad', ['diagonal', 'posterior-lateral', 'pda']),
+  spotQuestion('fig-coronary-arteries-circumflex', 'coronary-circulation', coronaryArteries, 'circumflex', ['marginal', 'lad', 'diagonal']),
+  spotQuestion('fig-coronary-arteries-pda', 'coronary-circulation', coronaryArteries, 'pda', ['aorta', 'rca', 'left-main']),
+  spotQuestion('fig-fetal-circulation-ductus-arteriosus', 'fetal-circulation', fetalCirculation, 'ductus-arteriosus', ['aorta', 'pulmonary-artery', 'lung']),
+  spotQuestion('fig-fetal-circulation-foramen-ovale', 'fetal-circulation', fetalCirculation, 'foramen-ovale', ['ductus-arteriosus', 'aorta', 'pulmonary-artery']),
+  spotQuestion('fig-fetal-circulation-ductus-venosus', 'fetal-circulation', fetalCirculation, 'ductus-venosus', ['liver', 'foramen-ovale', 'ductus-arteriosus']),
+  spotQuestion('fig-fetal-circulation-umbilical-vein', 'fetal-circulation', fetalCirculation, 'umbilical-vein', ['umbilical-arteries', 'ductus-venosus', 'liver']),
+  spotQuestion('fig-fetal-circulation-placenta', 'fetal-circulation', fetalCirculation, 'placenta', ['umbilical-cord', 'umbilical-vein', 'umbilical-arteries']),
+  spotQuestion('fig-limb-leads-lead-ii', 'ecg-basics', limbLeads, 'lead-ii', ['lead-iii', 'ra', 'la']),
+  spotQuestion('fig-limb-leads-la', 'ecg-basics', limbLeads, 'la', ['ll', 'rl', 'lead-i']),
+  spotQuestion('fig-limb-leads-lead-iii', 'ecg-basics', limbLeads, 'lead-iii', ['ra', 'la', 'll']),
+  spotQuestion('fig-chest-leads-v1', 'ecg-basics', chestLeads, 'v1', ['v2', 'v3', 'v4']),
+  spotQuestion('fig-chest-leads-v4', 'ecg-basics', chestLeads, 'v4', ['v5', 'v6', 'v1']),
+  spotQuestion('fig-chest-leads-v6', 'ecg-basics', chestLeads, 'v6', ['v1', 'v2', 'v3']),
+  spotQuestion('fig-ecg-p', 'ecg-waves', ecg, 'p', ['q', 'r', 's']),
+  spotQuestion('fig-ecg-t', 'ecg-waves', ecg, 't', ['u', 'pr-segment', 'st-segment']),
+  spotQuestion('fig-ecg-pr-interval', 'ecg-waves', ecg, 'pr-interval', ['qrs', 'st-interval', 'p']),
+  spotQuestion('fig-ecg-st-segment', 'ecg-waves', ecg, 'st-segment', ['pr-interval', 'qrs', 'st-interval']),
+  spotQuestion('fig-ecg-qrs', 'ecg-waves', ecg, 'qrs', ['st-interval', 'p', 'q']),
+];
+
+export const questions: Q[] = [...lesson1, ...lesson2, ...lesson3, ...lesson4, ...lesson5, ...lesson6, ...lesson7, ...lesson8, ...lesson9, ...diagrams];

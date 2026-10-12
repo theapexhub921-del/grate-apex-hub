@@ -1,6 +1,7 @@
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { Text } from '@/components/ui/text';
 
+import { FigureExplorer } from '@/components/learning/figure-view';
 import { PathwaySteps } from '@/components/pathway-steps';
 import { Icon, type IconName } from '@/components/ui/icon';
 import { Card } from '@/components/ui/interactive';
@@ -113,6 +114,8 @@ function ReadingSection({ chunk, index, total }: { chunk: LessonChunk; index: nu
       ))}
 
       {chunk.steps ? <PathwaySteps steps={chunk.steps} /> : null}
+
+      {chunk.figure ? <FigureExplorer figureId={chunk.figure} /> : null}
 
       {chunk.terms ? (
         <View style={styles.terms}>

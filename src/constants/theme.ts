@@ -394,6 +394,10 @@ export const Type = {
   numeral: { fontFamily: Fonts.display, fontWeight: '800', fontVariant: ['tabular-nums'] },
 } as const satisfies Record<string, TextStyle>;
 
+// Lecture diagrams (slide crops) are drawn on white, so they sit on white in
+// every theme (components/learning/figure-view.tsx).
+export const Paper = '#FFFFFF';
+
 export const Radius = {
   xs: 8,
   sm: 12,

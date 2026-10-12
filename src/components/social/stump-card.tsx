@@ -8,6 +8,7 @@ import { router } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, TextInput, View } from 'react-native';
 
+import { QuestionFigure } from '@/components/learning/figure-view';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
 import { Interactive } from '@/components/ui/interactive';
@@ -80,6 +81,7 @@ export function StumpCard({ postId, question, stump, authorId, authorName, ownId
       </View>
       {stump.note ? <Text style={styles.note}>{stump.note}</Text> : null}
       <Text style={styles.prompt}>{question.prompt}</Text>
+      {question.figure ? <QuestionFigure figure={question.figure} revealed={revealed} /> : null}
       <View style={styles.options}>
         {order.map((index, position) => {
           const isAnswer = index === question.answer;
