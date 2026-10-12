@@ -61,11 +61,16 @@ export function AppUpdateWatcher() {
     document.addEventListener('visibilitychange', onVisible);
     window.addEventListener('focus', onVisible);
     const timer = setInterval(() => void check(), EVERY_MS);
-    const first = setTimeout(() => void check(), 20_000);
+    // Soon after opening (an installed app may start from an old copy), and whenever it comes back.
+    const first = setTimeout(() => void check(), 2_500);
+    window.addEventListener('pageshow', onVisible);
+    window.addEventListener('online', onVisible);
     return () => {
       stopped = true;
       document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener('focus', onVisible);
+      window.removeEventListener('pageshow', onVisible);
+      window.removeEventListener('online', onVisible);
       clearInterval(timer);
       clearTimeout(first);
     };

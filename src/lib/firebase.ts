@@ -1,6 +1,8 @@
 import { getApp, getApps, initializeApp } from 'firebase/app';
-import { connectAuthEmulator, getAuth } from 'firebase/auth';
+import { connectAuthEmulator } from 'firebase/auth';
 import { connectFirestoreEmulator, getFirestore } from 'firebase/firestore';
+
+import { createAuth } from '@/lib/firebase-auth';
 
 const firebaseConfig = {
   apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY || 'AIzaSyCy4HizcdGEYEMC45mbrq4S4U2znUM9k6I',
@@ -13,7 +15,8 @@ const firebaseConfig = {
 };
 
 export const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
-export const auth = getAuth(app);
+// Sign-ins are saved on the device (web storage, or AsyncStorage on phones: lib/firebase-auth*.ts).
+export const auth = createAuth(app);
 export const db = getFirestore(app);
 
 // Local checks only: a web build made with EXPO_PUBLIC_FIREBASE_EMULATOR=1 talks to
