@@ -11,6 +11,7 @@ import { LearningWelcomeAtmosphere } from '@/components/learning/learning-welcom
 import { MemoryDistribution } from '@/components/learning/memory-ui';
 import { NextActionHero, NextActionList } from '@/components/learning/next-action-card';
 import { PersonalGoalsCard } from '@/components/learning/personal-goals-card';
+import { QuestionOfTheDay } from '@/components/learning/question-of-the-day';
 import { LearningWeekCard } from '@/components/learning/learning-week-card';
 import { ReviewCalendar } from '@/components/learning/review-calendar';
 import { RankProgressCard } from '@/components/rank-progress';
@@ -171,6 +172,7 @@ export default function LearnScreen() {
 
   const side = (
     <View style={styles.column}>
+      <QuestionOfTheDay />
       <RankProgressCard lifetimeXp={progress.xp} />
       <PersonalGoalsCard />
       <LearningWeekCard />

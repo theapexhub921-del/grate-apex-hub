@@ -56,6 +56,12 @@ export default function LegacyCourseScreen() {
   if (!lessons) return <LoadingState label="Loading lessons…" />;
 
   const done = lessons.filter((lesson) => completed.has(lesson.id)).length;
+  // Topics (HB2): each gets a clear heading in the path — its number, lessons and progress.
+  const topics = [...new Set(lessons.map((lesson) => lesson.group).filter((group): group is string => Boolean(group)))];
+  const topicStats = (group: string) => {
+    const own = lessons.filter((lesson) => lesson.group === group);
+    return { total: own.length, done: own.filter((lesson) => completed.has(lesson.id)).length };
+  };
   const totalQuestions = sets ? sets.reduce((sum, set) => sum + set.count, 0) : null;
 
   return (
@@ -110,7 +116,25 @@ export default function LegacyCourseScreen() {
           const newGroup = lesson.group && lesson.group !== lessons[index - 1]?.group;
           return (
             <View key={lesson.id}>
-            {newGroup ? <Text style={styles.group}>{lesson.group}</Text> : null}
+            {newGroup && lesson.group ? (() => {
+              const stats = topicStats(lesson.group);
+              const number = topics.indexOf(lesson.group) + 1;
+              return (
+                <View style={[styles.topicHead, number > 1 && styles.topicHeadGap]} accessibilityRole="header">
+                  <View style={[styles.topicBadge, stats.done === stats.total && styles.topicBadgeDone]}>
+                    {stats.done === stats.total ? <Icon name="check" size={18} color={colors.onPrimary} strokeWidth={2.6} /> : <Text style={styles.topicBadgeText}>{number}</Text>}
+                  </View>
+                  <View style={styles.flex}>
+                    <Text style={styles.topicKicker}>TOPIC {number} OF {topics.length}</Text>
+                    <Text style={styles.topicTitle}>{lesson.group}</Text>
+                    <View style={styles.progressRow}>
+                      <ProgressBar value={stats.total ? stats.done / stats.total : 0} height={6} style={styles.flex} label={`${lesson.group} lessons completed`} />
+                      <Text style={styles.meta}>{stats.done}/{stats.total} lessons</Text>
+                    </View>
+                  </View>
+                </View>
+              );
+            })() : null}
             <View style={styles.pathRow}>
               <View style={styles.rail}>
                 <View style={[styles.node, isDone ? styles.nodeDone : started ? styles.nodeActive : null]}>
@@ -188,7 +212,13 @@ function createStyles(colors: ThemeColors) {
     metaSoft: { fontSize: 12.5, color: colors.textTertiary },
     actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 4 },
     section: { marginTop: 28 },
-    group: { ...Type.overline, color: colors.textSecondary, marginTop: 14, marginBottom: 2, marginLeft: 48 },
+    topicHead: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 14, paddingHorizontal: 16, marginBottom: 10, borderRadius: 18, backgroundColor: colors.surfaceMuted, borderWidth: 1, borderColor: colors.border },
+    topicHeadGap: { marginTop: 22 },
+    topicBadge: { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primarySubtle, borderWidth: 1.5, borderColor: colors.primaryBorder },
+    topicBadgeDone: { backgroundColor: colors.success, borderColor: colors.success },
+    topicBadgeText: { fontSize: 18, fontWeight: '800', color: colors.primaryText },
+    topicKicker: { ...Type.overline, color: colors.primaryText },
+    topicTitle: { ...Type.title2, color: colors.text, marginTop: 2, marginBottom: 6 },
     empty: { gap: 6, padding: 18 },
     reviewCard: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: 16, marginTop: 16 },
     reviewText: { flex: 1, minWidth: 220, gap: 4 },
