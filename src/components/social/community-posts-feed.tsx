@@ -25,9 +25,9 @@ import { useDisplayName } from '@/data/user';
 import { useAuth } from '@/hooks/use-auth';
 import { Radius, Type, type ThemeColors } from '@/constants/theme';
 import { MentionInput } from '@/components/social/mention-input';
+import { PostDetail, type PostComment } from '@/components/social/post-detail';
 import { useTheme, useThemedStyles } from '@/hooks/use-theme';
 
-type PostComment = { id: string; author_id: string; author_name?: string | null; body: string; created_at: string };
 
 // Posts this learner chose "Not interested" for (this device only).
 const HIDDEN_KEY = 'grateapex_hidden_posts';
@@ -49,6 +49,7 @@ export function CommunityPostsFeed({ authorId, showComposer = true }: { authorId
   const [selectedPost, setSelectedPost] = useState<CommunityPost | null>(null);
   const [comments, setComments] = useState<PostComment[]>([]);
   const [commentDraft, setCommentDraft] = useState('');
+  const [replyingTo, setReplyingTo] = useState<string | null>(null);
   const [notice, setNotice] = useState('');
   const [reportTarget, setReportTarget] = useState<ReportTarget | null>(null);
   const [hiddenIds, setHiddenIds] = useState<readonly string[]>([]);
@@ -159,6 +160,7 @@ export function CommunityPostsFeed({ authorId, showComposer = true }: { authorId
     setSelectedPost(post);
     setComments([]);
     setCommentDraft('');
+    setReplyingTo(null);
     try { setComments(await listPostComments(post.id) as PostComment[]); }
     catch (caught) { setError(getErrorMessage(caught, 'Could not load comments.')); }
   }
@@ -169,6 +171,7 @@ export function CommunityPostsFeed({ authorId, showComposer = true }: { authorId
     try {
       await addPostComment(selectedPost.id, commentDraft);
       setCommentDraft('');
+      setReplyingTo(null);
       setComments(await listPostComments(selectedPost.id) as PostComment[]);
       setPosts((all) => all.map((post) => post.id === selectedPost.id ? { ...post, comments: post.comments + 1 } : post));
       setSelectedPost((post) => post?.id === selectedPost.id ? { ...post, comments: post.comments + 1 } : post);
@@ -177,6 +180,14 @@ export function CommunityPostsFeed({ authorId, showComposer = true }: { authorId
   }
 
   // Report: opens the reasons sheet (components/social/report-sheet.tsx).
+  // Reply to a comment the Instagram way: the answer starts with their @username.
+  function replyTo(comment: PostComment) {
+    const handle = comment.author_name?.trim();
+    if (!handle || comment.author_id === social.userId) return;
+    setReplyingTo(handle);
+    setCommentDraft((draft) => (draft.startsWith(`@${handle} `) ? draft : `@${handle} ${draft.replace(/^@\S+\s/, '')}`));
+  }
+
   function report(targetType: 'post' | 'comment' | 'user', id: string, label: string = targetType) {
     setReportTarget({ type: targetType, id, label });
   }
@@ -235,17 +246,27 @@ export function CommunityPostsFeed({ authorId, showComposer = true }: { authorId
           </View>
         </View>
       </Sheet>
-      <Sheet visible={selectedPost !== null} onClose={() => setSelectedPost(null)} title="Post" subtitle={selectedPost ? `${selectedPost.comments} comments · ${selectedPost.reshares} reshares` : undefined} width={800}>
-        <View style={styles.postDetailSheet}>
-          {selectedPost ? <PostCard post={selectedPost} socialPeople={social.people} ownId={user?.id ?? social.userId} ownName={displayName || 'You'} verticalActions onOpen={() => {}} onLike={() => void like(selectedPost)} onComment={() => void openPost(selectedPost)} onReshare={() => void repost(selectedPost)} onShare={() => void sharePost(selectedPost)} onReport={() => report('post', selectedPost.id, `post by ${selectedPost.author_name ? `@${selectedPost.author_name}` : 'a learner'}`)} onDelete={() => confirmDeletePost(selectedPost)} /> : null}
-          <View style={styles.commentSheet}>
-          {comments.map((comment) => { const author = social.people.find((person) => person.userId === comment.author_id); return <View key={comment.id} style={styles.comment}><View style={styles.commentHead}><View style={styles.commentWho}><PersonAvatar uid={comment.author_id} uri={author?.avatarUrl ?? null} name={author ? personName(author) : comment.author_name ?? 'Learner'} size={26} /><Text style={styles.commentAuthor}>{comment.author_id === social.userId ? 'You' : author ? personName(author) : comment.author_name ? `@${comment.author_name}` : 'Username pending'}</Text><VerifiedBadge username={comment.author_name} uid={comment.author_id} size={13} /></View><Button label="Report" variant="ghost" size="sm" onPress={() => report('comment', comment.id, `comment by ${comment.author_name ? `@${comment.author_name}` : 'a learner'}`)} /></View><Text style={styles.body}>{comment.body}</Text></View>; })}
-          {!comments.length ? <Text style={styles.muted}>Be the first to comment.</Text> : null}
-          <MentionInput people={social.people} value={commentDraft} onChangeText={setCommentDraft} maxLength={2000} placeholder="Add a comment…" placeholderTextColor={colors.textTertiary} accessibilityLabel="Write a comment" style={styles.input} />
-          <Button label="Comment" size="sm" onPress={() => void sendComment()} loading={busy} disabled={!commentDraft.trim() || busy} />
-          </View>
-        </View>
-      </Sheet>
+      <PostDetail
+        post={selectedPost}
+        comments={comments}
+        people={social.people}
+        ownId={user?.id ?? social.userId}
+        ownName={displayName || 'You'}
+        draft={commentDraft}
+        onDraft={setCommentDraft}
+        replyingTo={replyingTo}
+        onReply={replyTo}
+        onCancelReply={() => { const handle = replyingTo; setReplyingTo(null); if (handle) setCommentDraft((text) => text.replace(`@${handle} `, '')); }}
+        onSend={() => void sendComment()}
+        busy={busy}
+        onClose={() => setSelectedPost(null)}
+        onLike={() => { if (selectedPost) void like(selectedPost); }}
+        onReshare={() => { if (selectedPost) void repost(selectedPost); }}
+        onShare={() => { if (selectedPost) void sharePost(selectedPost); }}
+        onReport={() => { if (selectedPost) report('post', selectedPost.id, `post by ${selectedPost.author_name ? `@${selectedPost.author_name}` : 'a learner'}`); }}
+        onReportComment={(comment) => report('comment', comment.id, `comment by ${comment.author_name ? `@${comment.author_name}` : 'a learner'}`)}
+        onDelete={() => { if (selectedPost) confirmDeletePost(selectedPost); }}
+      />
     </View>
   );
 }
@@ -344,12 +365,6 @@ function createStyles(colors: ThemeColors) {
     postInput: { minHeight: 140, textAlignVertical: 'top', padding: 13, borderWidth: 1, borderColor: colors.borderStrong, borderRadius: 14, backgroundColor: colors.surfaceSunken, color: colors.text, fontSize: 15 },
     mediaSelected: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     input: { minHeight: 42, borderWidth: 1, borderColor: colors.borderStrong, borderRadius: Radius.md, backgroundColor: colors.surfaceSunken, paddingHorizontal: 12, color: colors.text, fontSize: 14 },
-    postDetailSheet: { gap: 16 },
-    commentSheet: { gap: 10, borderTopWidth: 1, borderTopColor: colors.divider, paddingTop: 12 },
-    comment: { gap: 4, paddingVertical: 7, borderBottomWidth: 1, borderBottomColor: colors.divider },
-    commentAuthor: { ...Type.caption, fontWeight: '800', color: colors.primaryText },
-    commentHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-    commentWho: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 8 },
     empty: { gap: 9, alignItems: 'center', padding: 20 },
     emptyTitle: { ...Type.title3, color: colors.text, textAlign: 'center' },
     errorCard: { gap: 8 },

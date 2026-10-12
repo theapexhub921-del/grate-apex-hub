@@ -1,5 +1,5 @@
-import { useMemo } from 'react';
-import { StyleSheet, type TextInputProps, View } from 'react-native';
+import { type Ref, useMemo } from 'react';
+import { StyleSheet, type TextInput as RNTextInput, type TextInputProps, View } from 'react-native';
 import { Text, TextInput } from '@/components/ui/text';
 
 import { Avatar } from '@/components/ui/avatar';
@@ -12,10 +12,13 @@ type MentionInputProps = Omit<TextInputProps, 'value' | 'onChangeText'> & {
   value: string;
   onChangeText: (value: string) => void;
   people: readonly SocialPerson[];
+  ref?: Ref<RNTextInput>;
+  /** Hide the "@username mentions a friend" hint (compact comment bars). */
+  compact?: boolean;
 };
 
 /** Text input with friend username suggestions when the learner types @. */
-export function MentionInput({ value, onChangeText, people, ...inputProps }: MentionInputProps) {
+export function MentionInput({ value, onChangeText, people, ref, compact = false, ...inputProps }: MentionInputProps) {
   const colors = useTheme();
   const styles = useThemedStyles(createStyles);
   const query = value.match(/(?:^|\s)@([a-z0-9_]*)$/i)?.[1]?.toLowerCase();
@@ -34,7 +37,7 @@ export function MentionInput({ value, onChangeText, people, ...inputProps }: Men
 
   return (
     <View style={styles.wrap}>
-      <TextInput {...inputProps} value={value} onChangeText={onChangeText} />
+      <TextInput ref={ref} {...inputProps} value={value} onChangeText={onChangeText} />
       {suggestions.length ? (
         <View style={styles.suggestions} accessibilityLabel="Mention a friend">
           {suggestions.map((person) => (
@@ -45,10 +48,10 @@ export function MentionInput({ value, onChangeText, people, ...inputProps }: Men
             </Interactive>
           ))}
         </View>
-      ) : query !== undefined ? (
+      ) : query !== undefined && !compact ? (
         <Text style={styles.noSuggestions}>{query ? 'No connected username matches that text.' : 'Type a username to mention a friend.'}</Text>
       ) : null}
-      <Text style={styles.hint}><Text style={{ color: colors.primaryText }}>@username</Text> mentions a connected friend.</Text>
+      {!compact ? <Text style={styles.hint}><Text style={{ color: colors.primaryText }}>@username</Text> mentions a connected friend.</Text> : null}
     </View>
   );
 }
