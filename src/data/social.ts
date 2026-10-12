@@ -341,16 +341,70 @@ export async function setShareActivity(share: boolean) {
   setState({ shareActivity: share });
 }
 
-/** Students whose username starts with the typed text (as in the original app). */
+/** Every way a typed search may be stored (Firestore matches exactly): as typed, lower case, Capitalised. */
+const searchSpellings = (text: string) => [...new Set([text, text.toLowerCase(), text[0].toUpperCase() + text.slice(1).toLowerCase()])];
+
+let directory: { at: number; docs: Promise<{ id: string; data: Record<string, unknown> }[]> } | null = null;
+
+/** Learner accounts for name search (cached for a few minutes; users is readable by every signed-in learner). */
+function learnerDirectory() {
+  if (!directory || Date.now() - directory.at > 5 * 60_000) {
+    directory = {
+      at: Date.now(),
+      docs: getDocs(query(collection(db, 'users'), limit(2000)))
+        .then((snap) => snap.docs.map((item) => ({ id: item.id, data: item.data() as Record<string, unknown> })))
+        .catch(() => []),
+    };
+  }
+  return directory.docs;
+}
+
+/**
+ * Learners by username or name: usernames and names that start with the typed
+ * text (as in the original app), plus those that contain it anywhere. People
+ * who turned off "Let students find me" are left out (unless you know them).
+ */
 export async function searchLearners(searchQuery: string): Promise<SocialPerson[]> {
-  const term = searchQuery.trim().toLowerCase().replace(/^@/, '');
-  if (term.length < 2) return [];
+  const typed = searchQuery.trim().replace(/^@/, '');
+  if (typed.length < 2) return [];
+  await auth.authStateReady();
   const me = auth.currentUser?.uid ?? null;
-  const snap = await getDocs(query(collection(db, 'users'), where('username', '>=', term), where('username', '<=', `${term}`), limit(10)));
+  if (!me) throw new Error('Sign in to search for learners.');
+  const term = typed.toLowerCase();
+  const prefixQueries = searchSpellings(typed).flatMap((spelling) =>
+    ['username', 'displayName'].map((field) =>
+      getDocs(query(collection(db, 'users'), where(field, '>=', spelling), where(field, '<=', `${spelling}`), limit(10)))
+        .then((snap) => snap.docs.map((item) => ({ id: item.id, data: item.data() as Record<string, unknown> })))
+        .catch(() => [])
+    )
+  );
+  // Older accounts may only have their username on the leaderboard (scores).
+  const scoreQuery = getDocs(query(collection(db, 'scores'), where('username', '>=', term), where('username', '<=', term + ''), limit(10)))
+    .then((snap) => snap.docs.map((item) => ({ id: item.id, data: item.data() as Record<string, unknown> })))
+    .catch(() => []);
+  const [everyone, ...prefixed] = await Promise.all([learnerDirectory(), scoreQuery, ...prefixQueries]);
+  const found = new Map<string, Record<string, unknown>>();
+  for (const item of prefixed.flat()) found.set(item.id, { ...item.data, ...(found.get(item.id) ?? {}) });
+  for (const item of everyone) {
+    const username = String(item.data.username ?? '').toLowerCase();
+    const name = String(item.data.displayName ?? '').toLowerCase();
+    if (username.includes(term) || name.includes(term)) found.set(item.id, item.data);
+  }
+  const hidden = (data: Record<string, unknown>) => {
+    const privacy = (data.preferences as { privacy_preferences?: { discoverable?: boolean } } | undefined)?.privacy_preferences;
+    return data.discoverable === false || privacy?.discoverable === false;
+  };
+  const rank = (data: Record<string, unknown>) => {
+    const username = String(data.username ?? '').toLowerCase();
+    const name = String(data.displayName ?? '').toLowerCase();
+    return username === term ? 0 : username.startsWith(term) ? 1 : name.startsWith(term) ? 2 : 3;
+  };
   const known = new Map(state.people.map((person) => [person.userId, person]));
-  return snap.docs
-    .filter((item) => item.id !== me)
-    .map((item) => known.get(item.id) ?? toPerson(item.id, 'none', null, null, null, { profile: item.data(), score: {} }));
+  return [...found.entries()]
+    .filter(([uid, data]) => uid !== me && (known.has(uid) || !hidden(data)) && (data.username || data.displayName))
+    .sort((a, b) => rank(a[1]) - rank(b[1]) || String(a[1].username ?? '').localeCompare(String(b[1].username ?? '')))
+    .slice(0, 20)
+    .map(([uid, data]) => known.get(uid) ?? toPerson(uid, 'none', null, null, null, { profile: data, score: {} }));
 }
 
 /**

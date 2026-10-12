@@ -223,7 +223,7 @@ function SearchCard() {
         value={query}
         onChangeText={(text) => {
           setQuery(text);
-          if (text.trim().length < 2) setResults(null);
+          setResults(null);
         }}
         placeholder="Search by username or name"
         placeholderTextColor={colors.textTertiary}
@@ -243,7 +243,7 @@ function SearchCard() {
         ) : (
           <Text style={styles.rowDetail}>No learners match “{query.trim()}”.</Text>
         )
-      ) : null}
+      ) : query.trim().length >= 2 && !error ? <Text style={styles.rowDetail}>Searching…</Text> : null}
     </View>
   );
 }
