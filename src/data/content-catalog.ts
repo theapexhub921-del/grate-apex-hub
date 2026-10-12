@@ -1542,7 +1542,7 @@ export const contentTopics: ContentTopic[] = [
     folderSubject: "PHYSIOLOGY",
     zip: "Cardiovascular Physiology",
     sourceFileIds: ["cvs-circulation-5-ecg", "cvs-circulation-4", "cvs-circulation-3-homeostais-in-cvs", "cvs-circulation-2-with-slides", "cvs-circulation-1"],
-    status: "source-only",
+    status: "published",
     emoji: "🫀",
     outline: [
       { title: "The Heart and Circulation", points: [], sourceRefs: [{ sourceId: "cvs-circulation-1" }] },

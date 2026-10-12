@@ -6,6 +6,7 @@
 // listed in the catalog until then.
 import { bloodCoagulation } from '@/data/topics/blood-coagulation-and-fibrinolysis';
 import type { BuiltTopic } from '@/data/topics/build';
+import { cardiovascularPhysiology } from '@/data/topics/cardiovascular-physiology';
 import { cholesterolAndBileBiosynthesis } from '@/data/topics/cholesterol-and-bile-biosynthesis';
 import { collagenAndElastin } from '@/data/topics/collagen-synthesis';
 import { fattyAcidBiosynthesis } from '@/data/topics/fatty-acid-biosynthesis';
@@ -14,4 +15,4 @@ import { hormones } from '@/data/topics/hormones-endocrine-biochemistry';
 import { inbornErrors } from '@/data/topics/inborn-errors-of-metabolism';
 import { oxygenCarriers } from '@/data/topics/oxygen-carriers';
 
-export const builtTopics: BuiltTopic[] = [fattyAcidBiosynthesis, cholesterolAndBileBiosynthesis, hemeMetabolism, oxygenCarriers, bloodCoagulation, hormones, inbornErrors, collagenAndElastin];
+export const builtTopics: BuiltTopic[] = [fattyAcidBiosynthesis, cholesterolAndBileBiosynthesis, hemeMetabolism, oxygenCarriers, bloodCoagulation, hormones, inbornErrors, collagenAndElastin, cardiovascularPhysiology];
