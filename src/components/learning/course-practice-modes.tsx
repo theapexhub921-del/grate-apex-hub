@@ -1,6 +1,6 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, useWindowDimensions, View } from 'react-native';
 
 import { Button } from '@/components/ui/button';
 import { Icon, type IconName } from '@/components/ui/icon';
@@ -18,12 +18,16 @@ import { routes } from '@/lib/routes';
 
 type CourseSet = { id: string; name: string; count: number };
 
+const rows = <T,>(items: readonly T[], size: number) => Array.from({ length: Math.ceil(items.length / size) }, (_, i) => items.slice(i * size, i * size + size));
+
 // A course's practice modes, from the original app (in this app's look):
 // predicted tests, a custom quiz builder, a timed drill, past questions and a
 // pre-test / post-test.
 export function CoursePracticeModes({ course, lessons, sets }: { course: LegacyCourse; lessons: readonly LegacyLessonMeta[]; sets: readonly CourseSet[] }) {
   const styles = useThemedStyles(createStyles);
   const colors = useTheme();
+  const { width } = useWindowDimensions();
+  const columns = width >= 760 ? 2 : 1;
   const [sheet, setSheet] = useState<'predicted' | 'past' | 'custom' | null>(null);
   const [prepost, setPrepost] = useState<PrePost>({});
   useFocusEffect(useCallback(() => {
@@ -55,15 +59,21 @@ export function CoursePracticeModes({ course, lessons, sets }: { course: LegacyC
   return (
     <>
       <SectionHeader title="Practice modes" subtitle="Exams, drills and quizzes built from this course’s questions." style={styles.section} />
+      {/* Uniform tiles: the same width and height in every row (an empty slot keeps a last odd tile the same size). */}
       <View style={styles.grid}>
-        {tiles.filter((tile) => !tile.hidden).map((tile) => (
-          <PressableCard key={tile.id} onPress={tile.onPress} accessibilityLabel={`${tile.title}. ${tile.detail}`} style={styles.tile}>
-            <View style={styles.tileIcon}><Icon name={tile.icon} size={20} color={colors.accentText} /></View>
-            <View style={styles.flex}>
-              <Text style={styles.tileTitle}>{tile.title}</Text>
-              <Text style={styles.tileText}>{tile.detail}</Text>
-            </View>
-          </PressableCard>
+        {rows(tiles.filter((tile) => !tile.hidden), columns).map((row, r) => (
+          <View key={r} style={styles.row2}>
+            {row.map((tile) => (
+              <PressableCard key={tile.id} onPress={tile.onPress} accessibilityLabel={`${tile.title}. ${tile.detail}`} style={styles.tile}>
+                <View style={styles.tileIcon}><Icon name={tile.icon} size={20} color={colors.accentText} /></View>
+                <View style={styles.flex}>
+                  <Text style={styles.tileTitle}>{tile.title}</Text>
+                  <Text style={styles.tileText}>{tile.detail}</Text>
+                </View>
+              </PressableCard>
+            ))}
+            {Array.from({ length: columns - row.length }, (_, i) => <View key={`gap${i}`} style={styles.tileGap} />)}
+          </View>
         ))}
       </View>
 
@@ -167,8 +177,10 @@ function createStyles(colors: ThemeColors) {
   return StyleSheet.create({
     flex: { flex: 1, minWidth: 0 },
     section: { marginTop: 28 },
-    grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
-    tile: { flexGrow: 1, flexBasis: 300, flexDirection: 'row', alignItems: 'flex-start', gap: 14, paddingVertical: 16 },
+    grid: { gap: 12 },
+    row2: { flexDirection: 'row', gap: 12, alignItems: 'stretch' },
+    tile: { flex: 1, minWidth: 0, minHeight: 112, flexDirection: 'row', alignItems: 'flex-start', gap: 14, paddingVertical: 16 },
+    tileGap: { flex: 1 },
     tileIcon: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accentSubtle },
     tileTitle: { ...Type.headline, color: colors.text },
     tileText: { fontSize: 13.5, lineHeight: 20, color: colors.textSecondary, marginTop: 2 },

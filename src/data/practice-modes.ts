@@ -77,7 +77,8 @@ export type ModeSettings = {
 
 export function modeSettings(mode: PracticeMode): ModeSettings {
   switch (mode.kind) {
-    case 'apex': return { count: APEX.questionsPerRun, feedback: 'instant', seconds: APEX.secondsPerQuestion, variants: true, fixed: false, xp: 'apex', key: 'apex' };
+    // Apex: single-answer questions as written, so each answer locks instantly in the arena.
+    case 'apex': return { count: APEX.questionsPerRun, feedback: 'instant', seconds: APEX.secondsPerQuestion, variants: false, fixed: false, xp: 'apex', key: 'apex' };
     case 'mock': return { count: MOCK_SIZE, feedback: 'submit', variants: false, fixed: true, xp: 'practice', key: `mock${mode.n}` };
     case 'drill': return { count: DRILL.questions, feedback: 'instant', seconds: DRILL.seconds, variants: true, fixed: false, xp: 'practice', key: 'drill' };
     case 'prepost': return { count: PREPOST_SIZE, feedback: 'submit', variants: false, fixed: false, xp: 'practice', key: mode.phase };

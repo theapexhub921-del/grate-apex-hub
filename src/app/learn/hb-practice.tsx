@@ -4,6 +4,7 @@ import { StyleSheet, View } from 'react-native';
 
 import { BackLink } from '@/components/learning/nav-bits';
 import { Arena, Countdown, Rule } from '@/components/learning/apex-arena';
+import { ApexDone, ApexRun, type ApexStats } from '@/components/learning/apex-run';
 import { ApexWordmark } from '@/components/motion/apex-wordmark';
 import { type FeedbackMode, QuestionSession, type SessionResult } from '@/components/learning/question-session';
 import { Button } from '@/components/ui/button';
@@ -55,6 +56,8 @@ export default function LegacyPracticeScreen() {
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<FeedbackMode>(settings.feedback);
   const [result, setResult] = useState<{ correct: number; total: number; xp: number; pre?: number | null } | null>(null);
+  const [apexStats, setApexStats] = useState<ApexStats | null>(null);
+  const [apexXp, setApexXp] = useState<number | null>(null);
   // Apex Challenge: the arena intro, then 3 · 2 · 1 · GO, then the run (as on the Apex Challenge screen).
   const [apexPhase, setApexPhase] = useState<'intro' | 'countdown' | 'run'>(apex ? 'intro' : 'run');
   const [count, setCount] = useState<number>(APEX.countdownSeconds);
@@ -90,6 +93,7 @@ export default function LegacyPracticeScreen() {
           source = chosen.length ? [...new Map(chosen.map((question) => [question.id, question])).values()] : all;
         }
         if (before) source = source.filter((question) => !before.has(question.id));
+        if (apex) source = source.filter((question) => question.type === 'choice');
         if (!live) return;
         if (source.length === 0) return fail('There are no questions here yet.');
         setTitle(modeTitle(practice, course.name, { lesson: lessonId ? hb2LessonById(lessonId)?.lesson.title : undefined, set: set?.name }));
@@ -117,6 +121,7 @@ export default function LegacyPracticeScreen() {
         if (chosen.length) source = chosen;
       }
       if (before) source = source.filter((q) => !before.has(`legacy:${course.id}:${q.id}`));
+      if (apex) source = source.filter((q) => q.kind !== 'input' && q.o?.length > 1 && q.a >= 0);
       if (source.length === 0) return fail(reviewIds ? 'Nothing to review here right now — well done.' : 'There are no questions here yet.');
       setTitle(modeTitle(practice, course.name, { lesson: lesson?.title, set: set?.name }));
       const size = take(source.length);
@@ -155,12 +160,44 @@ export default function LegacyPracticeScreen() {
       </Arena>
     );
   }
+  if (apex && apexStats) {
+    return (
+      <ApexDone
+        title={course.name}
+        stats={apexStats}
+        xp={apexXp}
+        onAgain={() => router.replace(routes.legacyPractice({ course: course.id, apex: true }))}
+        onLeave={() => router.replace(routes.legacyCourse(course.id))}
+      />
+    );
+  }
+  if (apex && apexPhase === 'run') {
+    return (
+      <ApexRun
+        questions={questions}
+        seed={seed}
+        onDone={(stats) => {
+          setApexStats(stats);
+          void awardApexXp(stats);
+        }}
+      />
+    );
+  }
   if (apex && apexPhase === 'countdown' && !result) {
     return (
       <Arena intensity="high">
         <Countdown count={count} total={APEX.countdownSeconds} />
       </Arena>
     );
+  }
+
+  async function awardApexXp(stats: ApexStats) {
+    const percent = stats.total ? (stats.correct / stats.total) * 100 : 0;
+    const bonus = percent >= 90 ? XP_RULES.apex.bonusAt90 : percent >= 75 ? XP_RULES.apex.bonusAt75 : percent >= 50 ? XP_RULES.apex.bonusAt50 : 0;
+    const amount = Math.min(XP_RULES.taskMax, XP_RULES.apex.completion + bonus);
+    const xp = await awardXp({ sourceType: 'apex', sourceId: `hb:${course!.id}:apex:${dayKey(Date.now())}`, amount, label: `${course!.name} · Apex Challenge` });
+    if (xp > 0) setPendingXpReward({ amount: xp, message: `Apex Challenge · ${stats.correct}/${stats.total}` });
+    setApexXp(xp);
   }
 
   async function submit(session: SessionResult) {
