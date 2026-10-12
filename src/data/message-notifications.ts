@@ -48,6 +48,8 @@ let timer: ReturnType<typeof setInterval> | null = null;
 /** Starts checking (idempotent); stops when the last screen using it goes away. */
 function start() {
   if (timer) return;
+  // Right after sign-in too (the first check may run before the account is ready).
+  auth.onAuthStateChanged(() => void refreshMessageNotifications());
   void refreshMessageNotifications();
   timer = setInterval(() => void refreshMessageNotifications(), 30_000);
   if (typeof document !== 'undefined') document.addEventListener('visibilitychange', onVisible);

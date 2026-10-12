@@ -21,6 +21,8 @@ import { useTheme, useThemedStyles } from '@/hooks/use-theme';
 import { showDeviceNotification } from '@/lib/device-notifications';
 import { registerWebPush } from '@/lib/web-push';
 import { useMessageNotifications } from '@/data/message-notifications';
+import { markAccountNotificationsRead, useAccountNotifications } from '@/data/account-notifications';
+import { sendFriendRequest } from '@/data/social';
 import { usePromotionNotifications } from '@/components/league-promotion';
 
 type Filter = 'all' | 'learning' | 'updates';
@@ -33,11 +35,13 @@ export function useNotifications() {
   const social = useSocial();
   const messages = useMessageNotifications();
   const promotions = usePromotionNotifications();
+  const account = useAccountNotifications();
   const items = useMemo(
     () =>
       [
         ...messages,
         ...promotions,
+        ...account,
         ...socialAppNotifications(social.notifications),
         ...buildNotifications({
           memory,
@@ -48,14 +52,15 @@ export function useNotifications() {
           now,
         }),
       ].filter((item) => preferences[preferenceFor(item)]).sort((a, b) => b.at - a.at),
-    [messages, promotions, social.notifications, memory, events, progress.streak, progress.lastActivityDate, progress.xp, now, preferences]
+    [messages, promotions, account, social.notifications, memory, events, progress.streak, progress.lastActivityDate, progress.xp, now, preferences]
   );
-  const read = useMemo(() => new Set([...localRead, ...readSocialNotificationIds(social.notifications)]), [localRead, social.notifications]);
+  const read = useMemo(() => new Set([...localRead, ...readSocialNotificationIds(social.notifications), ...account.filter((item) => item.read).map((item) => item.id)]), [localRead, social.notifications, account]);
   const unread = items.filter((item) => !read.has(item.id)).length;
   return { items, read, unread, now };
 }
 
 export function preferenceFor(item: AppNotification) {
+  if (item.id.startsWith('acct:')) return ((item as { kind?: string }).kind === 'follow' ? 'friendRequests' : 'socialEngagement') as 'friendRequests' | 'socialEngagement';
   if (item.id.startsWith('msg:')) return 'messages' as const;
   if (item.id.startsWith('league:')) return 'socialEngagement' as const;
   if (item.id.startsWith('inapp:')) return 'socialEngagement' as const;
@@ -131,6 +136,7 @@ export function DeviceNotificationBridge() {
 function markRead(ids: string[]) {
   markNotificationsRead(ids);
   markSocialNotificationsRead(ids);
+  void markAccountNotificationsRead(ids);
 }
 
 // The bell in the Home header: unread badge + the notification centre.
@@ -148,7 +154,15 @@ export function NotificationBell() {
 export function NotificationCenter({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const styles = useThemedStyles(createStyles);
   const { items, read, unread, now } = useNotifications();
+  const social = useSocial();
   const [filter, setFilter] = useState<Filter>('all');
+  // A follow notification offers Follow back while I don't follow them yet.
+  const followBackFor = (item: AppNotification) => {
+    const entry = item as AppNotification & { kind?: string; from?: string };
+    if (entry.kind !== 'follow' || !entry.from) return null;
+    const person = social.people.find((p) => p.userId === entry.from);
+    return person && (person.relationship === 'friends' || person.relationship === 'outgoing') ? null : entry.from;
+  };
   const shown = items.filter((item) => filter === 'all' || item.group === filter);
   const today = startOfDay(now);
   const groups = [
@@ -194,7 +208,7 @@ export function NotificationCenter({ visible, onClose }: { visible: boolean; onC
             <Text style={styles.groupTitle}>{group.title.toUpperCase()}</Text>
             <View style={styles.list}>
               {group.items.map((item, index) => (
-                <NotificationItem key={item.id} item={item} unread={!read.has(item.id)} now={now} first={index === 0} onPress={() => open(item)} />
+                <NotificationItem key={item.id} item={item} unread={!read.has(item.id)} now={now} first={index === 0} onPress={() => open(item)} followBack={followBackFor(item)} />
               ))}
             </View>
           </View>
@@ -204,7 +218,8 @@ export function NotificationCenter({ visible, onClose }: { visible: boolean; onC
   );
 }
 
-function NotificationItem({ item, unread, now, first, onPress }: { item: AppNotification; unread: boolean; now: number; first: boolean; onPress: () => void }) {
+function NotificationItem({ item, unread, now, first, onPress, followBack }: { item: AppNotification; unread: boolean; now: number; first: boolean; onPress: () => void; followBack?: string | null }) {
+  const [followed, setFollowed] = useState(false);
   const styles = useThemedStyles(createStyles);
   const colors = useTheme();
   const tint =
@@ -229,7 +244,10 @@ function NotificationItem({ item, unread, now, first, onPress }: { item: AppNoti
         <Text style={styles.itemBody}>{item.body}</Text>
         <Text style={styles.itemTime}>{describeAgo(item.at, now)}</Text>
       </View>
-      {unread ? <View style={styles.unreadDot} /> : null}
+      {followBack ? (
+        // Like other social apps: accept a follow straight from the notification.
+        <Button label={followed ? 'Following' : 'Follow back'} size="sm" variant={followed ? 'secondary' : 'primary'} disabled={followed} onPress={() => { setFollowed(true); void sendFriendRequest(followBack).catch(() => setFollowed(false)); }} />
+      ) : unread ? <View style={styles.unreadDot} /> : null}
     </Interactive>
   );
 }

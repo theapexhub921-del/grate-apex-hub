@@ -7,6 +7,24 @@ export type DeviceNotificationResult = {
   message?: string;
 };
 
+/** The browser's permission prompt (older Safari uses a callback instead of a promise). */
+function askPermission(): Promise<NotificationPermission> {
+  return new Promise((resolve) => {
+    try {
+      const result = Notification.requestPermission((value) => resolve(value));
+      if (result && typeof result.then === 'function') void result.then(resolve, () => resolve('default'));
+    } catch {
+      resolve('default');
+    }
+  });
+}
+
+/** The service worker, if it becomes ready within a few seconds (it may never, e.g. in a private window). */
+function readyWorker(ms = 3000): Promise<ServiceWorkerRegistration | null> {
+  if (!('serviceWorker' in navigator)) return Promise.resolve(null);
+  return Promise.race([navigator.serviceWorker.ready, new Promise<null>((resolve) => setTimeout(() => resolve(null), ms))]);
+}
+
 function isSupported() {
   return Platform.OS === 'web'
     && typeof window !== 'undefined'
@@ -19,15 +37,18 @@ export async function enableDeviceNotifications(): Promise<DeviceNotificationRes
     return { granted: false, message: 'Device notifications are available in the installed web app on supported browsers.' };
   }
 
-  const permission = Notification.permission === 'granted'
-    ? 'granted'
-    : await Notification.requestPermission();
+  // Blocked before: browsers never ask again, so say how to unblock.
+  if (Notification.permission === 'denied') {
+    return { granted: false, message: 'Notifications are blocked for this site. Allow them in your browser’s site settings (tap the lock or ⓘ next to the address, or the app’s settings on your phone), then tap Turn on again.' };
+  }
+  const permission = Notification.permission === 'granted' ? 'granted' : await askPermission();
 
   if (permission !== 'granted') {
     return { granted: false, message: 'Notifications are off. You can allow them later in your browser or device settings.' };
   }
 
-  await showDeviceNotification({
+  // A confirmation alert, without waiting long for the background worker.
+  void showDeviceNotification({
     id: 'grateapex-notifications-enabled',
     title: 'Notifications are on',
     body: 'GrAte Apex Hub will alert you about the updates you choose.',
@@ -49,9 +70,7 @@ export async function showDeviceNotification(item: Pick<AppNotification, 'id' | 
   };
 
   try {
-    const registration = 'serviceWorker' in navigator
-      ? await navigator.serviceWorker.ready
-      : null;
+    const registration = await readyWorker();
     if (registration) {
       await registration.showNotification(item.title, options);
     } else {

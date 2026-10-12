@@ -12,6 +12,7 @@ import { WeeklyChallengeCard } from '@/components/social/connect-challenges';
 import { LeagueCard } from '@/components/social/league-card';
 import { BattlesCard } from '@/components/social/battles-card';
 import { RecentMessagesCard } from '@/components/social/recent-messages-card';
+import { FollowRequestsCard } from '@/components/social/follow-requests-card';
 import { LearningWeekCard } from '@/components/learning/learning-week-card';
 import { Type, type ThemeColors } from '@/constants/theme';
 import { addDays, startOfDay } from '@/data/learning/time';
@@ -146,6 +147,7 @@ export default function SocialScreen() {
   return (
     <Screen width="content">
       <PageHeader title="Connect" subtitle="Find classmates, message friends and study together." right={<NotificationBell />} />
+      <FollowRequestsCard />
       <RecentMessagesCard />
       <View style={styles.quickActions}>
         {QUICK_ACTIONS.map((item) => (

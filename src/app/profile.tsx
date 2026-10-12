@@ -7,6 +7,7 @@ import { PersonalGoalsCard } from '@/components/learning/personal-goals-card';
 import { RankProgressCard } from '@/components/rank-progress';
 import { useAuth } from '@/hooks/use-auth';
 import { VerifiedBadge } from '@/components/ui/verified-badge';
+import { AboutEditor } from '@/components/social/about-editor';
 import { AchievementBadge } from '@/components/achievements/achievement-badge';
 import { ApexCoinWalletCard } from '@/components/apex-coin-wallet-card';
 import { AvatarPicker } from '@/components/avatar/avatar-picker';
@@ -113,6 +114,7 @@ export default function ProfileScreen() {
             <Text style={styles.countValue}>{myCounts.posts}</Text> posts · <Text style={styles.countValue}>{myCounts.followers}</Text> followers · <Text style={styles.countValue}>{myCounts.following}</Text> following
           </Text>
         ) : null}
+        <AboutEditor />
         <Text style={styles.username}>
           {social.status === 'loading' ? 'Username: Loading…' : `Username: ${social.username ? `@${social.username}` : '—'}`}
         </Text>

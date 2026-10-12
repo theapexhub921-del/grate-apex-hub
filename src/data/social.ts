@@ -183,8 +183,11 @@ function toPerson(uid: string, relationship: Relationship, friendshipId: string 
   };
 }
 
-async function loadSocial(userId: string) {
+async function loadSocial(userId: string, attempt = 0): Promise<void> {
   try {
+    // Opening a page directly (or the installed app resuming) can query before
+    // the sign-in is ready; wait for it so the friends list doesn't fail.
+    await auth.authStateReady();
     const [userSnap, following, followers, dismissed] = await Promise.all([
       getDoc(doc(db, 'users', userId)),
       followEdges(userId, 'following'),
@@ -219,7 +222,14 @@ async function loadSocial(userId: string) {
     });
   } catch (err) {
     console.warn('Could not load friends:', err);
-    setState({ status: 'error', error: 'Your friends could not be loaded. Check your connection and try again.' });
+    // Try again twice before saying so; a list already loaded stays on screen.
+    if (attempt < 2) {
+      await new Promise((resolve) => setTimeout(resolve, 1200 * (attempt + 1)));
+      if (state.userId === userId) return loadSocial(userId, attempt + 1);
+      return;
+    }
+    if (state.people.length) setState({ status: 'ready', error: null });
+    else setState({ status: 'error', error: 'Your friends could not be loaded. Check your connection and try again.' });
   }
 }
 

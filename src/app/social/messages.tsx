@@ -24,7 +24,7 @@ export default function MessagesScreen() {
       <BackLink fallback={'/social' as never} />
       <PageHeader title="Messages" subtitle="Private text conversations with accepted friends." />
       {social.status === 'loading' && !friends.length ? <LoadingState label="Loading friends" /> : null}
-      {social.status === 'error' ? <InlineNotice tone="warning" title="Messages unavailable" message={social.error ?? 'Could not load friends.'} /> : null}
+      {social.status === 'error' && !friends.length ? <InlineNotice tone="warning" title="Messages unavailable" message={social.error ?? 'Could not load friends.'} /> : null}
       {friends.length ? friends.map((friend) => (
         <Interactive
           key={friend.userId}

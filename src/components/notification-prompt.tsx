@@ -37,7 +37,7 @@ export function NotificationPrompt() {
   useEffect(() => {
     if (!user || enabled) return;
     const state = permission();
-    if (state === null || state === 'denied') return;
+    if (state === null) return;
     let live = true;
     const timer = setTimeout(() => {
       void AsyncStorage.getItem(KEY).catch(() => null).then((last) => {

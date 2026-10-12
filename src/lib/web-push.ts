@@ -32,7 +32,8 @@ export async function registerWebPush() {
   const uid = auth.currentUser?.uid;
   if (!uid) return false;
   try {
-    const registration = await navigator.serviceWorker.ready;
+    const registration = await Promise.race([navigator.serviceWorker.ready, new Promise<null>((resolve) => setTimeout(() => resolve(null), 5000))]);
+    if (!registration) return false;
     const subscription = (await registration.pushManager.getSubscription()) ?? (await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(VAPID_PUBLIC_KEY) }));
     const json = subscription.toJSON() as { endpoint?: string; keys?: { p256dh?: string; auth?: string } };
     if (!json.endpoint || !json.keys?.p256dh || !json.keys?.auth) return false;
@@ -51,7 +52,8 @@ export async function unregisterWebPush() {
   if (!supported()) return;
   const uid = auth.currentUser?.uid;
   try {
-    const registration = await navigator.serviceWorker.ready;
+    const registration = await Promise.race([navigator.serviceWorker.ready, new Promise<null>((resolve) => setTimeout(() => resolve(null), 5000))]);
+    if (!registration) return false;
     const subscription = await registration.pushManager.getSubscription();
     if (!subscription) return;
     const endpoint = subscription.endpoint;
