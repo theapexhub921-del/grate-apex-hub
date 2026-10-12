@@ -294,7 +294,7 @@ export default function LearnScreen() {
   );
   const studyHub = (
     <View style={styles.column}>
-      <Columns main={<LegacyCourseList courses={legacyCourses} selection={viewing as ClassSelection} />} side={<QuestionOfTheDay />} sideWidth={360} />
+      <Columns main={<LegacyCourseList courses={legacyCourses} selection={viewing as ClassSelection} />} side={<QuestionOfTheDay />} sideWidth={440} />
       <SectionHeader title="Practise and plan" subtitle="Ways to practise beyond the lessons, and your week." style={styles.hubSection} />
       <TileGrid columns={4} tiles={studyTiles} />
       <SectionHeader title="Your progress" subtitle="Your rank, this week and your goals." style={styles.hubSection} />
