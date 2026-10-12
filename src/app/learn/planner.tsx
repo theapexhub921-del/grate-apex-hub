@@ -12,7 +12,9 @@ import { InlineNotice } from '@/components/ui/state-views';
 import { Radius, Type, type ThemeColors } from '@/constants/theme';
 import { publishedTopics } from '@/data/curriculum';
 import { getProgressSnapshot } from '@/data/progress';
-import { WeekTimetable } from '@/components/learning/week-timetable';
+import { TimetableCalendar } from '@/components/learning/timetable-calendar';
+import { Sheet } from '@/components/ui/sheet';
+import { useDisplayName } from '@/data/user';
 import { createTimetableBlock, deleteTimetableBlock, listStudyPlans, listTimetableBlocks, saveStudyPlan, updateStudyPlanProgress, updateTimetableBlock, type StudyPlan, type TimetableBlock } from '@/data/planning';
 import { routes } from '@/lib/routes';
 import { useTheme, useThemedStyles } from '@/hooks/use-theme';
@@ -38,6 +40,20 @@ export default function PlannerScreen() {
   const [error, setError] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [subject, setSubject] = useState('');
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const displayName = useDisplayName();
+
+  function openBlock(entry?: TimetableBlock, defaults?: { weekday: number; start: string }) {
+    setError('');
+    if (entry) {
+      setEditingId(entry.id); setTitle(entry.title ?? ''); setSubject(entry.subject ?? ''); setDay(DAYS[entry.weekday]); setStart(entry.start_time.slice(0, 5)); setEnd(entry.end_time.slice(0, 5));
+    } else {
+      const startAt = defaults?.start ?? '09:00';
+      const endHour = Math.min(23, Number(startAt.slice(0, 2)) + 1);
+      setEditingId(null); setTitle(''); setSubject(''); setDay(DAYS[defaults?.weekday ?? 0]); setStart(startAt); setEnd(`${String(endHour).padStart(2, '0')}:${startAt.slice(3, 5)}`);
+    }
+    setSheetOpen(true);
+  }
 
   useEffect(() => {
     let active = true;
@@ -96,24 +112,27 @@ export default function PlannerScreen() {
       const input = { title: title.trim(), subject: subject.trim(), weekday: DAYS.indexOf(day), start_time: start, end_time: end, recurrence: 'weekly' as const, event_date: null, study_plan_id: plan?.id ?? null };
       const row = editingId ? await updateTimetableBlock(editingId, input) : await createTimetableBlock(input);
       setEntries((old) => editingId ? old.map((entry) => entry.id === editingId ? row : entry) : [...old, row].sort((a,b) => a.weekday - b.weekday || a.start_time.localeCompare(b.start_time)));
-      setTitle(''); setSubject(''); setEditingId(null);
+      setTitle(''); setSubject(''); setEditingId(null); setSheetOpen(false);
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not save the timetable block.'); }
     finally { setSavingEntry(false); }
   }
 
   async function removeEntry(id: string) {
-    try { await deleteTimetableBlock(id); setEntries((old) => old.filter((entry) => entry.id !== id)); }
+    try { await deleteTimetableBlock(id); setEntries((old) => old.filter((entry) => entry.id !== id)); setSheetOpen(false); setEditingId(null); }
     catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not remove the timetable block.'); }
   }
 
   return (
     <Screen width="content">
       <BackLink fallback={'/learn' as never} />
-      <PageHeader title="Your study planner" subtitle="Optional tools to shape your week around the subjects you want to study." />
+      <PageHeader title="Your study planner" subtitle="Your timetable, and an optional study plan built from the course." />
       {!ready ? <Text style={styles.body}>Loading your saved plans…</Text> : null}
-      {error ? <InlineNotice tone="error" title="Planner issue" message={error} /> : null}
+      {error && !sheetOpen ? <InlineNotice tone="error" title="Planner issue" message={error} /> : null}
 
-      <SectionHeader title="Build a study plan" subtitle="Choose topics and a time period. GrAte Apex Hub will make a lesson path from published course material." />
+      <TimetableCalendar entries={entries} name={displayName} onAdd={(defaults) => openBlock(undefined, defaults)} onSelect={(entry) => openBlock(entry)} />
+
+      <SectionHeader title="Build a study plan" subtitle="Choose topics and a time period. GrAte Apex Hub will make a lesson path from published course material." style={styles.sectionHeader} />
+
       <Card style={styles.sectionCard}>
         <Text style={styles.label}>Topics</Text>
         <View style={styles.topicGrid}>
@@ -155,33 +174,37 @@ export default function PlannerScreen() {
         </Card>
       ) : plan ? <InlineNotice tone="info" title="Your topics are not available yet" message="The plan is saved. Its lesson path will appear when those topics have published lessons." /> : null}
 
-      <SectionHeader title="Personal timetable" subtitle="Add recurring class or study blocks. Your timetable is private to you." style={styles.sectionHeader} />
-      {entries.length ? (
-        <Card style={styles.weekCard}>
-          <WeekTimetable entries={entries} onSelect={(entry) => { setEditingId(entry.id); setTitle(entry.title ?? ''); setSubject(entry.subject ?? ''); setDay(DAYS[entry.weekday]); setStart(entry.start_time.slice(0,5)); setEnd(entry.end_time.slice(0,5)); }} />
-        </Card>
-      ) : null}
-      <Card style={styles.sectionCard}>
-        <TextInput value={title} onChangeText={setTitle} maxLength={60} placeholder="Class or study block" placeholderTextColor={colors.textTertiary} accessibilityLabel="Timetable item name" style={styles.input} />
-        <TextInput value={subject} onChangeText={setSubject} maxLength={100} placeholder="Subject (optional)" placeholderTextColor={colors.textTertiary} accessibilityLabel="Timetable subject" style={styles.input} />
-        <View style={styles.days}>
-          {DAYS.map((value) => <Button key={value} label={value} size="sm" variant={day === value ? 'primary' : 'secondary'} onPress={() => setDay(value)} />)}
-        </View>
-        <View style={styles.inputPair}>
-          <TextInput value={start} onChangeText={setStart} placeholder="09:00" accessibilityLabel="Start time" style={[styles.input, styles.timeInput]} />
-          <Text style={styles.body}>to</Text>
-          <TextInput value={end} onChangeText={setEnd} placeholder="10:00" accessibilityLabel="End time" style={[styles.input, styles.timeInput]} />
-        </View>
-        <Button label={editingId ? 'Save changes' : 'Add to timetable'} variant="secondary" onPress={() => void addTimetableEntry()} loading={savingEntry} disabled={!ready || !title.trim() || savingEntry} />
-        {editingId ? <Button label="Cancel edit" variant="ghost" onPress={() => { setEditingId(null); setTitle(''); setSubject(''); }} /> : null}
-        {entries.length ? entries.map((entry) => (
-          <View key={entry.id} style={styles.entry}>
-            <View style={styles.flex}><Text style={styles.lessonTitle}>{DAYS[entry.weekday]} · {entry.start_time.slice(0,5)}–{entry.end_time.slice(0,5)}</Text><Text style={styles.muted}>{entry.title}{entry.subject ? ` · ${entry.subject}` : ''}</Text></View>
-            <Button label="Edit" size="sm" variant="ghost" onPress={() => { setEditingId(entry.id); setTitle(entry.title ?? ''); setSubject(entry.subject ?? ''); setDay(DAYS[entry.weekday]); setStart(entry.start_time.slice(0,5)); setEnd(entry.end_time.slice(0,5)); }} />
-            <Button label="Remove" size="sm" variant="ghost" onPress={() => void removeEntry(entry.id)} />
+      <Sheet
+        visible={sheetOpen}
+        onClose={() => { if (!savingEntry) { setSheetOpen(false); setEditingId(null); } }}
+        title={editingId ? 'Edit block' : 'Add to your timetable'}
+        subtitle="A class or study block that repeats every week."
+        footer={
+          <View style={styles.sheetActions}>
+            {editingId ? <Button label="Remove" variant="ghost" onPress={() => void removeEntry(editingId)} /> : null}
+            <Button label="Cancel" variant="secondary" onPress={() => { setSheetOpen(false); setEditingId(null); }} disabled={savingEntry} />
+            <Button label={editingId ? 'Save changes' : 'Add to timetable'} onPress={() => void addTimetableEntry()} loading={savingEntry} disabled={!ready || !title.trim() || savingEntry} />
           </View>
-        )) : <Text style={styles.muted}>No timetable blocks yet. Add one whenever it would help.</Text>}
-      </Card>
+        }
+      >
+        <View style={styles.sheetBody}>
+          {error ? <InlineNotice tone="error" title="Check the block" message={error} /> : null}
+          <Text style={styles.label}>Name</Text>
+          <TextInput value={title} onChangeText={setTitle} maxLength={60} placeholder="e.g. Anatomy lecture" placeholderTextColor={colors.textTertiary} accessibilityLabel="Timetable item name" style={styles.input} />
+          <Text style={styles.label}>Subject (optional)</Text>
+          <TextInput value={subject} onChangeText={setSubject} maxLength={100} placeholder="e.g. Anatomy" placeholderTextColor={colors.textTertiary} accessibilityLabel="Timetable subject" style={styles.input} />
+          <Text style={styles.label}>Day</Text>
+          <View style={styles.days}>
+            {DAYS.map((value) => <Button key={value} label={value} size="sm" variant={day === value ? 'primary' : 'secondary'} onPress={() => setDay(value)} />)}
+          </View>
+          <Text style={styles.label}>Time</Text>
+          <View style={styles.inputPair}>
+            <TextInput value={start} onChangeText={setStart} placeholder="09:00" accessibilityLabel="Start time" style={[styles.input, styles.timeInput]} />
+            <Text style={styles.body}>to</Text>
+            <TextInput value={end} onChangeText={setEnd} placeholder="10:00" accessibilityLabel="End time" style={[styles.input, styles.timeInput]} />
+          </View>
+        </View>
+      </Sheet>
     </Screen>
   );
 }
@@ -213,6 +236,7 @@ function createStyles(colors: ThemeColors) {
     dayHint: { ...Type.caption, color: colors.textTertiary },
     days: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
     timeInput: { flex: 1 },
-    entry: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, borderTopWidth: 1, borderTopColor: colors.divider },
+    sheetBody: { gap: 8 },
+    sheetActions: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 10 },
   });
 }

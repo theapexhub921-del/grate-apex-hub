@@ -3,6 +3,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { BackLink } from '@/components/learning/nav-bits';
+import { Arena, Countdown } from '@/components/learning/apex-arena';
+import { BattleIntro } from '@/components/social/battle-intro';
 import { QuestionSession, type SessionResult } from '@/components/learning/question-session';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/interactive';
@@ -62,6 +64,17 @@ export default function BattleScreen() {
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
   const [reward, setReward] = useState(0);
+  // The intro (you vs them in the arena), then 3 · 2 · 1, then the questions.
+  const [phase, setPhase] = useState<'intro' | 'countdown' | 'play'>('intro');
+  const [count, setCount] = useState(3);
+  useEffect(() => {
+    if (phase !== 'countdown') return;
+    const timer = setTimeout(() => {
+      if (count <= 1) setPhase('play');
+      else setCount(count - 1);
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [phase, count]);
 
   useEffect(() => {
     if (!id) return;
@@ -123,6 +136,27 @@ export default function BattleScreen() {
           <Button label="Back to Connect" variant="secondary" onPress={() => router.replace('/social')} />
         </Card>
       </Screen>
+    );
+  }
+
+  if (phase === 'intro') {
+    return (
+      <BattleIntro
+        course={battle.course.name}
+        me={{ uid, name: user?.profile?.username ?? 'You' }}
+        opponent={{ uid: battle.challengerId === uid ? battle.opponentId : battle.challengerId, name: otherName ?? 'opponent' }}
+        questions={questions.length}
+        seconds={BATTLE_SECONDS}
+        winXp={BATTLE_WIN_XP}
+        onStart={() => { setCount(3); setPhase('countdown'); }}
+      />
+    );
+  }
+  if (phase === 'countdown') {
+    return (
+      <Arena intensity="high">
+        <Countdown count={count} total={3} />
+      </Arena>
     );
   }
 
