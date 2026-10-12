@@ -8,15 +8,21 @@ import { LogoMark } from '@/components/logo-mark';
 import { AnimatedContent } from '@/components/motion';
 import {
   ApexDemo,
+  ExploreDemo,
   HomeDemo,
   InstallGuideDemo,
   LearnDemo,
   NotificationsDemo,
   PersonaliseDemo,
+  PlanningDemo,
   ProgressDemo,
   QuizDemo,
+  ReadDemo,
   RecallDemo,
+  ReviewDemo,
+  SimFrame,
   SocialDemo,
+  UsernameDemo,
   WelcomeDemo,
 } from '@/components/onboarding/tour-demos';
 import { Button } from '@/components/ui/button';
@@ -25,6 +31,7 @@ import { webStyle } from '@/components/ui/web';
 import { cssTransition, MOTION } from '@/constants/motion';
 import { elevation, isDesktopWidth, Radius, Type, type ThemeColors } from '@/constants/theme';
 import { ABOUT_US } from '@/data/about';
+import { EXPLORE_TEAM } from '@/data/explore';
 import { getNextActions } from '@/data/learning/next-action';
 import { useLearning } from '@/data/learning/use-learning';
 import { acceptCurrentLegalVersions, completeOnboarding, needsLegalAcceptance } from '@/data/onboarding';
@@ -73,100 +80,213 @@ export function OnboardingTour({ replay = false }: { replay?: boolean }) {
   const [legalError, setLegalError] = useState<string | null>(null);
   const showLegalGate = !legalSaved && needsLegalAcceptance(user);
 
-  // Ten pages that match the app as it is today (Feed, Connect, Study, Explore, You).
   const chapters: Chapter[] = [
     {
       id: 'welcome',
       icon: 'sparkle',
       kicker: 'WELCOME',
       title: `Welcome to GrAte Apex Hub, ${name}`,
-      body: `${ABOUT_US} This tour has ten short pages. Try each sample as you go — practice actions never change your progress.`,
+      body: 'A quick tour of the main features. Try each sample as you go — practice actions do not change your learning progress.',
       demo: () => <WelcomeDemo />,
+    },
+    {
+      id: 'about-us',
+      icon: 'profile',
+      kicker: 'ABOUT US',
+      title: 'A learning companion for medical students',
+      body: ABOUT_US,
+      demo: () => (
+        <SimFrame>
+          <View style={styles.aboutTeam}>
+            <Text style={styles.finishKicker}>MEET THE TEAM</Text>
+            {EXPLORE_TEAM.map((member) => (
+              <View key={member.name} style={styles.aboutTeamRow}>
+                <View style={styles.aboutTeamIcon}>
+                  <Icon name={member.icon} size={16} color={colors.primaryText} />
+                </View>
+                <View style={styles.teamMemberCopy}>
+                  <Text style={styles.aboutTeamName}>{member.name}</Text>
+                  <Text style={styles.aboutTeamRole}>{member.role}</Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        </SimFrame>
+      ),
     },
     {
       id: 'home',
       icon: 'home',
-      kicker: 'FEED',
+      kicker: 'HOME',
       title: 'Your study circle, all in one place',
-      body: 'Watch and share Stories, post photos, videos and study moments, and like, comment on and reply to friends’ posts. Open a post to see it with all its comments.',
-      tryIt: 'See how Stories and the feed work.',
+      body: 'Feed is your social space. Watch and share Stories, post photos, videos and study moments, then like, comment on, reply to and reshare posts from friends.',
+      tryIt: 'See how Stories and the community feed work.',
       demo: (props) => <HomeDemo {...props} nextTitle={nextAction?.title ?? 'Your next lesson is waiting in Study'} greeting={`${greeting}, ${name}`} />,
     },
     {
       id: 'learn',
       icon: 'learn',
-      kicker: 'STUDY',
-      title: 'Your class, your courses',
-      body: 'Pick your class and semester, then follow its subjects, courses, topics and lessons in order. Question of the Day, past questions, flashcards and your timetable are in Study too.',
+      kicker: 'LEARN',
+      title: 'Subjects → courses → topics → lessons',
+      body: 'Choose your class and semester, then follow its subjects, courses, topics and lessons in order. Question of the Day, past questions, flashcards and your timetable are in Study too.',
       tryIt: 'Tap your way down to a lesson.',
       demo: (props) => <LearnDemo {...props} />,
     },
     {
       id: 'recall',
       icon: 'mastery',
-      kicker: 'LEARN BY ANSWERING',
+      kicker: 'LEARN ACTIVELY',
       title: 'Answer first, then learn why',
-      body: 'Lessons ask before they tell: you try to recall, then see the explanation. Prefer reading? Every lesson also has a reading version with the slide sources, high-yield points and common confusions.',
+      body: 'Lessons are interactive: you try to recall before you’re told. Wrong answers are expected — they decide what comes back for review.',
       tryIt: 'Answer the practice question.',
       demo: (props) => <RecallDemo {...props} />,
     },
     {
+      id: 'read',
+      icon: 'book',
+      kicker: 'READ & REVISE',
+      title: 'The reference layer',
+      body: 'Every lesson also has a reading version: the full explanation, the slide sources, high-yield points and common confusions.',
+      tryIt: 'Show the key points.',
+      demo: (props) => <ReadDemo {...props} />,
+    },
+    {
       id: 'quiz',
       icon: 'lesson',
-      kicker: 'QUIZZES & REVIEW',
-      title: 'Check it, then keep it',
-      body: 'Take a lesson quiz with instant feedback or as an exam, practise the questions you missed, and let spaced review bring each concept back just before you would forget it.',
+      kicker: 'LESSON QUIZZES',
+      title: 'Check your understanding',
+      body: 'After a lesson, take its quiz with instant feedback or as an exam. Results show your strengths, what to revise, and let you practise the misses.',
       tryIt: 'Switch the feedback mode.',
       demo: (props) => <QuizDemo {...props} />,
+    },
+    {
+      id: 'review',
+      icon: 'reinforce',
+      kicker: 'REVIEW',
+      title: 'Spaced repetition, built in',
+      body: 'Each concept is scheduled to come back just before you would forget it. Your review calendar in Study shows what’s due and when.',
+      tryIt: 'Tap a day with dots.',
+      demo: (props) => <ReviewDemo {...props} />,
+    },
+    {
+      id: 'progress',
+      icon: 'rank',
+      kicker: 'XP, LEAGUES & STREAKS',
+      title: 'Progress that builds good habits',
+      body: 'Learning earns XP and advances your rank. Each week you compete in a league on that week’s XP. Weekly challenges can earn streak freezes, and Apex Coins can restore a lost streak.',
+      tryIt: 'Finish an example lesson.',
+      demo: (props) => <ProgressDemo {...props} />,
+    },
+    {
+      id: 'planning',
+      icon: 'calendar',
+      kicker: 'PLAN YOUR WEEK',
+      title: 'Turn your goals into a study routine',
+      body: 'Build your timetable in Study and set lesson, XP or streak goals in Your progress. Your next learning step is always waiting in Study.',
+      tryIt: 'Choose days for a sample study timetable.',
+      demo: (props) => <PlanningDemo {...props} />,
     },
     {
       id: 'apex',
       icon: 'challenge',
       kicker: 'APEX CHALLENGE & BATTLES',
-      title: 'Test yourself against the clock',
-      body: 'Apex Challenge is a timed run across a whole course — your best score is your benchmark. In Connect you can also battle a friend on the same questions.',
+      title: 'The mastery test',
+      body: 'A timed run across a whole course. Fast, serious and separate from lesson quizzes — your best score is your benchmark. In Connect you can also battle a friend on the same questions.',
       tryIt: 'Start the clock.',
       demo: (props) => <ApexDemo {...props} />,
     },
     {
-      id: 'progress',
-      icon: 'rank',
-      kicker: 'XP, LEAGUES & GOALS',
-      title: 'Progress that builds good habits',
-      body: 'Learning earns XP, ranks and streaks. Each week you compete in a league on that week’s XP. Set lesson, XP or streak goals, and use streak freezes and Apex Coins to protect your streak.',
-      tryIt: 'Finish an example lesson.',
-      demo: (props) => <ProgressDemo {...props} />,
+      id: 'explore',
+      icon: 'explore',
+      kicker: 'EXPLORE',
+      title: 'Explore every feature',
+      body: 'Explore explains how each part of GrAte Apex Hub works, shares announcements, and shows what is coming next. There is more to discover in Explore.',
+      tryIt: 'See the feature guide and updates.',
+      demo: (props) => <ExploreDemo {...props} />,
     },
     {
       id: 'social',
       icon: 'social',
       kicker: 'CONNECT',
       title: 'Study with your classmates',
-      body: 'Follow classmates and message friends or groups with photos, documents and voice notes — swipe a message to reply. Keep friend streaks going and join study groups and Table Conferences.',
+      body: 'Follow classmates and message friends or groups with photos, documents and voice notes — swipe a message to reply. Keep friend streaks going, and join study groups and Table Conferences. Voice and video calls are coming later.',
       tryIt: 'Explore a sample group or study session.',
       demo: (props) => <SocialDemo {...props} />,
     },
     {
+      id: 'team',
+      icon: 'profile',
+      kicker: 'MEET THE TEAM',
+      title: 'The people behind GrAte Apex Hub',
+      body: 'The people building and supporting GrAte Apex Hub.',
+      demo: () => (
+        <SimFrame>
+          <View style={styles.aboutTeam}>
+            {EXPLORE_TEAM.map((member) => (
+              <View key={member.name} style={styles.aboutTeamRow}>
+                <View style={styles.aboutTeamIcon}><Icon name={member.icon} size={16} color={colors.accentText} /></View>
+                <View style={styles.teamMemberCopy}>
+                  <Text style={styles.aboutTeamName}>{member.name}</Text>
+                  <Text style={styles.aboutTeamRole}>{member.role}</Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        </SimFrame>
+      ),
+    },
+    {
       id: 'personalise',
       icon: 'profile',
-      kicker: 'MAKE IT YOURS',
-      title: 'Your look, your name',
-      body: 'Choose a photo, an illustrated avatar or initials, pick your theme and text size, and add an About line. Your @username is how classmates find you. Change any of it later in You and Settings.',
+      kicker: 'PROFILE & SETTINGS',
+      title: 'Make it yours',
+      body: 'Choose a profile photo, an illustrated avatar or initials, add an About line, and set your theme, text zoom and navigation style. You can change these anytime in You and Settings.',
       tryIt: 'Make the app feel like yours (optional).',
       demo: (props) => <PersonaliseDemo {...props} />,
     },
     {
+      id: 'username',
+      icon: 'social',
+      kicker: 'YOUR USERNAME',
+      title: 'Let classmates recognise you',
+      body: 'Choose a username for Connect. It appears beside your name when classmates search for you, add you as a friend or study with you.',
+      tryIt: 'Save the username classmates will use to find you.',
+      demo: (props) => <UsernameDemo {...props} />,
+    },
+    {
       id: 'notifications',
       icon: 'bell',
-      kicker: 'STAY IN THE LOOP',
-      title: `You’re all set, ${name}`,
-      body: 'Allow alerts for messages, follow requests, league promotions and study reminders, and add GrAte Apex Hub to your home screen — no app store needed. Explore has the full feature guide and what’s new. Replay this tour anytime from Settings.',
+      kicker: 'NOTIFICATIONS',
+      title: 'Stay updated beyond the app',
+      body: 'Allow device alerts for messages, follow requests, league promotions and study reminders. You can change notification categories at any time in Settings.',
       tryIt: 'Allow notifications to receive a test alert.',
-      demo: (props) => (
-        <View style={styles.stackDemos}>
-          <NotificationsDemo {...props} />
-          <InstallGuideDemo />
-        </View>
+      demo: (props) => <NotificationsDemo {...props} />,
+    },
+    {
+      id: 'install',
+      icon: 'share',
+      kicker: 'INSTALL ON YOUR DEVICES',
+      title: 'Keep GrAte Apex Hub close at hand',
+      body: 'Add the app to your home screen or desktop for quick access. No app-store download is needed.',
+      demo: () => <InstallGuideDemo />,
+    },
+    {
+      id: 'finish',
+      icon: 'achievement',
+      kicker: 'YOU’RE READY',
+      title: `You’re all set, ${name}`,
+      body: 'Open Study for lessons, practice and your plan, Feed for Stories and posts, Connect for messages and classmates, and Explore for the feature guide and updates. Replay this introduction anytime from Settings.',
+      demo: () => (
+        <SimFrame kind="real">
+          <View style={styles.finish}>
+            <View style={styles.finishIcon}>
+              <Icon name="play" size={22} color="#0A1F5C" filled />
+            </View>
+            <Text style={styles.finishKicker}>READY TO BEGIN?</Text>
+            <Text style={styles.finishTitle}>Start where you need most</Text>
+            <Text style={styles.finishText}>Lessons and plans in Study · classmates in Connect · discoveries and updates in Explore</Text>
+          </View>
+        </SimFrame>
       ),
     },
   ];
@@ -327,7 +447,6 @@ export function OnboardingTour({ replay = false }: { replay?: boolean }) {
 
 function createStyles(colors: ThemeColors) {
   return StyleSheet.create({
-    stackDemos: { gap: 12 },
     root: { flex: 1 },
     flex: { flex: 1, minWidth: 0 },
     topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingBottom: 10 },

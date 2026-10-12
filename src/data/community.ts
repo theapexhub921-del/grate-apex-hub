@@ -28,6 +28,18 @@ export type CommunityMedia = {
   filename: string;
 };
 
+/** One photo or video of a post. */
+export type PostMedia = { type: 'image' | 'video'; url: string };
+
+/** A post's photos and videos, in order (the shared rules allow up to 3). */
+function mediaList(raw: unknown): PostMedia[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((item) => item && typeof item === 'object' && safeUrl(item.url))
+    .slice(0, 3)
+    .map((item) => (item.t === 'video' ? { type: 'video' as const, url: String(item.url) } : { type: 'image' as const, url: optimized(String(item.url)) }));
+}
+
 export type CommunityStory = {
   id: string;
   author_id: string;
@@ -49,6 +61,7 @@ export type CommunityPost = {
   media_path: string | null;
   media_type: 'image' | 'video' | null;
   media_url?: string | null;
+  media_list?: PostMedia[];
   reshared_post_id: string | null;
   reshared_author_id?: string | null;
   reshared_body?: string | null;
@@ -225,6 +238,7 @@ export async function listCommunityFeed(limitCount = 50): Promise<CommunityPost[
       media_path: null,
       media_type: media?.t === 'video' ? 'video' : media?.t === 'image' ? 'image' : null,
       media_url: safeUrl(media?.url) ? (media.t === 'image' ? optimized(media.url) : media.url) : null,
+      media_list: mediaList(d.media),
       reshared_post_id: typeof d.resharedPostId === 'string' ? d.resharedPostId : null,
       reshared_author_id: original?.authorUid ?? null,
       reshared_body: original ? postText(original) : null,
@@ -252,14 +266,16 @@ export async function listPostsBy(uid: string, limitCount = 30): Promise<Communi
   return [...own, ...extra].sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, limitCount);
 }
 
-export async function createCommunityPost(body: string, media?: CommunityMedia, resharedPostId?: string | null, stump?: StumpRef): Promise<CommunityPost> {
+export async function createCommunityPost(body: string, media?: CommunityMedia | readonly CommunityMedia[], resharedPostId?: string | null, stump?: StumpRef): Promise<CommunityPost> {
   const text = body.trim() || (resharedPostId ? REPOST_TEXT : '');
   if (text.length < 3) throw new Error('Posts need at least 3 characters.');
   if (text.length > 2000) throw new Error('Posts can be up to 2,000 characters.');
   const me = await myUsername();
   // Uploaded to the original app's Cloudinary account first (lib/media.ts);
   // nothing is posted if the upload fails.
-  const uploaded = media ? cleanMedia([await uploadMedia(media)]) : [];
+  const files = (Array.isArray(media) ? media : media ? [media as CommunityMedia] : []).slice(0, 3);
+  const uploaded = files.length ? cleanMedia(await Promise.all(files.map((file) => uploadMedia(file)))) : [];
+  if (files.length && uploaded.length < files.length) throw new Error('One of the uploads failed. Please try again.');
   // The shared board needs a title (3–120 characters): the first line.
   const firstLine = text.split('\n')[0].trim();
   const title = (firstLine.length >= 3 ? firstLine : text).slice(0, 120);
@@ -280,7 +296,7 @@ export async function createCommunityPost(body: string, media?: CommunityMedia, 
   });
   return {
     id: ref.id, author_id: me.uid, author_name: me.username, body: text, media_path: null,
-    media_type: uploaded[0]?.t ?? null, media_url: uploaded[0]?.url ?? null,
+    media_type: uploaded[0]?.t ?? null, media_url: uploaded[0]?.url ?? null, media_list: mediaList(uploaded),
     reshared_post_id: resharedPostId ?? null, created_at: new Date().toISOString(), reactions: 0, comments: 0, reshares: 0, my_reaction: null,
     stump: stump ?? null,
   };

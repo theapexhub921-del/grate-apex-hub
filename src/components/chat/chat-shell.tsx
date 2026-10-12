@@ -7,8 +7,6 @@ import { ChatThread } from '@/components/chat/chat-thread';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
-import { Card } from '@/components/ui/interactive';
-import { Screen } from '@/components/ui/screen';
 import { Text } from '@/components/ui/text';
 import { webStyle } from '@/components/ui/web';
 import { Type, type ThemeColors } from '@/constants/theme';
@@ -50,7 +48,6 @@ export function ChatShell({ friendId, groupId, name }: { friendId?: string | nul
     else router.push(href);
   };
   const thread = groupId ? <ChatThread key={`g:${groupId}`} groupId={groupId} name={name} /> : friendId ? <ChatThread key={`f:${friendId}`} friendId={friendId} name={name} /> : null;
-  const paneHeight = Math.max(480, height - (wide ? 70 : 150));
 
   if (!wide) {
     // The chats list leaves room for the bottom bar; an open chat has the whole screen.
@@ -61,8 +58,7 @@ export function ChatShell({ friendId, groupId, name }: { friendId?: string | nul
     );
   }
   return (
-    <Screen width="wide">
-      <Card style={[styles.shell, { height: paneHeight }]}>
+    <View style={[styles.shell, styles.full, { height }]}>
         <View style={styles.side}><ChatList activeId={groupId ?? friendId} onOpen={open} onOpenGroup={openGroup} /></View>
         <View style={styles.main}>
           {thread ? (
@@ -76,8 +72,7 @@ export function ChatShell({ friendId, groupId, name }: { friendId?: string | nul
             </View>
           )}
         </View>
-      </Card>
-    </Screen>
+    </View>
   );
 }
 
@@ -86,6 +81,7 @@ function createStyles(colors: ThemeColors) {
     phone: { width: '100%', backgroundColor: colors.surface, overflow: 'hidden' },
     fixed: { left: 0, right: 0, zIndex: 50, ...(webStyle({ position: 'fixed' }) as object) },
     shell: { flexDirection: 'row', padding: 0, overflow: 'hidden' },
+    full: { width: '100%', backgroundColor: colors.surface },
     side: { width: 360, borderRightWidth: 1, borderRightColor: colors.divider },
     main: { flex: 1, minWidth: 0 },
     empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10, padding: 24 },
