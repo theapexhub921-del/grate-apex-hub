@@ -298,10 +298,13 @@ export default function LearnScreen() {
       <SectionHeader title="Practise and plan" subtitle="Ways to practise beyond the lessons, and your week." style={styles.hubSection} />
       <TileGrid columns={4} tiles={studyTiles} />
       <SectionHeader title="Your progress" subtitle="Your rank, this week and your goals." style={styles.hubSection} />
+      {/* This week on the left (wider); rank and goals stacked on the right, matching its height. */}
       <View style={styles.progressRow}>
-        <View style={styles.progressItem}><RankProgressCard lifetimeXp={progress.xp} /></View>
-        <View style={styles.progressItem}><LearningWeekCard /></View>
-        <View style={styles.progressItem}><PersonalGoalsCard /></View>
+        <View style={styles.progressWide}><LearningWeekCard /></View>
+        <View style={styles.progressStack}>
+          <View style={styles.progressFill}><RankProgressCard lifetimeXp={progress.xp} /></View>
+          <View style={styles.progressFill}><PersonalGoalsCard /></View>
+        </View>
       </View>
       {reviewCalendar}
     </View>
@@ -412,7 +415,9 @@ function createStyles(colors: ThemeColors) {
     toolGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 16, alignItems: 'flex-start' },
     hubSection: { marginTop: 18, marginBottom: 2 },
     progressRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 16, alignItems: 'stretch' },
-    progressItem: { flexGrow: 1, flexBasis: 300, minWidth: 0 },
+    progressWide: { flexGrow: 2, flexBasis: 460, minWidth: 0 },
+    progressStack: { flexGrow: 1, flexBasis: 300, minWidth: 0, gap: 16 },
+    progressFill: { flexGrow: 1 },
     toolColumn: { flexGrow: 1, flexBasis: 320, minWidth: 0, gap: 16 },
     calendarCard: { gap: 12 },
     calendarHeading: { marginBottom: 0 },
