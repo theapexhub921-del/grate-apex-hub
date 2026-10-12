@@ -319,6 +319,19 @@ const ICONS = {
     </>
   ),
   dot: ({ color }) => <Circle cx={12} cy={12} r={3.4} fill={color} />,
+  mic: ({ color, sw }) => (
+    <>
+      <Rect x={9} y={3.4} width={6} height={11} rx={3} {...stroke(color, sw)} />
+      <Path d="M5.8 11.2a6.2 6.2 0 0 0 12.4 0M12 17.4v3.2" {...stroke(color, sw)} />
+    </>
+  ),
+  pause: ({ color, filled, sw }) => (
+    <>
+      <Rect x={6.8} y={5.6} width={3.6} height={12.8} rx={1} {...stroke(color, sw)} fill={filled ? color : 'none'} />
+      <Rect x={13.6} y={5.6} width={3.6} height={12.8} rx={1} {...stroke(color, sw)} fill={filled ? color : 'none'} />
+    </>
+  ),
+  send: ({ color, filled, sw }) => <Path d="M4 11.6 20 4.4l-5.6 15.4-3-6.6z" {...stroke(color, sw)} fill={filled ? color : 'none'} />,
 } satisfies Record<string, Draw>;
 
 export type IconName = keyof typeof ICONS;

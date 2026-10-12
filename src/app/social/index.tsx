@@ -1,13 +1,9 @@
 import { router } from 'expo-router';
-import { useMemo } from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Text } from '@/components/ui/text';
-import Svg, { Circle, Defs, LinearGradient, Line, Path, Stop } from 'react-native-svg';
 
-import { AnimatedNumber } from '@/components/ui/animated-number';
 import { Button } from '@/components/ui/button';
 import { PersonAvatar, PersonLink } from '@/components/social/profile-card';
-import { IconButton } from '@/components/ui/icon-button';
 import { NotificationBell } from '@/components/notifications';
 import { Icon, type IconName } from '@/components/ui/icon';
 import { Card, PressableCard } from '@/components/ui/interactive';
@@ -16,6 +12,8 @@ import { Columns, PageHeader, Screen } from '@/components/ui/screen';
 import { WeeklyChallengeCard } from '@/components/social/connect-challenges';
 import { LeagueCard } from '@/components/social/league-card';
 import { BattlesCard } from '@/components/social/battles-card';
+import { RecentMessagesCard } from '@/components/social/recent-messages-card';
+import { LearningWeekCard } from '@/components/learning/learning-week-card';
 import { Type, type ThemeColors } from '@/constants/theme';
 import { addDays, startOfDay } from '@/data/learning/time';
 import { useLearning } from '@/data/learning/use-learning';
@@ -37,80 +35,11 @@ export default function SocialScreen() {
   const social = useSocial();
   const friends = social.people.filter((person) => person.relationship === 'friends');
   const requests = social.people.filter((person) => person.relationship === 'incoming');
-  const { progress, attempts, now } = useLearning();
+  const { progress, now } = useLearning();
 
   const today = startOfDay(now);
   const weekStart = addDays(today, -6);
-  const lessonsThisWeek = Object.values(progress.lessonCompletedAt).filter((at) => at >= weekStart).length;
-  const answersThisWeek = attempts.filter((attempt) => attempt.attemptedAt >= weekStart).length;
   const xpThisWeek = progress.xpLedger.filter((entry) => entry.at >= weekStart).reduce((sum, entry) => sum + entry.amount, 0);
-
-  // XP per day for the last seven days (real ledger).
-  const days = useMemo(
-    () =>
-      Array.from({ length: 7 }, (_, index) => {
-        const start = addDays(today, index - 6);
-        const end = addDays(start, 1);
-        const xp = progress.xpLedger.filter((entry) => entry.at >= start && entry.at < end).reduce((sum, entry) => sum + Math.max(0, entry.amount), 0);
-        return { start, xp, label: new Date(start).toLocaleDateString(undefined, { weekday: 'narrow' }), isToday: start === today };
-      }),
-    [progress.xpLedger, today]
-  );
-  const maxXp = Math.max(1, ...days.map((day) => day.xp));
-  const graphPoints = days.map((day, index) => ({
-    x: 16 + index * 48,
-    y: 82 - (day.xp / maxXp) * 62,
-    isToday: day.isToday,
-  }));
-  const graphLine = createSmoothPath(graphPoints);
-  const graphArea = `${graphLine} L ${graphPoints[graphPoints.length - 1].x} 90 L ${graphPoints[0].x} 90 Z`;
-
-  const week = (
-    <Card style={styles.card}>
-      <View style={styles.cardHeader}>
-        <Text style={styles.cardTitle}>Your learning this week</Text>
-        <Pill label="Real activity" tone="success" />
-      </View>
-      <View style={styles.weekStats}>
-        <WeekStat icon="lesson" value={lessonsThisWeek} label="lessons" />
-        <WeekStat icon="check" value={answersThisWeek} label="answers" />
-        <WeekStat icon="xp" value={xpThisWeek} label="XP" />
-        <WeekStat icon="streak" value={progress.streak} label="streak" />
-      </View>
-      <View style={styles.chart} accessibilityLabel={`XP per day this week: ${days.map((day) => day.xp).join(', ')}`}>
-        <Svg style={styles.graph} viewBox="0 0 320 100" preserveAspectRatio="none">
-          <Defs>
-            <LinearGradient id="weekXpFill" x1="0" y1="0" x2="0" y2="1">
-              <Stop offset="0" stopColor={colors.primary} stopOpacity="0.22" />
-              <Stop offset="1" stopColor={colors.primary} stopOpacity="0.01" />
-            </LinearGradient>
-          </Defs>
-          {[20, 40, 60, 80].map((y) => (
-            <Line key={y} x1="16" y1={y} x2="304" y2={y} stroke={colors.divider} strokeWidth="1" strokeDasharray="3 5" />
-          ))}
-          <Path d={graphArea} fill="url(#weekXpFill)" />
-          <Path d={graphLine} fill="none" stroke={colors.primary} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-          {graphPoints.map((point, index) => (
-            <Circle
-              key={days[index].start}
-              cx={point.x}
-              cy={point.y}
-              r={point.isToday ? 5 : 3.5}
-              fill={point.isToday ? colors.accent : colors.primary}
-              stroke={colors.surface}
-              strokeWidth="2"
-            />
-          ))}
-        </Svg>
-        <View style={styles.chartLabels}>
-          {days.map((day) => (
-            <Text key={day.start} style={[styles.chartLabel, day.isToday && styles.chartLabelToday]}>{day.label}</Text>
-          ))}
-        </View>
-      </View>
-      <Text style={styles.note}>Friends see your weekly XP and streak — never your answers or scores.</Text>
-    </Card>
-  );
 
   const activityCard = (
     <Card style={styles.card}>
@@ -210,7 +139,8 @@ export default function SocialScreen() {
 
   return (
     <Screen width="content">
-      <PageHeader title="Connect" subtitle="Find classmates, message friends and study together." right={<><NotificationBell /><IconButton icon="mail" label="Messages" onPress={() => router.push('/social/messages' as never)} /></>} />
+      <PageHeader title="Connect" subtitle="Find classmates, message friends and study together." right={<NotificationBell />} />
+      <RecentMessagesCard />
       <View style={styles.quickActions}>
         <Button label="Study groups" variant="secondary" icon={<Icon name="social" size={16} color={colors.text} />} onPress={() => router.push('/social/groups' as never)} />
         <Button label="Table conferences" variant="secondary" icon={<Icon name="connection" size={16} color={colors.text} />} onPress={() => router.push('/social/conferences' as never)} />
@@ -220,9 +150,9 @@ export default function SocialScreen() {
         sideWidth={width >= 1180 ? 380 : 340}
         main={
           <View style={styles.column}>
-            {week}
             {activityCard}
             <WeeklyChallengeCard />
+            <LearningWeekCard />
             <LeagueCard />
             <BattlesCard />
           </View>
@@ -251,29 +181,6 @@ function relativeDay(at: number, today: number) {
   if (days <= 0) return 'Today';
   if (days === 1) return 'Yesterday';
   return `${days} days ago`;
-}
-
-function createSmoothPath(points: { x: number; y: number }[]) {
-  if (points.length < 2) return '';
-  return points.reduce((path, point, index) => {
-    if (index === 0) return `M ${point.x} ${point.y}`;
-    const previous = points[index - 1];
-    const midpoint = (previous.x + point.x) / 2;
-    return `${path} C ${midpoint} ${previous.y}, ${midpoint} ${point.y}, ${point.x} ${point.y}`;
-  }, '');
-}
-
-function WeekStat({ icon, value, label }: { icon: IconName; value: number; label: string }) {
-  const styles = useThemedStyles(createStyles);
-  const colors = useTheme();
-  const gold = icon === 'xp' || icon === 'streak';
-  return (
-    <View style={styles.weekStat}>
-      <Icon name={icon} size={15} color={gold ? colors.accentText : colors.primaryText} filled={gold} />
-      <AnimatedNumber value={value} style={styles.weekValue} />
-      <Text style={styles.weekLabel}>{label}</Text>
-    </View>
-  );
 }
 
 function createStyles(colors: ThemeColors) {

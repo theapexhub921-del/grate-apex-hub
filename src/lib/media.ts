@@ -63,3 +63,23 @@ export async function uploadMedia(file: MediaFile, onProgress?: (share: number) 
   if (!safeUrl(data.secure_url)) throw new Error('Upload failed.');
   return { t: data.resource_type === 'video' ? 'video' : 'image', url: data.secure_url, w: data.width, h: data.height };
 }
+
+/** Uploads a recorded voice note (web: a MediaRecorder blob) to Cloudinary and returns its URL. */
+export async function uploadVoiceNote(blob: Blob): Promise<string> {
+  if (!uploadsReady()) throw new Error('Uploads aren’t set up yet.');
+  if (blob.size > MAX_VIDEO_BYTES) throw new Error('That voice note is too long.');
+  const form = new FormData();
+  const type = blob.type || 'audio/webm';
+  form.append('file', blob, type.includes('mp4') ? 'voice-note.m4a' : type.includes('ogg') ? 'voice-note.ogg' : 'voice-note.webm');
+  form.append('upload_preset', CLOUDINARY.uploadPreset);
+  let response: Response;
+  try {
+    response = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY.cloudName}/auto/upload`, { method: 'POST', body: form });
+  } catch {
+    throw new Error('Couldn’t reach the upload server. Check your connection.');
+  }
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data?.error?.message || 'Upload failed.');
+  if (!safeUrl(data.secure_url)) throw new Error('Upload failed.');
+  return data.secure_url as string;
+}

@@ -11,6 +11,7 @@ import { LearningWelcomeAtmosphere } from '@/components/learning/learning-welcom
 import { MemoryDistribution } from '@/components/learning/memory-ui';
 import { NextActionHero, NextActionList } from '@/components/learning/next-action-card';
 import { PersonalGoalsCard } from '@/components/learning/personal-goals-card';
+import { LearningWeekCard } from '@/components/learning/learning-week-card';
 import { ReviewCalendar } from '@/components/learning/review-calendar';
 import { RankProgressCard } from '@/components/rank-progress';
 import { TopicCard } from '@/components/learning/topic-card';
@@ -172,6 +173,7 @@ export default function LearnScreen() {
     <View style={styles.column}>
       <RankProgressCard lifetimeXp={progress.xp} />
       <PersonalGoalsCard />
+      <LearningWeekCard />
       <Card style={styles.calendarCard}>
         <SectionHeader
           title="Your week"

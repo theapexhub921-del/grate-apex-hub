@@ -95,6 +95,19 @@ export type CommunityMessage = {
   body: string;
   created_at: string;
   deleted_at?: string | null;
+  /** A voice note (the original app's `audio`: a Cloudinary URL and its length in seconds). */
+  audio?: { url: string; seconds: number } | null;
+};
+
+/** One of my chats, for the recent-messages list. */
+export type ConversationSummary = {
+  id: string;
+  otherId: string;
+  otherName: string | null;
+  lastText: string;
+  lastAt: number;
+  lastFromMe: boolean;
+  unread: boolean;
 };
 
 export type FriendChallenge = {
@@ -531,8 +544,46 @@ export async function listConversationMessages(conversationId: string): Promise<
   const snap = await getDocs(query(collection(db, 'chats', conversationId, 'messages'), orderBy('createdAt', 'asc'), limit(200)));
   return snap.docs.map((item) => {
     const d = item.data();
-    return { id: item.id, conversation_id: conversationId, sender_id: String(d.from ?? ''), body: String(d.text ?? ''), created_at: iso(d.createdAt) };
+    const audio = d.audio && typeof d.audio.url === 'string' ? { url: d.audio.url as string, seconds: Number(d.audio.d) || 0 } : null;
+    return { id: item.id, conversation_id: conversationId, sender_id: String(d.from ?? ''), body: String(d.text ?? ''), created_at: iso(d.createdAt), audio };
   });
+}
+
+/** My chats, most recent first (members contains me; sorted here so no extra index is needed). */
+export async function listMyConversations(max = 8): Promise<ConversationSummary[]> {
+  const me = await signedInUserId();
+  const snap = await getDocs(query(collection(db, 'chats'), where('members', 'array-contains', me), limit(100)));
+  const millis = (value: unknown) => (value as { toMillis?: () => number } | null)?.toMillis?.() ?? 0;
+  return snap.docs
+    .map((item) => {
+      const d = item.data();
+      const otherId = ((d.members ?? []) as string[]).find((member) => member !== me) ?? '';
+      const lastAt = millis(d.lastAt);
+      const seenAt = millis((d.seen ?? {})[me]);
+      return { id: item.id, otherId, otherName: ((d.names ?? {})[otherId] as string) ?? null, lastText: String(d.lastText ?? ''), lastAt, lastFromMe: d.lastFrom === me, unread: d.lastFrom !== me && Boolean(d.lastText) && lastAt > seenAt };
+    })
+    .filter((chat) => chat.otherId && chat.lastText)
+    .sort((a, b) => b.lastAt - a.lastAt)
+    .slice(0, max);
+}
+
+export const VOICE_NOTE_MAX_SECONDS = 120;
+
+/** Sends a voice note (already uploaded to Cloudinary), as the original app does: an empty text with `audio`. */
+export async function sendVoiceNote(conversationId: string, url: string, seconds: number): Promise<CommunityMessage> {
+  const me = await signedInUserId();
+  const d = Math.max(1, Math.min(VOICE_NOTE_MAX_SECONDS, Math.round(seconds)));
+  const ref = doc(collection(db, 'chats', conversationId, 'messages'));
+  const batch = writeBatch(db);
+  batch.set(ref, { from: me, text: '', createdAt: serverTimestamp(), audio: { url, d } });
+  batch.update(doc(db, 'chats', conversationId), { lastText: 'Voice note', lastAt: serverTimestamp(), lastFrom: me, [`seen.${me}`]: serverTimestamp() });
+  try {
+    await batch.commit();
+  } catch (error) {
+    if ((error as { code?: string }).code === 'permission-denied') throw new Error('Voice notes can only be sent between friends who follow each other.');
+    throw error;
+  }
+  return { id: ref.id, conversation_id: conversationId, sender_id: me, body: '', created_at: new Date().toISOString(), audio: { url, seconds: d } };
 }
 
 export async function sendCommunityMessage(conversationId: string, body: string): Promise<CommunityMessage> {

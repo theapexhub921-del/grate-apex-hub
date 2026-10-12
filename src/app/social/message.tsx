@@ -13,9 +13,11 @@ import { Sheet } from '@/components/ui/sheet';
 import { PageHeader, Screen } from '@/components/ui/screen';
 import { InlineNotice, LoadingState } from '@/components/ui/state-views';
 import { MentionInput } from '@/components/social/mention-input';
+import { clock, useVoiceRecorder, voiceNotesSupported, VoiceNotePlayer } from '@/components/social/voice-note';
+import { uploadVoiceNote } from '@/lib/media';
 import { Radius, ReadReceiptBlues, Type, type ThemeColors } from '@/constants/theme';
 import { contrastRatio } from '@/data/contrast';
-import { deleteCommunityMessage, getOrCreateFriendConversation, listConversationMessages, loadConversationMeta, markConversationSeen, messageStatus, sendCommunityMessage, type CommunityMessage, type ConversationMeta, type MessageStatus } from '@/data/community';
+import { deleteCommunityMessage, getOrCreateFriendConversation, listConversationMessages, loadConversationMeta, markConversationSeen, messageStatus, sendCommunityMessage, sendVoiceNote, VOICE_NOTE_MAX_SECONDS, type CommunityMessage, type ConversationMeta, type MessageStatus } from '@/data/community';
 import { usePrivacyPreferences } from '@/data/settings';
 import { useSocial } from '@/data/social';
 import { useAuth } from '@/hooks/use-auth';
@@ -82,8 +84,32 @@ export default function DirectMessageScreen() {
   }, [conversationId, refresh]);
 
   const readBlue = [...ReadReceiptBlues].sort((a, b) => contrastRatio(b, colors.primary) - contrastRatio(a, colors.primary))[0];
-  const lastMine = [...messages].reverse().find((message) => message.sender_id === user?.id && !message.deleted_at);
+  // Sent / Delivered / Read under the last message, when it is mine (like other messaging apps).
+  const lastMessage = messages[messages.length - 1];
+  const lastMine = lastMessage && lastMessage.sender_id === user?.id && !lastMessage.deleted_at ? lastMessage : null;
   const presence = meta ? (meta.otherOnline ? 'Online' : meta.otherLastSeen ? lastSeenText(meta.otherLastSeen) : null) : null;
+
+  // At the two-minute limit the voice note is sent automatically.
+  const voice = useVoiceRecorder(() => void sendVoice());
+  const [canRecord] = useState(voiceNotesSupported);
+  const [sendingVoice, setSendingVoice] = useState(false);
+
+  async function sendVoice() {
+    if (!conversationId || sendingVoice) return;
+    const note = await voice.finish();
+    if (!note) return;
+    setSendingVoice(true);
+    setError(null);
+    try {
+      const url = await uploadVoiceNote(note.blob);
+      await sendVoiceNote(conversationId, url, note.seconds);
+      await refresh(conversationId);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Could not send this voice note.');
+    } finally {
+      setSendingVoice(false);
+    }
+  }
 
   async function send() {
     if (!conversationId || !draft.trim() || busy) return;
@@ -118,7 +144,7 @@ export default function DirectMessageScreen() {
   return (
     <Screen width="prose">
       <BackLink fallback={'/social/messages' as never} />
-      <PageHeader title={name ? `Chat with ${name}` : 'Direct message'} subtitle={presence ?? 'Text conversation with your friend.'} />
+      <PageHeader title={name ? `Chat with ${name}` : 'Direct message'} subtitle={presence ?? 'Messages and voice notes with your friend.'} />
       {error ? <InlineNotice tone="warning" title="Conversation unavailable" message={`${error} Direct messages work between friends who follow each other.`} /> : null}
       {loading ? <LoadingState label="Loading conversation" /> : null}
       <ScrollView ref={messagesRef} style={styles.messages} contentContainerStyle={styles.messageList} onContentSizeChange={() => messagesRef.current?.scrollToEnd({ animated: true })}>
@@ -126,7 +152,11 @@ export default function DirectMessageScreen() {
           const mine = message.sender_id === user?.id;
           return (
             <View key={message.id} style={[styles.bubble, mine ? styles.mine : styles.theirs]}>
-              <Text style={[styles.messageText, mine && styles.mineText]}>{message.deleted_at ? 'This message was deleted.' : message.body}</Text>
+              {message.audio && !message.deleted_at ? (
+                <VoiceNotePlayer url={message.audio.url} seconds={message.audio.seconds} color={mine ? colors.onPrimary : colors.primaryText} trackColor={mine ? colors.onPrimaryMuted : colors.track} />
+              ) : (
+                <Text style={[styles.messageText, mine && styles.mineText]}>{message.deleted_at ? 'This message was deleted.' : message.body}</Text>
+              )}
               <View style={styles.messageFooter}>
                 <Text style={[styles.time, mine && styles.mineTime]}>{new Date(message.created_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</Text>
                 {mine && !message.deleted_at && meta ? <MessageTicks status={messageStatus(message, meta)} color={colors.onPrimaryMuted} readColor={readBlue} /> : null}
@@ -139,8 +169,25 @@ export default function DirectMessageScreen() {
         {!messages.length && !loading && !error ? <Text style={styles.empty}>Say hello or share what you’re studying.</Text> : null}
       </ScrollView>
       <Card style={styles.composer}>
-        <MentionInput people={social.people} value={draft} onChangeText={setDraft} maxLength={5000} multiline placeholder="Write a message…" placeholderTextColor={colors.textTertiary} accessibilityLabel="Write a message" style={styles.input} />
-        <Button label="Send" onPress={() => void send()} loading={busy} disabled={!draft.trim() || busy || !conversationId} />
+        {voice.recording ? (
+          <View style={styles.recordingRow} accessibilityLiveRegion="polite">
+            <View style={styles.recDot} />
+            <Text style={styles.recText}>Recording {clock(voice.seconds)} / {clock(VOICE_NOTE_MAX_SECONDS)}</Text>
+            <Button label="Cancel" variant="ghost" size="sm" onPress={voice.cancel} />
+            <Button label="Send voice note" size="sm" icon={<Icon name="send" size={15} color={colors.onPrimary} />} onPress={() => void sendVoice()} />
+          </View>
+        ) : (
+          <>
+            <MentionInput people={social.people} value={draft} onChangeText={setDraft} maxLength={500} multiline placeholder="Write a message…" placeholderTextColor={colors.textTertiary} accessibilityLabel="Write a message" style={styles.input} />
+            <View style={styles.composerActions}>
+              {canRecord ? (
+                <Button label={sendingVoice ? 'Sending…' : 'Voice note'} variant="secondary" icon={<Icon name="mic" size={16} color={colors.text} />} onPress={() => void voice.start()} loading={sendingVoice} disabled={!conversationId || sendingVoice} accessibilityLabel="Record a voice note" />
+              ) : null}
+              <Button label="Send" icon={<Icon name="send" size={15} color={colors.onPrimary} />} onPress={() => void send()} loading={busy} disabled={!draft.trim() || busy || !conversationId} />
+            </View>
+          </>
+        )}
+        {voice.error ? <Text style={styles.recError}>{voice.error}</Text> : null}
       </Card>
       <Sheet visible={deleteTarget !== null} onClose={() => { if (!busy) setDeleteTarget(null); }} title="Delete this message?" subtitle="The message will be marked as deleted for everyone in this conversation." footer={<View style={styles.confirmActions}><Button label="Cancel" variant="secondary" onPress={() => setDeleteTarget(null)} disabled={busy} /><Button label="Delete message" variant="danger" onPress={() => void removeMessage()} loading={busy} /></View>}>
         <Text style={styles.empty}>You can’t undo this action.</Text>
@@ -191,6 +238,11 @@ function createStyles(colors: ThemeColors) {
     receipt: { alignSelf: 'flex-end', fontSize: 11, fontWeight: '700', color: colors.textTertiary, marginTop: -4, marginRight: 4 },
     empty: { ...Type.callout, color: colors.textTertiary, textAlign: 'center', marginTop: 30 },
     composer: { gap: 10 },
+    composerActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10 },
+    recordingRow: { flexDirection: 'row', alignItems: 'center', gap: 10, flexWrap: 'wrap' },
+    recDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.error },
+    recText: { flex: 1, fontSize: 14, fontWeight: '700', color: colors.text },
+    recError: { fontSize: 13, color: colors.error },
     input: { minHeight: 52, maxHeight: 140, textAlignVertical: 'top', borderWidth: 1, borderColor: colors.borderStrong, borderRadius: Radius.md, backgroundColor: colors.surfaceSunken, padding: 12, color: colors.text, fontSize: 14 },
   });
 }
