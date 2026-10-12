@@ -19,9 +19,7 @@ import { Icon, type IconName } from '@/components/ui/icon';
 import { IconButton } from '@/components/ui/icon-button';
 import { Card, Interactive } from '@/components/ui/interactive';
 import { Columns, PageHeader, Screen, SectionHeader } from '@/components/ui/screen';
-import { Sheet } from '@/components/ui/sheet';
-import { SegmentedControl } from '@/components/ui/segmented-control';
-import { EmptyState, LoadingState } from '@/components/ui/state-views';
+import { FollowListSheet } from '@/components/social/follow-list-sheet';
 import { webStyle } from '@/components/ui/web';
 import { elevation, isDesktopWidth, Radius, Type, type ThemeColors } from '@/constants/theme';
 import { curriculumProgress } from '@/data/learning/progress-model';
@@ -29,7 +27,7 @@ import { useAchievements } from '@/data/achievements-store';
 import { useLearning } from '@/data/learning/use-learning';
 import { getRankProgress } from '@/data/ranks';
 import { useAvatarUrl, useDisplayName } from '@/data/user';
-import { getRecommendedFriends, personName, sendFriendRequest, useSocial, type SocialRecommendation, getPublicProfile, getFollowList, type FollowUser } from '@/data/social';
+import { getRecommendedFriends, personName, sendFriendRequest, useSocial, type SocialRecommendation, getPublicProfile } from '@/data/social';
 import { useTheme, useThemedStyles } from '@/hooks/use-theme';
 
 type MenuItem = { icon: IconName; label: string; detail: string; href: Href };
@@ -76,35 +74,12 @@ export default function ProfileScreen() {
   const [myCounts, setMyCounts] = useState<{ posts: number; followers: number; following: number } | null>(null);
   const [followSheetOpen, setFollowSheetOpen] = useState(false);
   const [followTab, setFollowTab] = useState<'followers' | 'following'>('followers');
-  const [followList, setFollowList] = useState<FollowUser[]>([]);
-  const [followLoading, setFollowLoading] = useState(false);
+  const [expandedFriends, setExpandedFriends] = useState(false);
 
   const openFollowList = (tab: 'followers' | 'following') => {
     setFollowTab(tab);
     setFollowSheetOpen(true);
   };
-
-  useEffect(() => {
-    if (!followSheetOpen || !user?.uid) return;
-    let active = true;
-    setFollowLoading(true);
-    getFollowList(user.uid, followTab)
-      .then((list) => {
-        if (active) {
-          setFollowList(list);
-          setFollowLoading(false);
-        }
-      })
-      .catch(() => {
-        if (active) {
-          setFollowList([]);
-          setFollowLoading(false);
-        }
-      });
-    return () => {
-      active = false;
-    };
-  }, [followSheetOpen, followTab, user?.uid]);
 
   useEffect(() => {
     if (!user?.uid) return;
@@ -144,33 +119,33 @@ export default function ProfileScreen() {
           </Text>
           <VerifiedBadge username={social.username} uid={user?.uid} size={20} />
         </View>
-        {myCounts ? (
-          <View style={styles.countsRow}>
+        <View style={styles.countsRow}>
+          <Text style={styles.countText}>
+            <Text style={styles.countValue}>{myCounts ? myCounts.posts : 0}</Text> posts
+          </Text>
+          <Text style={styles.countDivider}> · </Text>
+          <Interactive
+            onPress={() => openFollowList('followers')}
+            accessibilityRole="button"
+            accessibilityLabel={`View ${myCounts ? myCounts.followers : 0} followers`}
+            style={styles.countPressable}
+          >
             <Text style={styles.countText}>
-              <Text style={styles.countValue}>{myCounts.posts}</Text> posts
+              <Text style={styles.countValueTappable}>{myCounts ? myCounts.followers : 0}</Text> followers
             </Text>
-            <Text style={styles.countDivider}> · </Text>
-            <Interactive
-              onPress={() => openFollowList('followers')}
-              accessibilityLabel={`View ${myCounts.followers} followers`}
-              style={styles.countPressable}
-            >
-              <Text style={styles.countText}>
-                <Text style={styles.countValueTappable}>{myCounts.followers}</Text> followers
-              </Text>
-            </Interactive>
-            <Text style={styles.countDivider}> · </Text>
-            <Interactive
-              onPress={() => openFollowList('following')}
-              accessibilityLabel={`View ${myCounts.following} following`}
-              style={styles.countPressable}
-            >
-              <Text style={styles.countText}>
-                <Text style={styles.countValueTappable}>{myCounts.following}</Text> following
-              </Text>
-            </Interactive>
-          </View>
-        ) : null}
+          </Interactive>
+          <Text style={styles.countDivider}> · </Text>
+          <Interactive
+            onPress={() => openFollowList('following')}
+            accessibilityRole="button"
+            accessibilityLabel={`View ${myCounts ? myCounts.following : 0} following`}
+            style={styles.countPressable}
+          >
+            <Text style={styles.countText}>
+              <Text style={styles.countValueTappable}>{myCounts ? myCounts.following : 0}</Text> following
+            </Text>
+          </Interactive>
+        </View>
         <AboutEditor />
         <Text style={styles.username}>
           {social.status === 'loading' ? 'Username: Loading…' : `Username: ${social.username ? `@${social.username}` : '—'}`}
@@ -201,7 +176,7 @@ export default function ProfileScreen() {
         style={styles.noMargin}
         right={<Text style={styles.cardMeta}>{friends.length} friends</Text>}
       />
-      {friends.length ? friends.slice(0, 3).map((friend) => (
+      {friends.length ? (expandedFriends ? friends : friends.slice(0, 3)).map((friend) => (
         <View key={friend.userId} style={styles.friendRow}>
           <PersonAvatar uid={friend.userId} uri={friend.avatarUrl} name={personName(friend)} size={40} status={friend.isOnline ? 'online' : null} />
           <PersonLink uid={friend.userId} label={personName(friend)} style={styles.friendText}>
@@ -215,12 +190,28 @@ export default function ProfileScreen() {
           {social.status === 'loading' ? 'Loading your friends...' : 'Your friend list is empty. Find classmates to build your circle.'}
         </Text>
       )}
-      <Button
-        label={friends.length ? 'Show all friends' : 'Find classmates'}
-        variant="secondary"
-        size="sm"
-        onPress={() => router.push('/social/friends' as Href)}
-      />
+      <View style={styles.circleButtonsRow}>
+        {friends.length > 0 ? (
+          <Button
+            label={friends.length > 3 ? (expandedFriends ? 'See fewer friends' : 'See more friends') : 'See more friends'}
+            variant="ghost"
+            size="sm"
+            onPress={() => {
+              if (friends.length > 3) {
+                setExpandedFriends((prev) => !prev);
+              } else {
+                router.push('/social/friends' as Href);
+              }
+            }}
+          />
+        ) : null}
+        <Button
+          label={friends.length ? 'Manage more friends' : 'Find classmates'}
+          variant="secondary"
+          size="sm"
+          onPress={() => router.push('/social/friends' as Href)}
+        />
+      </View>
     </Card>
   );
   const recommendationsCard = (
@@ -331,70 +322,15 @@ export default function ProfileScreen() {
           {menu}
         </View>
       )}
-      <Sheet
+      <FollowListSheet
         visible={followSheetOpen}
         onClose={() => setFollowSheetOpen(false)}
-        title={followTab === 'followers' ? 'Followers' : 'Following'}
-        subtitle={followTab === 'followers' ? 'People who follow you on GRATEAPEX' : 'People you follow'}
-      >
-        <SegmentedControl
-          value={followTab}
-          onChange={(tab) => setFollowTab(tab)}
-          options={[
-            { value: 'followers', label: 'Followers', count: myCounts?.followers },
-            { value: 'following', label: 'Following', count: myCounts?.following },
-          ]}
-          style={styles.sheetTabs}
-        />
-        {followLoading ? (
-          <View style={styles.sheetLoading}>
-            <LoadingState label={`Loading ${followTab}…`} />
-          </View>
-        ) : followList.length === 0 ? (
-          <View style={styles.sheetEmpty}>
-            <EmptyState
-              icon="social"
-              title={followTab === 'followers' ? 'No followers yet' : 'Not following anyone yet'}
-              message={
-                followTab === 'followers'
-                  ? 'When classmates follow your learning journey, they will appear here.'
-                  : 'Find classmates in Your Circle or search in Friends to start following them.'
-              }
-            />
-          </View>
-        ) : (
-          <View style={styles.followUserList}>
-            {followList.map((person) => (
-              <Interactive
-                key={person.userId}
-                style={styles.followUserRow}
-                onPress={() => {
-                  setFollowSheetOpen(false);
-                  router.push(`/social/person?user=${person.userId}` as Href);
-                }}
-              >
-                <PersonAvatar uid={person.userId} uri={person.avatarUrl} name={person.displayName || person.username || 'Learner'} size={44} />
-                <View style={styles.followUserInfo}>
-                  <View style={styles.nameLine}>
-                    <Text style={styles.followUserName}>{person.displayName || person.username || 'Learner'}</Text>
-                    <VerifiedBadge username={person.username} uid={person.userId} size={14} />
-                  </View>
-                  <Text style={styles.followUserHandle}>{person.username ? `@${person.username}` : '—'}</Text>
-                  {person.bio ? (
-                    <Text style={styles.followUserBio} numberOfLines={1}>{person.bio}</Text>
-                  ) : null}
-                </View>
-                {person.totalXp !== null ? (
-                  <View style={styles.followUserXpPill}>
-                    <Icon name="xp" size={12} color={colors.accentText} filled />
-                    <Text style={styles.followUserXp}>{person.totalXp} XP</Text>
-                  </View>
-                ) : null}
-              </Interactive>
-            ))}
-          </View>
-        )}
-      </Sheet>
+        userId={user?.uid}
+        userName={displayName}
+        initialTab={followTab}
+        followersCount={myCounts?.followers}
+        followingCount={myCounts?.following}
+      />
     </Screen>
   );
 }
@@ -479,34 +415,14 @@ function createStyles(colors: ThemeColors) {
     countPressable: { paddingVertical: 2, paddingHorizontal: 4, borderRadius: Radius.sm },
     countValue: { fontWeight: '800', color: colors.text },
     countValueTappable: { fontWeight: '800', color: colors.primaryText, textDecorationLine: 'underline' },
-    sheetTabs: { marginBottom: 14 },
-    sheetLoading: { paddingVertical: 32, alignItems: 'center', justifyContent: 'center' },
-    sheetEmpty: { paddingVertical: 24 },
-    followUserList: { gap: 10, paddingVertical: 4 },
-    followUserRow: {
+    circleButtonsRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 12,
-      padding: 10,
-      borderRadius: Radius.md,
-      backgroundColor: colors.surfaceMuted,
+      justifyContent: 'space-between',
+      flexWrap: 'wrap',
+      gap: 8,
+      marginTop: 4,
     },
-    followUserInfo: { flex: 1, minWidth: 0, gap: 2 },
-    followUserName: { fontSize: 14, fontWeight: '800', color: colors.text },
-    followUserHandle: { fontSize: 12, color: colors.textSecondary },
-    followUserBio: { fontSize: 11.5, color: colors.textTertiary, marginTop: 2 },
-    followUserXpPill: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 4,
-      paddingVertical: 4,
-      paddingHorizontal: 8,
-      borderRadius: Radius.pill,
-      backgroundColor: colors.surfaceElevated,
-      borderWidth: 1,
-      borderColor: colors.hairline,
-    },
-    followUserXp: { fontSize: 11.5, fontWeight: '800', color: colors.accentText },
     name: { ...Type.title1, color: colors.text },
     badges: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
     rankBadge: {

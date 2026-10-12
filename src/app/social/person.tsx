@@ -4,10 +4,11 @@ import { StyleSheet, View } from 'react-native';
 
 import { BackLink } from '@/components/learning/nav-bits';
 import { CommunityPostsFeed } from '@/components/social/community-posts-feed';
+import { FollowListSheet } from '@/components/social/follow-list-sheet';
 import { Avatar } from '@/components/ui/avatar';
 import { VerifiedBadge } from '@/components/ui/verified-badge';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/interactive';
+import { Card, Interactive } from '@/components/ui/interactive';
 import { Pill } from '@/components/ui/pill';
 import { Screen } from '@/components/ui/screen';
 import { ErrorScreen, LoadingState } from '@/components/ui/state-views';
@@ -30,6 +31,13 @@ export default function PersonScreen() {
   const [profile, setProfile] = useState<PublicProfile | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [followSheetOpen, setFollowSheetOpen] = useState(false);
+  const [followTab, setFollowTab] = useState<'followers' | 'following'>('followers');
+
+  const openFollowList = (tab: 'followers' | 'following') => {
+    setFollowTab(tab);
+    setFollowSheetOpen(true);
+  };
 
   const load = useCallback(async () => {
     if (!uid) return;
@@ -84,8 +92,22 @@ export default function PersonScreen() {
           <Text style={styles.display}>{name}</Text>
           <View style={styles.counts}>
             <Count label="posts" value={profile.posts} />
-            <Count label="followers" value={profile.followers} />
-            <Count label="following" value={profile.following} />
+            <Interactive
+              onPress={() => openFollowList('followers')}
+              accessibilityRole="button"
+              accessibilityLabel={`View ${profile.followers} followers`}
+              style={styles.countPressable}
+            >
+              <Count label="followers" value={profile.followers} tappable />
+            </Interactive>
+            <Interactive
+              onPress={() => openFollowList('following')}
+              accessibilityRole="button"
+              accessibilityLabel={`View ${profile.following} following`}
+              style={styles.countPressable}
+            >
+              <Count label="following" value={profile.following} tappable />
+            </Interactive>
             {profile.totalXp !== null ? <Count label="XP" value={profile.totalXp} /> : null}
           </View>
           {profile.classLabel || rank ? (
@@ -105,15 +127,24 @@ export default function PersonScreen() {
       </Card>
       <Text style={styles.section}>Posts</Text>
       <CommunityPostsFeed authorId={profile.userId} showComposer={false} />
+      <FollowListSheet
+        visible={followSheetOpen}
+        onClose={() => setFollowSheetOpen(false)}
+        userId={profile.userId}
+        userName={name}
+        initialTab={followTab}
+        followersCount={profile.followers}
+        followingCount={profile.following}
+      />
     </Screen>
   );
 }
 
-function Count({ label, value }: { label: string; value: number }) {
+function Count({ label, value, tappable }: { label: string; value: number; tappable?: boolean }) {
   const styles = useThemedStyles(createStyles);
   return (
     <Text style={styles.count}>
-      <Text style={styles.countValue}>{value.toLocaleString()}</Text> {label}
+      <Text style={[styles.countValue, tappable && styles.countValueTappable]}>{value.toLocaleString()}</Text> {label}
     </Text>
   );
 }
@@ -125,9 +156,11 @@ function createStyles(colors: ThemeColors) {
     nameRow: { flexDirection: 'row', alignItems: 'center', gap: 10, flexWrap: 'wrap' },
     username: { ...Type.title2, color: colors.text },
     display: { fontSize: 14, color: colors.textSecondary },
-    counts: { flexDirection: 'row', flexWrap: 'wrap', gap: 18, marginTop: 4 },
+    counts: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 14, marginTop: 4 },
     count: { fontSize: 14, color: colors.textSecondary },
+    countPressable: { paddingVertical: 2, paddingHorizontal: 4, borderRadius: 6 },
     countValue: { fontWeight: '800', color: colors.text },
+    countValueTappable: { color: colors.primaryText, textDecorationLine: 'underline' },
     meta: { fontSize: 13, color: colors.textTertiary },
     bio: { fontSize: 14, lineHeight: 21, color: colors.text, marginTop: 2 },
     actions: { flexDirection: 'row', gap: 10, marginTop: 8 },

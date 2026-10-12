@@ -5,6 +5,7 @@ import { doc, getDoc } from 'firebase/firestore';
 
 import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
+import { FollowListSheet } from '@/components/social/follow-list-sheet';
 import { Interactive } from '@/components/ui/interactive';
 import { Pill } from '@/components/ui/pill';
 import { Sheet } from '@/components/ui/sheet';
@@ -104,6 +105,14 @@ function ProfileCardSheet({ uid, onClose }: { uid: string | null; onClose: () =>
   const rank = shown?.totalXp != null ? legacyRank(shown.totalXp) : null;
   const friends = Boolean(shown?.iFollow && shown?.followsMe);
 
+  const [followSheetOpen, setFollowSheetOpen] = useState(false);
+  const [followTab, setFollowTab] = useState<'followers' | 'following'>('followers');
+
+  const openFollowList = (tab: 'followers' | 'following') => {
+    setFollowTab(tab);
+    setFollowSheetOpen(true);
+  };
+
   async function toggleFollow() {
     if (!shown || busy) return;
     setBusy(true);
@@ -124,47 +133,74 @@ function ProfileCardSheet({ uid, onClose }: { uid: string | null; onClose: () =>
   }
 
   return (
-    <Sheet visible={uid !== null} onClose={onClose} title="Profile" width={420}>
-      {!shown && !error ? <Text style={styles.muted}>Loading profile…</Text> : null}
-      {error && !shown ? <Text style={styles.error}>{error}</Text> : null}
-      {shown ? (
-        <View style={styles.card}>
-          <Interactive onPress={() => go(routes.profile(shown.userId))} accessibilityRole="link" accessibilityLabel={`Open ${name}'s full profile`} style={styles.top}>
-            <Avatar uri={shown.avatarUrl} name={name} size={84} ring="gold" />
-            <View style={styles.nameRow}>
-              <Text style={styles.username} numberOfLines={1}>{shown.username ?? name}</Text>
-              <VerifiedBadge username={shown.username} uid={shown.userId} size={18} />
+    <>
+      <Sheet visible={uid !== null} onClose={onClose} title="Profile" width={420}>
+        {!shown && !error ? <Text style={styles.muted}>Loading profile…</Text> : null}
+        {error && !shown ? <Text style={styles.error}>{error}</Text> : null}
+        {shown ? (
+          <View style={styles.card}>
+            <Interactive onPress={() => go(routes.profile(shown.userId))} accessibilityRole="link" accessibilityLabel={`Open ${name}'s full profile`} style={styles.top}>
+              <Avatar uri={shown.avatarUrl} name={name} size={84} ring="gold" />
+              <View style={styles.nameRow}>
+                <Text style={styles.username} numberOfLines={1}>{shown.username ?? name}</Text>
+                <VerifiedBadge username={shown.username} uid={shown.userId} size={18} />
+              </View>
+              {shown.username && shown.displayName && shown.displayName !== shown.username ? <Text style={styles.muted}>{shown.displayName}</Text> : null}
+              {friends ? <Pill label="Friends" tone="success" /> : shown.followsMe ? <Pill label="Follows you" tone="primary" /> : null}
+            </Interactive>
+            <View style={styles.counts}>
+              <Count label="posts" value={shown.posts} />
+              <Interactive
+                onPress={() => openFollowList('followers')}
+                accessibilityRole="button"
+                accessibilityLabel={`View ${shown.followers} followers`}
+                style={styles.countPressable}
+              >
+                <Count label="followers" value={shown.followers} tappable />
+              </Interactive>
+              <Interactive
+                onPress={() => openFollowList('following')}
+                accessibilityRole="button"
+                accessibilityLabel={`View ${shown.following} following`}
+                style={styles.countPressable}
+              >
+                <Count label="following" value={shown.following} tappable />
+              </Interactive>
             </View>
-            {shown.username && shown.displayName && shown.displayName !== shown.username ? <Text style={styles.muted}>{shown.displayName}</Text> : null}
-            {friends ? <Pill label="Friends" tone="success" /> : shown.followsMe ? <Pill label="Follows you" tone="primary" /> : null}
-          </Interactive>
-          <View style={styles.counts}>
-            <Count label="posts" value={shown.posts} />
-            <Count label="followers" value={shown.followers} />
-            <Count label="following" value={shown.following} />
+            {shown.classLabel || rank ? (
+              <Text style={styles.meta}>{[shown.classLabel, rank ? `Level ${rank.level} · ${rank.title}` : null, shown.totalXp != null ? `${shown.totalXp.toLocaleString()} XP` : null].filter(Boolean).join(' · ')}</Text>
+            ) : null}
+            {shown.bio ? <Text style={styles.bio}>{shown.bio}</Text> : null}
+            {error ? <Text style={styles.error}>{error}</Text> : null}
+            <View style={styles.actions}>
+              <Button label={shown.iFollow ? 'Following' : shown.followsMe ? 'Follow back' : 'Follow'} variant={shown.iFollow ? 'secondary' : 'primary'} size="sm" loading={busy} onPress={() => void toggleFollow()} />
+              {friends ? <Button label="Message" variant="secondary" size="sm" onPress={() => go({ pathname: '/social/message', params: { friend: shown.userId, name } } as never)} /> : null}
+              <Button label="View profile" variant="ghost" size="sm" onPress={() => go(routes.profile(shown.userId))} />
+            </View>
           </View>
-          {shown.classLabel || rank ? (
-            <Text style={styles.meta}>{[shown.classLabel, rank ? `Level ${rank.level} · ${rank.title}` : null, shown.totalXp != null ? `${shown.totalXp.toLocaleString()} XP` : null].filter(Boolean).join(' · ')}</Text>
-          ) : null}
-          {shown.bio ? <Text style={styles.bio}>{shown.bio}</Text> : null}
-          {error ? <Text style={styles.error}>{error}</Text> : null}
-          <View style={styles.actions}>
-            <Button label={shown.iFollow ? 'Following' : shown.followsMe ? 'Follow back' : 'Follow'} variant={shown.iFollow ? 'secondary' : 'primary'} size="sm" loading={busy} onPress={() => void toggleFollow()} />
-            {friends ? <Button label="Message" variant="secondary" size="sm" onPress={() => go({ pathname: '/social/message', params: { friend: shown.userId, name } } as never)} /> : null}
-            <Button label="View profile" variant="ghost" size="sm" onPress={() => go(routes.profile(shown.userId))} />
-          </View>
-        </View>
+        ) : null}
+      </Sheet>
+      {shown ? (
+        <FollowListSheet
+          visible={followSheetOpen}
+          onClose={() => setFollowSheetOpen(false)}
+          userId={shown.userId}
+          userName={name}
+          initialTab={followTab}
+          followersCount={shown.followers}
+          followingCount={shown.following}
+        />
       ) : null}
-    </Sheet>
+    </>
   );
 }
 
-function Count({ label, value }: { label: string; value: number }) {
+function Count({ label, value, tappable }: { label: string; value: number; tappable?: boolean }) {
   const styles = useThemedStyles(createStyles);
   return (
     <View style={styles.count}>
-      <Text style={styles.countValue}>{value.toLocaleString()}</Text>
-      <Text style={styles.countLabel}>{label}</Text>
+      <Text style={[styles.countValue, tappable && styles.countValueTappable]}>{value.toLocaleString()}</Text>
+      <Text style={[styles.countLabel, tappable && styles.countLabelTappable]}>{label}</Text>
     </View>
   );
 }
@@ -178,8 +214,11 @@ function createStyles(colors: ThemeColors) {
     muted: { fontSize: 14, color: colors.textSecondary, textAlign: 'center' },
     counts: { flexDirection: 'row', justifyContent: 'center', gap: 28 },
     count: { alignItems: 'center' },
+    countPressable: { borderRadius: 8, paddingHorizontal: 6, paddingVertical: 2 },
     countValue: { fontSize: 17, fontWeight: '800', color: colors.text },
+    countValueTappable: { color: colors.primaryText },
     countLabel: { fontSize: 12.5, color: colors.textSecondary },
+    countLabelTappable: { color: colors.primaryText, textDecorationLine: 'underline' },
     meta: { fontSize: 13, color: colors.textTertiary, textAlign: 'center' },
     bio: { fontSize: 14, lineHeight: 21, color: colors.text, textAlign: 'center' },
     actions: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 10 },
