@@ -5,6 +5,7 @@
 //   questions.ts    — the topic question bank (quiz layer)
 import { contentTopics } from '@/data/content-catalog';
 import { buildTopic } from '@/data/topics/build';
+import { assertionReasonQuestions } from '@/data/topics/heme-metabolism/assertion-reason';
 import { lessons } from '@/data/topics/heme-metabolism/lessons';
 import { questions } from '@/data/topics/heme-metabolism/questions';
 import {
@@ -28,7 +29,7 @@ export const hemeMetabolism = buildTopic({
   contentVersion: 1,
   concepts,
   lessons,
-  questions,
+  questions: [...questions, ...assertionReasonQuestions],
   discrepancies,
   diagrams,
 });

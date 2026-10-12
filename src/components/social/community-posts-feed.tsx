@@ -26,6 +26,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { Radius, Type, type ThemeColors } from '@/constants/theme';
 import { MentionInput } from '@/components/social/mention-input';
 import { PostDetail, type PostComment } from '@/components/social/post-detail';
+import { MediaCarousel, postMedia } from '@/components/social/media-carousel';
 import { useTheme, useThemedStyles } from '@/hooks/use-theme';
 
 
@@ -44,7 +45,7 @@ export function CommunityPostsFeed({ authorId, showComposer = true }: { authorId
   const [error, setError] = useState<string | null>(null);
   const [composeOpen, setComposeOpen] = useState(false);
   const [draft, setDraft] = useState('');
-  const [media, setMedia] = useState<CommunityMedia | undefined>();
+  const [media, setMedia] = useState<CommunityMedia[]>([]);
   const [busy, setBusy] = useState(false);
   const [selectedPost, setSelectedPost] = useState<CommunityPost | null>(null);
   const [comments, setComments] = useState<PostComment[]>([]);
@@ -86,22 +87,27 @@ export function CommunityPostsFeed({ authorId, showComposer = true }: { authorId
   async function chooseMedia() {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) { setError('Allow photo library access to attach media.'); return; }
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images', 'videos'], quality: 0.85, videoMaxDuration: 60 });
-    if (result.canceled || !result.assets[0]) return;
-    const asset = result.assets[0];
-    const type = asset.type === 'video' ? 'video' : 'image';
-    setMedia({ uri: asset.uri, type, mimeType: asset.mimeType ?? (type === 'video' ? 'video/mp4' : 'image/jpeg'), filename: asset.fileName ?? `grateapex-${Date.now()}.${type === 'video' ? 'mp4' : 'jpg'}`, size: asset.fileSize });
+    // Up to 3 photos or videos per post (the shared rules' limit), shown as a carousel.
+    const room = 3 - media.length;
+    if (room <= 0) { setError('A post can have up to 3 photos or videos.'); return; }
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images', 'videos'], quality: 0.85, videoMaxDuration: 60, allowsMultipleSelection: true, selectionLimit: room });
+    if (result.canceled || !result.assets.length) return;
+    const picked = result.assets.slice(0, room).map((asset, at): CommunityMedia => {
+      const type = asset.type === 'video' ? 'video' : 'image';
+      return { uri: asset.uri, type, mimeType: asset.mimeType ?? (type === 'video' ? 'video/mp4' : 'image/jpeg'), filename: asset.fileName ?? `grateapex-${Date.now()}-${at}.${type === 'video' ? 'mp4' : 'jpg'}`, size: asset.fileSize };
+    });
+    setMedia((list) => [...list, ...picked].slice(0, 3));
     setError(null);
   }
 
   async function publish(resharedPostId?: string) {
-    if ((!draft.trim() && !media && !resharedPostId) || busy) return;
+    if ((!draft.trim() && !media.length && !resharedPostId) || busy) return;
     setBusy(true);
     setError(null);
     try {
-      await createCommunityPost(draft, media, resharedPostId);
+      await createCommunityPost(draft, resharedPostId ? undefined : media, resharedPostId);
       setDraft('');
-      setMedia(undefined);
+      setMedia([]);
       setComposeOpen(false);
       setNotice(resharedPostId ? 'Reposted to your feed.' : 'Your post is live for your friends.');
       await refresh();
@@ -195,7 +201,7 @@ export function CommunityPostsFeed({ authorId, showComposer = true }: { authorId
   // Reply to a comment the Instagram way: the answer starts with their @username.
   function replyTo(comment: PostComment) {
     const handle = comment.author_name?.trim();
-    if (!handle || comment.author_id === social.userId) return;
+    if (!handle) return;
     setReplyingTo(handle);
     setCommentDraft((draft) => (draft.startsWith(`@${handle} `) ? draft : `@${handle} ${draft.replace(/^@\S+\s/, '')}`));
   }
@@ -236,7 +242,7 @@ export function CommunityPostsFeed({ authorId, showComposer = true }: { authorId
         </View>
         <View style={styles.actions}>
           <Button label="Write a post" variant="secondary" size="sm" onPress={() => setComposeOpen(true)} />
-          <Button label="Add photo or video" variant="ghost" size="sm" icon={<Icon name="image" size={16} color={colors.primaryText} />} onPress={() => { setComposeOpen(true); void chooseMedia(); }} />
+          <Button label="Add photos or video" variant="ghost" size="sm" icon={<Icon name="image" size={16} color={colors.primaryText} />} onPress={() => { setComposeOpen(true); void chooseMedia(); }} />
         </View>
       </Card> : null}
       {notice ? <Text accessibilityRole="text" style={styles.notice}>{notice}</Text> : null}
@@ -251,14 +257,15 @@ export function CommunityPostsFeed({ authorId, showComposer = true }: { authorId
         <View style={styles.composeSheet}>
         <Text style={styles.muted}>Share how you’re feeling, what’s happening in your life, or anything you’d like your friends to know.</Text>
         <MentionInput people={social.people} value={draft} onChangeText={setDraft} multiline maxLength={5000} placeholder="What’s on your mind today?" placeholderTextColor={colors.textTertiary} accessibilityLabel="Write a post" style={styles.postInput} />
-          {media ? <View style={styles.mediaSelected}><Icon name={media.type === 'video' ? 'play' : 'image'} size={16} color={colors.primaryText} /><Text style={styles.muted}>{media.filename}</Text><Button label="Remove" size="sm" variant="ghost" onPress={() => setMedia(undefined)} /></View> : null}
+          {media.map((item, at) => <View key={`${item.uri}-${at}`} style={styles.mediaSelected}><Icon name={item.type === 'video' ? 'play' : 'image'} size={16} color={colors.primaryText} /><Text style={[styles.muted, styles.flex]} numberOfLines={1}>{item.filename}</Text><Button label="Remove" size="sm" variant="ghost" onPress={() => setMedia((list) => list.filter((_, index) => index !== at))} /></View>)}
           <View style={styles.actions}>
-            <Button label="Choose photo or video" variant="secondary" size="sm" onPress={() => void chooseMedia()} />
-            <Button label="Publish" size="sm" onPress={() => void publish()} loading={busy} disabled={(!draft.trim() && !media) || busy} />
+            <Button label={media.length ? `Add more (${media.length}/3)` : 'Choose photos or video'} variant="secondary" size="sm" onPress={() => void chooseMedia()} />
+            <Button label="Publish" size="sm" onPress={() => void publish()} loading={busy} disabled={(!draft.trim() && !media.length) || busy} />
           </View>
         </View>
       </Sheet>
       <PostDetail
+        key={selectedPost?.id ?? 'none'}
         post={selectedPost}
         comments={comments}
         people={social.people}
@@ -321,8 +328,7 @@ function PostCard({ post, socialPeople, ownId, ownName, onOpen, onLike, onCommen
           {post.reshared_media_url && post.reshared_media_type === 'video' ? <VideoPlayer url={post.reshared_media_url} height={260} label="Reshared video" /> : null}
         </View>
       ) : null}
-      {post.media_url && post.media_type === 'image' ? <Interactive onPress={onOpen} accessibilityRole="button" accessibilityLabel="Open photo post"><Image source={{ uri: post.media_url }} contentFit="cover" style={styles.image} accessibilityLabel="Photo in community post" /></Interactive> : null}
-      {post.media_url && post.media_type === 'video' ? <VideoPlayer url={post.media_url} label="Video in community post" /> : null}
+      {postMedia(post).length ? <MediaCarousel items={postMedia(post)} height={320} onPress={onOpen} /> : null}
       {!verticalActions ? <Text style={styles.counts}>{post.reactions} likes · {post.comments} comments · {post.reshares} reshares</Text> : <Text style={styles.counts}>{post.reactions} likes</Text>}
       {!verticalActions ? <View style={styles.postActions}>
         <Interactive onPress={onLike} accessibilityRole="button" accessibilityLabel={post.my_reaction ? 'Unlike post' : 'Like post'} style={styles.action}><Icon name="heart" size={20} color={post.my_reaction ? colors.primaryText : colors.textSecondary} filled={Boolean(post.my_reaction)} /></Interactive>

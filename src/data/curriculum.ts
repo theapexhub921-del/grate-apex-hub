@@ -40,7 +40,7 @@ export const courseCatalog: CourseInfo[] = [
     id: 'anatomy-lectures',
     subject: 'anatomy',
     title: 'Anatomy',
-    description: 'Anatomy lecture materials have not been supplied yet.',
+    description: 'The supplied Anatomy lecture course — regional and systemic anatomy from lecture decks.',
     folder: 'ANATOMY',
   },
 ];

@@ -534,3 +534,34 @@ export async function unfollowLearner(targetUserId: string) {
   await deleteDoc(doc(db, 'follows', followId(me, targetUserId)));
   await refreshSocial();
 }
+
+export type FollowUser = {
+  userId: string;
+  username: string | null;
+  displayName: string | null;
+  avatarUrl: string | null;
+  totalXp: number | null;
+  bio?: string | null;
+};
+
+/** Returns the real learners who follow a user or who the user follows. */
+export async function getFollowList(uid: string, direction: 'followers' | 'following'): Promise<FollowUser[]> {
+  const edges = await followEdges(uid, direction);
+  if (edges.length === 0) return [];
+  const people = await readPeople(edges.map((e) => e.uid));
+  return edges.map((edge) => {
+    const data = people.get(edge.uid);
+    const profile = data?.profile ?? {};
+    const score = data?.score ?? {};
+    const username = edge.username || profile.username || score.username || null;
+    return {
+      userId: edge.uid,
+      username,
+      displayName: profile.displayName || username || 'Learner',
+      avatarUrl: profile.avatar_url || profile.photo || null,
+      totalXp: typeof score.xp === 'number' ? score.xp : null,
+      bio: typeof profile.bio === 'string' && profile.bio.trim() ? profile.bio.trim() : null,
+    };
+  });
+}
+

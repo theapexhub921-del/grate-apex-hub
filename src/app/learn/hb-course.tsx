@@ -147,7 +147,7 @@ export default function LegacyCourseScreen() {
               </View>
               <View style={styles.pathCard}>
                 {started && !isDone ? <Text style={styles.kicker}>IN PROGRESS</Text> : null}
-                <PressableCard onPress={() => router.push(routes.legacyLesson(lesson.id))} accessibilityRole="link" accessibilityLabel={`${lesson.title}. ${isDone ? 'Completed' : started ? 'In progress' : 'Not started'}`} style={styles.lessonCard}>
+                <PressableCard onPress={() => router.push(routes.legacyLesson(lesson.id))} accessibilityLabel={`${lesson.title}. ${isDone ? 'Completed' : started ? 'In progress' : 'Not started'}`} style={styles.lessonCard}>
                   <View style={styles.lessonTop}>
                     <View style={styles.lessonIcon}><Text style={styles.lessonEmoji}>{lesson.icon || course.icon}</Text></View>
                     <View style={styles.flex}>

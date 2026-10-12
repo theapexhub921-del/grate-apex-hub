@@ -4,6 +4,7 @@ import { type StyleProp, StyleSheet, View, type ViewStyle } from 'react-native';
 import { doc, getDoc } from 'firebase/firestore';
 
 import { Avatar } from '@/components/ui/avatar';
+import { EnlargeableAvatar } from '@/components/ui/avatar-lightbox';
 import { Button } from '@/components/ui/button';
 import { Interactive } from '@/components/ui/interactive';
 import { Pill } from '@/components/ui/pill';
@@ -129,19 +130,21 @@ function ProfileCardSheet({ uid, onClose }: { uid: string | null; onClose: () =>
       {error && !shown ? <Text style={styles.error}>{error}</Text> : null}
       {shown ? (
         <View style={styles.card}>
-          <Interactive onPress={() => go(routes.profile(shown.userId))} accessibilityRole="link" accessibilityLabel={`Open ${name}'s full profile`} style={styles.top}>
-            <Avatar uri={shown.avatarUrl} name={name} size={84} ring="gold" />
-            <View style={styles.nameRow}>
-              <Text style={styles.username} numberOfLines={1}>{shown.username ?? name}</Text>
-              <VerifiedBadge username={shown.username} uid={shown.userId} size={18} />
-            </View>
-            {shown.username && shown.displayName && shown.displayName !== shown.username ? <Text style={styles.muted}>{shown.displayName}</Text> : null}
+          <View style={styles.top}>
+            <EnlargeableAvatar uri={shown.avatarUrl} name={name} size={84} ring="gold" />
+            <Interactive onPress={() => go(routes.profile(shown.userId))} accessibilityRole="link" accessibilityLabel={`Open ${name}'s full profile`} style={styles.topName}>
+              <View style={styles.nameRow}>
+                <Text style={styles.username} numberOfLines={1}>{shown.username ?? name}</Text>
+                <VerifiedBadge username={shown.username} uid={shown.userId} size={18} />
+              </View>
+              {shown.username && shown.displayName && shown.displayName !== shown.username ? <Text style={styles.muted}>{shown.displayName}</Text> : null}
+            </Interactive>
             {friends ? <Pill label="Friends" tone="success" /> : shown.followsMe ? <Pill label="Follows you" tone="primary" /> : null}
-          </Interactive>
+          </View>
           <View style={styles.counts}>
             <Count label="posts" value={shown.posts} />
-            <Count label="followers" value={shown.followers} />
-            <Count label="following" value={shown.following} />
+            <Count label="followers" value={shown.followers} onPress={() => go({ pathname: '/social/person', params: { user: shown.userId, list: 'followers' } } as never)} />
+            <Count label="following" value={shown.following} onPress={() => go({ pathname: '/social/person', params: { user: shown.userId, list: 'following' } } as never)} />
           </View>
           {shown.classLabel || rank ? (
             <Text style={styles.meta}>{[shown.classLabel, rank ? `Level ${rank.level} · ${rank.title}` : null, shown.totalXp != null ? `${shown.totalXp.toLocaleString()} XP` : null].filter(Boolean).join(' · ')}</Text>
@@ -159,20 +162,23 @@ function ProfileCardSheet({ uid, onClose }: { uid: string | null; onClose: () =>
   );
 }
 
-function Count({ label, value }: { label: string; value: number }) {
+function Count({ label, value, onPress }: { label: string; value: number; onPress?: () => void }) {
   const styles = useThemedStyles(createStyles);
-  return (
+  const body = (
     <View style={styles.count}>
       <Text style={styles.countValue}>{value.toLocaleString()}</Text>
       <Text style={styles.countLabel}>{label}</Text>
     </View>
   );
+  if (!onPress) return body;
+  return <Interactive onPress={onPress} accessibilityRole="button" accessibilityLabel={`View ${value} ${label}`}>{body}</Interactive>;
 }
 
 function createStyles(colors: ThemeColors) {
   return StyleSheet.create({
     card: { gap: 14, alignItems: 'center', paddingBottom: 6 },
     top: { alignItems: 'center', gap: 8, borderRadius: 16, paddingHorizontal: 8 },
+    topName: { alignItems: 'center', gap: 4, borderRadius: 16, paddingHorizontal: 8 },
     nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
     username: { ...Type.title3, color: colors.text },
     muted: { fontSize: 14, color: colors.textSecondary, textAlign: 'center' },

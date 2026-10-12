@@ -6,6 +6,7 @@
 //   questions.ts    — the topic question bank (quiz layer)
 import { contentTopics } from '@/data/content-catalog';
 import { buildTopic } from '@/data/topics/build';
+import { assertionReasonQuestions } from '@/data/topics/oxygen-carriers/assertion-reason';
 import { lessons } from '@/data/topics/oxygen-carriers/lessons';
 import { questions } from '@/data/topics/oxygen-carriers/questions';
 import {
@@ -29,7 +30,7 @@ export const oxygenCarriers = buildTopic({
   contentVersion: 1,
   concepts,
   lessons,
-  questions,
+  questions: [...questions, ...assertionReasonQuestions],
   discrepancies,
   diagrams,
 });

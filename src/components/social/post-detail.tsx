@@ -5,6 +5,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, type TextInput as RNTextInput
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { canSwipe, SwipeToReply } from '@/components/chat/swipe-to-reply';
+import { MediaCarousel, postMedia } from '@/components/social/media-carousel';
 import { MentionInput } from '@/components/social/mention-input';
 import { PersonAvatar } from '@/components/social/profile-card';
 import { StumpCard } from '@/components/social/stump-card';
@@ -25,6 +26,10 @@ import { routes } from '@/lib/routes';
 export type PostComment = { id: string; author_id: string; author_name?: string | null; body: string; created_at: string };
 
 const now = () => Date.now();
+
+// Video posts open in a dark viewer like Instagram reels, whatever the theme.
+const REEL_STAGE = '#000000';
+const REEL_INK = '#FFFFFF';
 
 /** Instagram-style short times: now, 5m, 3h, 2d, 1w. */
 function short(iso: string) {
@@ -59,6 +64,8 @@ export function PostDetail({
   const focusInput = useCallback(() => input.current?.focus(), []);
   // Long-press (or tap, on touch screens) a comment for its options, like a message.
   const [menu, setMenu] = useState<PostComment | null>(null);
+  // A video post opens as a reel; the comment button switches to the comments view.
+  const [showComments, setShowComments] = useState(false);
   if (!post) return null;
 
   const desktop = isDesktopWidth(width);
@@ -66,8 +73,11 @@ export function PostDetail({
   const name = friend ? personName(friend) : post.author_id === ownId ? ownName : post.author_name ? `@${post.author_name}` : 'Learner';
   const handle = post.author_name ? post.author_name : name;
   const stumped = post.stump ? stumpQuestion(post.stump.qid) : null;
-  const hasMedia = Boolean(post.media_url);
+  const items = postMedia(post);
+  const hasMedia = items.length > 0;
   const split = desktop && hasMedia;
+  const reel = items.length === 1 && items[0].type === 'video' && !showComments;
+  const own = post.author_id === ownId;
   const panelHeight = Math.min(height - 80, 680);
   const openProfile = (uid: string) => {
     onClose();
@@ -79,13 +89,7 @@ export function PostDetail({
     return comment.author_name ?? (person ? personName(person) : 'Learner');
   };
 
-  const media = post.media_url ? (
-    post.media_type === 'video' ? (
-      <VideoPlayer url={post.media_url} height={split ? panelHeight : 320} label="Video in community post" />
-    ) : (
-      <Image source={{ uri: post.media_url }} contentFit={split ? 'contain' : 'cover'} style={split ? styles.mediaSplit : styles.mediaStacked} accessibilityLabel="Photo in community post" />
-    )
-  ) : null;
+  const media = hasMedia ? <MediaCarousel items={items} height={split ? panelHeight : 360} fit={split ? 'contain' : 'cover'} rounded={!split} /> : null;
 
   const header = (
     <View style={styles.head}>
@@ -132,7 +136,7 @@ export function PostDetail({
       {comments.map((comment) => {
         const person = people.find((p) => p.userId === comment.author_id);
         const who = commentName(comment);
-        const canReply = Boolean(comment.author_name) && comment.author_id !== ownId;
+        const canReply = Boolean(comment.author_name);
         return (
           <SwipeToReply key={comment.id} onReply={() => { onReply(comment); focusInput(); }} enabled={canSwipe && canReply}>
             <Interactive onLongPress={() => setMenu(comment)} onPress={canSwipe ? () => setMenu(comment) : undefined} accessibilityLabel={`Comment by ${who}. Options`} style={styles.row}>
@@ -205,8 +209,41 @@ export function PostDetail({
     </View>
   );
 
+  // The reel: the video in the middle, likes / comments / reposts / share on the right,
+  // who posted it and the caption over the bottom of the video.
+  const stageW = desktop ? Math.min(width - 260, 820) : width;
+  const stageH = desktop ? Math.min(height - 110, Math.round(stageW * 0.6)) : height - insets.top - insets.bottom;
+  const reelView = (
+    <View style={[styles.reel, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+      <View style={[styles.reelRow, !desktop && styles.reelRowPhone]}>
+        <View style={[styles.reelStage, { width: stageW, height: stageH }]}>
+          <VideoPlayer url={items[0]?.url ?? ''} height={stageH} autoPlay label="Video post" />
+          <View style={styles.reelCaption} pointerEvents="box-none">
+            <Interactive onPress={() => openProfile(post.author_id)} accessibilityRole="link" accessibilityLabel={`View ${name}'s profile`} style={styles.reelWho}>
+              <PersonAvatar uid={post.author_id} uri={friend?.avatarUrl ?? null} name={name} size={32} />
+              <Text style={styles.reelName} numberOfLines={1}>{handle}</Text>
+              <VerifiedBadge username={post.author_name} uid={post.author_id} size={14} />
+            </Interactive>
+            {post.body ? <Text style={styles.reelText} numberOfLines={2}>{post.body}</Text> : null}
+          </View>
+        </View>
+        <View style={[styles.reelRail, !desktop && styles.reelRailPhone]}>
+          <RailButton icon="heart" label={`${post.my_reaction ? 'Unlike' : 'Like'} post`} count={post.reactions} active={Boolean(post.my_reaction)} onPress={onLike} />
+          <RailButton icon="comment" label="Comments" count={post.comments} onPress={() => setShowComments(true)} />
+          <RailButton icon="repost" label="Repost" count={post.reshares} onPress={onReshare} />
+          <RailButton icon="share" label="Share post" onPress={onShare} />
+          <RailButton icon={own ? 'trash' : 'more'} label={own ? 'Delete post' : 'Report post'} onPress={own ? onDelete : onReport} />
+        </View>
+      </View>
+      <Interactive onPress={onClose} accessibilityRole="button" accessibilityLabel="Close post" style={[styles.reelClose, { top: insets.top + 10 }]}>
+        <Icon name="close" size={26} color={REEL_INK} />
+      </Interactive>
+    </View>
+  );
+
   return (
     <Modal transparent visible animationType="fade" onRequestClose={onClose} statusBarTranslucent>
+      {reel ? reelView : (
       <View style={[styles.root, desktop && styles.rootDesktop]}>
         {desktop ? <Pressable style={[StyleSheet.absoluteFill, { backgroundColor: colors.overlay }]} onPress={onClose} accessibilityLabel="Close" accessibilityRole="button" /> : null}
         <View
@@ -221,10 +258,11 @@ export function PostDetail({
           {side}
         </View>
       </View>
+      )}
       <Sheet visible={menu !== null} onClose={() => setMenu(null)} title="Comment" width={380}>
         {menu ? (
           <View style={styles.menu}>
-            {menu.author_name && menu.author_id !== ownId ? <MenuRow icon="reply" label="Reply" onPress={() => { onReply(menu); setMenu(null); focusInput(); }} /> : null}
+            {menu.author_name ? <MenuRow icon="reply" label="Reply" onPress={() => { onReply(menu); setMenu(null); focusInput(); }} /> : null}
             <MenuRow icon="copy" label="Copy" onPress={() => { void globalThis.navigator?.clipboard?.writeText(menu.body).catch(() => {}); setMenu(null); }} />
             {menu.author_id === ownId || post.author_id === ownId ? <MenuRow icon="trash" label="Delete comment" danger onPress={() => { onDeleteComment(menu); setMenu(null); }} /> : null}
             {menu.author_id !== ownId ? <MenuRow icon="warning" label="Report" danger onPress={() => { onReportComment(menu); setMenu(null); }} /> : null}
@@ -232,6 +270,17 @@ export function PostDetail({
         ) : null}
       </Sheet>
     </Modal>
+  );
+}
+
+function RailButton({ icon, label, count, active = false, onPress }: { icon: IconName; label: string; count?: number; active?: boolean; onPress: () => void }) {
+  const styles = useThemedStyles(createStyles);
+  const colors = useTheme();
+  return (
+    <Interactive onPress={onPress} accessibilityRole="button" accessibilityLabel={count === undefined ? label : `${label}, ${count}`} style={styles.railButton}>
+      <Icon name={icon} size={27} color={active ? colors.error : REEL_INK} filled={active} />
+      {count !== undefined ? <Text style={styles.railCount}>{count.toLocaleString()}</Text> : null}
+    </Interactive>
   );
 }
 
@@ -259,6 +308,19 @@ function ActionIcon({ icon, label, onPress, active = false }: { icon: IconName; 
 function createStyles(colors: ThemeColors) {
   return StyleSheet.create({
     flex: { flex: 1, minWidth: 0 },
+    reel: { flex: 1, backgroundColor: REEL_STAGE, alignItems: 'center', justifyContent: 'center' },
+    reelRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 18 },
+    reelRowPhone: { gap: 0 },
+    reelStage: { borderRadius: 12, overflow: 'hidden', backgroundColor: REEL_STAGE, justifyContent: 'center' },
+    reelCaption: { position: 'absolute', left: 14, right: 70, bottom: 56, gap: 6 },
+    reelWho: { flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'flex-start' },
+    reelName: { fontSize: 14.5, fontWeight: '800', color: REEL_INK },
+    reelText: { fontSize: 14, lineHeight: 19, color: REEL_INK },
+    reelRail: { alignItems: 'center', gap: 16, paddingBottom: 8 },
+    reelRailPhone: { position: 'absolute', right: 8, bottom: 70 },
+    railButton: { alignItems: 'center', gap: 3, minWidth: 48, paddingVertical: 2 },
+    railCount: { fontSize: 12, fontWeight: '700', color: REEL_INK },
+    reelClose: { position: 'absolute', right: 14, width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
     menu: { gap: 2 },
     menuRow: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 12, paddingHorizontal: 8, borderRadius: Radius.md },
     menuHover: { backgroundColor: colors.surfaceMuted },

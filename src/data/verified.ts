@@ -114,7 +114,8 @@ export async function loadGoldAccounts(): Promise<SuggestedAccount[]> {
       });
     }
   }
-  // The owner's order (the list above).
-  const order = (name: string) => VERIFIED_USERNAMES.indexOf(name.toLowerCase());
+
+  // @grateapex_official first, then the owner's order (the list above).
+  const order = (name: string) => (name.toLowerCase() === 'grateapex_official' ? -1 : VERIFIED_USERNAMES.indexOf(name.toLowerCase()));
   return accounts.sort((a, b) => order(a.username) - order(b.username));
 }
