@@ -29,7 +29,10 @@ const comingSoon: { id: string; icon: IconName; title: string; description: stri
 // Shortcuts under Messages: evenly spaced tiles (they wrap on phones).
 const QUICK_ACTIONS: { label: string; detail: string; icon: IconName; href: string }[] = [
   { label: 'Study groups', detail: 'Join or start a group and discuss topics together.', icon: 'social', href: '/social/groups' },
-  { label: 'Table conferences', detail: 'Plan a study session with friends.', icon: 'connection', href: '/social/conferences' },
+  // Table conferences card hidden for now (owner request, 2026-10-12). The
+  // screen (/social/conferences) and data/conferences.ts are kept; put this
+  // line back to show the card again.
+  // { label: 'Table conferences', detail: 'Plan a study session with friends.', icon: 'connection', href: '/social/conferences' },
   { label: 'Find classmates', detail: 'Search by username or name and follow.', icon: 'profile', href: '/social/friends' },
 ];
 
