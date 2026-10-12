@@ -10,6 +10,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
+import { QuestionFigure } from '@/components/learning/figure-view';
 import { Icon } from '@/components/ui/icon';
 import { Interactive } from '@/components/ui/interactive';
 import { Pill } from '@/components/ui/pill';
@@ -140,6 +141,8 @@ export function QuestionCard({
       <Text style={[styles.prompt, compact && styles.promptCompact]} accessibilityRole="header">
         {question.prompt}
       </Text>
+
+      {question.figure ? <QuestionFigure figure={question.figure} revealed={revealed} /> : null}
 
       {showMeta && !compact ? (
         <View style={styles.meta}>

@@ -4,6 +4,7 @@ import { StyleSheet, View } from 'react-native';
 import { Text } from '@/components/ui/text';
 
 import { MemoryStateBadge } from '@/components/learning/memory-ui';
+import { QuestionFigure } from '@/components/learning/figure-view';
 import { StumpComposer } from '@/components/social/stump-card';
 import { Breadcrumbs, StatTile } from '@/components/learning/nav-bits';
 import { Button } from '@/components/ui/button';
@@ -448,6 +449,7 @@ function QuestionReview({ row, index, onStump }: { row: Row; index: number; onSt
         {row.correct ? '✓' : '✗'} {index + 1} · {row.question.concept}
       </Text>
       <Text style={styles.reviewPrompt}>{row.question.prompt}</Text>
+      {row.question.figure ? <QuestionFigure figure={row.question.figure} revealed /> : null}
       {!row.correct ? (
         <Text style={styles.reviewLine}>
           <Text style={styles.reviewLabel}>Your answer: </Text>

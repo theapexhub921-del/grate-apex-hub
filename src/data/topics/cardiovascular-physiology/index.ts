@@ -19,7 +19,7 @@ export const cardiovascularPhysiology = buildTopic({
   emoji: '🫀',
   source: 'Lectures: Circulation 1–5',
   sourceFileIds: contentTopics.find((topic) => topic.id === TOPIC_ID)?.sourceFileIds ?? [],
-  contentVersion: 1,
+  contentVersion: 2,
   concepts,
   lessons,
   questions,

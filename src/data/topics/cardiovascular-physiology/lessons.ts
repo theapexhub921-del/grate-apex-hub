@@ -25,6 +25,7 @@ const lesson1: Draft = {
   chunks: [
     {
       title: 'What the heart does',
+      figure: 'cardiovascular-physiology:heart',
       kind: 'overview',
       paragraphs: [
         'The heart is built from cardiac muscle and a specialised conducting system. Its job is to move blood about — to send blood to all the tissues (slide 4).',
@@ -34,6 +35,7 @@ const lesson1: Draft = {
     },
     {
       title: 'The conducting system',
+      figure: 'cardiovascular-physiology:conduction',
       kind: 'pathway',
       paragraphs: [
         'All parts of the conduction system can discharge spontaneously, but they are controlled by the discharge of the SA node — the pacemaker (slide 7). The impulse travels (slide 8):',
@@ -139,6 +141,7 @@ const lesson2: Draft = {
     },
     {
       title: 'The jugular venous pulse',
+      figure: 'cardiovascular-physiology:jvp',
       kind: 'mechanism',
       paragraphs: [
         'The neck veins (internal jugular) communicate with the right atrium, so pressure changes in the atrium show as visible pressure changes in the neck veins. The venous level falls in inspiration, when blood is drawn into the heart. The JVP is seen, not palpated (slide 26). The waves (slide 27):',
@@ -244,6 +247,7 @@ const lesson3: Draft = {
     },
     {
       title: 'Preload, afterload and Starling’s law',
+      figure: 'cardiovascular-physiology:starling-curves',
       kind: 'mechanism',
       paragraphs: [
         'The force of contraction depends on preload and afterload — liken it to an elastic band or sling shot (slide 44).',
@@ -883,6 +887,7 @@ const lesson8: Draft = {
     },
     {
       title: 'Cerebral blood flow',
+      figure: 'cardiovascular-physiology:circle-of-willis',
       kind: 'regulation',
       paragraphs: [
         'Flow is greater to active parts. Cerebral vessels have adrenergic, cholinergic and sensory nerves — touching them causes pain (slide 21).',
@@ -895,6 +900,7 @@ const lesson8: Draft = {
     },
     {
       title: 'Coronary circulation',
+      figure: 'cardiovascular-physiology:coronary-arteries',
       kind: 'mechanism',
       paragraphs: [
         'There are right and left coronary arteries: the right is larger in 50% of people, the left in 20%, and they are equal in 30% (slide 27). Venous return is through the coronary sinus and anterior cardiac veins; others drain directly into the chambers.',
@@ -947,6 +953,7 @@ const lesson8: Draft = {
     },
     {
       title: 'Fetal respiration',
+      figure: 'cardiovascular-physiology:fetal-circulation',
       kind: 'overview',
       paragraphs: [
         'Fetal haemoglobin has a higher O₂ affinity than the mother’s adult haemoglobin, because it binds 2,3-DPG less. HbF usually disappears by about 4 months after birth. The placenta is cut off at birth and the baby adjusts to adult respiration (slide 45). Slides 43–46 show the fetal circulation and its changes after birth as diagrams.',
@@ -985,6 +992,7 @@ const lesson9: Draft = {
   chunks: [
     {
       title: 'What the ECG records',
+      figure: 'cardiovascular-physiology:limb-leads',
       kind: 'overview',
       paragraphs: [
         'Currents generated as the heart depolarises and repolarises spread through the whole body, so they can be recorded by electrodes on the body surface: the electrocardiogram (ECG or EKG). It is recorded at 25 mm/s and calibrated so that 1 mV = 10 mm vertically (slide 2).',
@@ -994,6 +1002,7 @@ const lesson9: Draft = {
     },
     {
       title: 'Chest lead positions',
+      figure: 'cardiovascular-physiology:chest-leads',
       kind: 'structure',
       steps: [
         { label: 'V1', detail: '4th intercostal space, just right of the sternum.' },
@@ -1007,6 +1016,7 @@ const lesson9: Draft = {
     },
     {
       title: 'Waves and intervals',
+      figure: 'cardiovascular-physiology:ecg',
       kind: 'pathway',
       table: {
         columns: ['Feature', 'Represents', 'Normal duration'],

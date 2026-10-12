@@ -164,6 +164,32 @@ export type SourceDiagram = {
   note?: string;
 };
 
+// A lecture diagram learners can tap (data/figures/). The picture is a
+// crop of a slide, served from public/figures/. Spot positions and label
+// boxes are fractions (0–1) of the picture's width and height.
+export type FigureSpot = {
+  id: string; // unique within the figure
+  label: string; // the part's name, as the slide labels it
+  note?: string; // one short line about it (lecture material only)
+  x: number; // where its pin sits
+  y: number;
+  // Where the slide prints its label (some parts are labelled twice):
+  // covered in "Test yourself" and in quiz questions so the picture
+  // doesn't give the answer away.
+  boxes?: [x: number, y: number, w: number, h: number][];
+};
+
+export type LessonFigure = {
+  id: string; // `${topicId}:${name}`
+  title: string;
+  src: string; // path under public/, e.g. /figures/cardiovascular-physiology/heart.jpg
+  width: number; // the picture's size in pixels (sets its shape)
+  height: number;
+  caption?: string;
+  sourceRefs: SourceReference[]; // the slide it comes from
+  spots: FigureSpot[];
+};
+
 // ─── Lessons ────────────────────────────────────────────────────────
 
 export type ConceptCoverage = {
@@ -230,6 +256,7 @@ export type LessonChunk = {
   terms?: LessonTerm[]; // important enzymes / molecules / structures
   table?: LessonTable;
   keyPoints?: string[];
+  figure?: string; // a tappable lecture diagram (LessonFigure id, data/figures/)
   sourceRefs?: SourceReference[]; // lecture and/or textbook references
   notes?: LessonNote[];
 };
