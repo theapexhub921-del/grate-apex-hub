@@ -28,3 +28,8 @@ Still to do:
 - Explore feature guide: add messaging, groups, friend streaks, stories, the new post view.
 - Legacy progress repair: waiting for the owner's read-only admin key.
 - Lessons and slide images (the other session is working on these).
+
+## Next up (asked 2026-10-12, not started)
+
+- Post visibility: the writer chooses "Everyone" or "Friends" for each post. To be truly private this must be enforced by the Firestore rules (a `visibility` field the read rule checks against mutual follows), so it needs a rules addition the owner pastes.
+- Stories like WhatsApp: choose who can view (everyone / friends / hand-picked people, needs the same kind of rule), hide someone's stories (mute, device only, no rules needed), and archive your own stories after 24 hours (needs the rules to let the owner keep and read old stories).
