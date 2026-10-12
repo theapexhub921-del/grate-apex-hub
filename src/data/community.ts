@@ -59,7 +59,11 @@ export type CommunityPost = {
   comments: number;
   reshares: number;
   my_reaction: 'like' | null;
+  stump?: StumpRef | null; // a "Stump a friend" question (data/stumps.ts)
 };
+
+/** The quiz question a "Stump a friend" post shares, and the sharer's note. */
+export type StumpRef = { qid: string; note: string };
 
 export type StudyGroup = {
   id: string;
@@ -152,10 +156,13 @@ async function signedInUserId(): Promise<string> {
 // username. Likes are posts/{id}/likes/{uid} with likeCount moved by one in the
 // same batch; comments are posts/{id}/replies with replyCount moved by one.
 // Errors are passed on: nothing is shown as posted when it wasn't.
+// A "Stump a friend" post also carries stump: { qid, note }, and its answers
+// are replies carrying stump: { pick, ok } (see data/stumps.ts) — they are
+// not comments, so the comment list leaves them out.
 
 const BLOCKED_KEY = 'grateapex_blocked_learners';
 
-async function myUsername(): Promise<{ uid: string; username: string }> {
+export async function myUsername(): Promise<{ uid: string; username: string }> {
   const uid = await signedInUserId();
   const username = (await getDoc(doc(db, 'users', uid))).data()?.username;
   if (typeof username !== 'string' || !/^[a-z0-9_]{3,20}$/.test(username)) throw new Error('Choose a username first — posts show your username.');
@@ -167,6 +174,9 @@ const iso = (value: any) => (value?.toDate ? value.toDate().toISOString() : type
 // Old-app posts have a separate title; show it above the body when it isn't just the body's start.
 /** A plain repost has no words of its own; the shared rules still need 3+ characters, so it carries this. */
 export const REPOST_TEXT = 'Reposted';
+
+const readStump = (d: Record<string, any>): StumpRef | null =>
+  d.stump && typeof d.stump.qid === 'string' ? { qid: d.stump.qid, note: typeof d.stump.note === 'string' ? d.stump.note : '' } : null;
 
 const postText = (d: Record<string, any>) => {
   const title = String(d.title ?? '').trim();
@@ -225,6 +235,7 @@ export async function listCommunityFeed(limitCount = 50): Promise<CommunityPost[
       comments: Number(d.replyCount) || 0,
       reshares: 0, // not counted by the shared rules
       my_reaction: liked[index] ? 'like' : null,
+      stump: readStump(d),
     };
   });
 }
@@ -237,11 +248,11 @@ export async function listPostsBy(uid: string, limitCount = 30): Promise<Communi
   // Older posts beyond the recent feed.
   const snap = await getDocs(query(collection(db, 'posts'), where('authorUid', '==', uid), limit(limitCount)));
   const ids = new Set(own.map((post) => post.id));
-  const extra = snap.docs.filter((item) => !ids.has(item.id)).map((item) => ({ id: item.id, author_id: uid, author_name: item.data().authorName ?? null, author_avatar: null, body: postText(item.data()), media_path: null, media_type: null, media_url: null, reshared_post_id: null, created_at: iso(item.data().createdAt), reactions: Number(item.data().likeCount) || 0, comments: Number(item.data().replyCount) || 0, reshares: 0, my_reaction: null } as CommunityPost));
+  const extra = snap.docs.filter((item) => !ids.has(item.id)).map((item) => ({ id: item.id, author_id: uid, author_name: item.data().authorName ?? null, author_avatar: null, body: postText(item.data()), media_path: null, media_type: null, media_url: null, reshared_post_id: null, created_at: iso(item.data().createdAt), reactions: Number(item.data().likeCount) || 0, comments: Number(item.data().replyCount) || 0, reshares: 0, my_reaction: null, stump: readStump(item.data()) } as CommunityPost));
   return [...own, ...extra].sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, limitCount);
 }
 
-export async function createCommunityPost(body: string, media?: CommunityMedia, resharedPostId?: string | null): Promise<CommunityPost> {
+export async function createCommunityPost(body: string, media?: CommunityMedia, resharedPostId?: string | null, stump?: StumpRef): Promise<CommunityPost> {
   const text = body.trim() || (resharedPostId ? REPOST_TEXT : '');
   if (text.length < 3) throw new Error('Posts need at least 3 characters.');
   if (text.length > 2000) throw new Error('Posts can be up to 2,000 characters.');
@@ -265,11 +276,13 @@ export async function createCommunityPost(body: string, media?: CommunityMedia, 
     lastActivityAt: serverTimestamp(),
     ...(resharedPostId ? { resharedPostId } : {}),
     ...(uploaded.length ? { media: uploaded } : {}),
+    ...(stump ? { stump: { qid: stump.qid, note: stump.note.slice(0, 200) } } : {}),
   });
   return {
     id: ref.id, author_id: me.uid, author_name: me.username, body: text, media_path: null,
     media_type: uploaded[0]?.t ?? null, media_url: uploaded[0]?.url ?? null,
     reshared_post_id: resharedPostId ?? null, created_at: new Date().toISOString(), reactions: 0, comments: 0, reshares: 0, my_reaction: null,
+    stump: stump ?? null,
   };
 }
 
@@ -335,7 +348,7 @@ export async function blockCommunityUser(blockedId: string, friendshipId?: strin
 export async function listPostComments(postId: string) {
   const [snap, blocked] = await Promise.all([getDocs(query(collection(db, 'posts', postId, 'replies'), orderBy('createdAt', 'asc'), limit(200))), blockedLearners()]);
   return snap.docs
-    .filter((item) => !blocked.has(String(item.data().authorUid)))
+    .filter((item) => !blocked.has(String(item.data().authorUid)) && !item.data().stump)
     .map((item) => {
       const d = item.data();
       return { id: item.id, author_id: String(d.authorUid ?? ''), author_name: d.authorName ?? null, body: String(d.body ?? ''), created_at: iso(d.createdAt) };

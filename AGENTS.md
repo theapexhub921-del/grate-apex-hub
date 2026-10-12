@@ -133,6 +133,8 @@ Social (real friends) is in `src/data/social.ts`, backed by `supabase/migrations
 * XP awards are capped at 150 per event on the server, and `user_learning_stats.total_xp` can only change through the XP functions.
 * The store refreshes over Supabase Realtime and clears on sign-out.
 
+"Stump a friend" (`src/data/stumps.ts`, `src/components/social/stump-card.tsx`): from quiz results, a multiple-choice question is shared to the feed as a post with `stump: { qid, note }`; friends answer on the card (answers are hidden `replies` with `stump: { pick, ok }`, saved to question history as practice, no XP). Only the sharer sees who got it right or wrong; others see only their own result. Works with the deployed Firestore rules unchanged.
+
 Database changes go in `supabase/migrations/` (the live project is `dkmossrgptfgutkqefws`); apply them only with the owner's approval.
 
 Progress functionality is currently in:

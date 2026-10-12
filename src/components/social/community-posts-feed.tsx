@@ -15,10 +15,12 @@ import { Pill } from '@/components/ui/pill';
 import { VideoPlayer } from '@/components/ui/video-player';
 import { routes } from '@/lib/routes';
 import { ReportSheet, type ReportTarget } from '@/components/social/report-sheet';
+import { StumpCard } from '@/components/social/stump-card';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Sheet } from '@/components/ui/sheet';
 import { addPostComment, createCommunityPost, deleteCommunityPost, listCommunityFeed, listPostsBy, listPostComments, togglePostLike, type CommunityMedia, type CommunityPost } from '@/data/community';
 import { personName, type SocialPerson, useSocial } from '@/data/social';
+import { stumpQuestion } from '@/data/stumps';
 import { useDisplayName } from '@/data/user';
 import { useAuth } from '@/hooks/use-auth';
 import { Radius, Type, type ThemeColors } from '@/constants/theme';
@@ -269,12 +271,14 @@ function PostCard({ post, socialPeople, ownId, ownName, onOpen, onLike, onCommen
   const name = friend ? personName(friend) : post.author_id === ownId ? ownName : post.author_name ? `@${post.author_name}` : 'Username pending';
   const resharedFriend = socialPeople.find((person) => person.userId === post.reshared_author_id);
   const resharedName = post.reshared_author_id === ownId ? ownName : resharedFriend ? personName(resharedFriend) : 'Username pending';
+  // A Stump a friend post shows its question card (the plain text is for the original app).
+  const stumped = post.stump ? stumpQuestion(post.stump.qid) : null;
   return (
     <Card style={[styles.postCard, verticalActions && styles.postDetailCard]}>
       <View style={verticalActions ? styles.postDetailLayout : undefined}>
       <View style={verticalActions ? styles.postDetailContent : styles.postContent}>
       <View style={styles.postHead}><View style={styles.postAuthor}><PersonAvatar uid={post.author_id} uri={friend?.avatarUrl ?? null} name={name} size={42} ring="subtle" /><Interactive onPress={() => router.push(post.author_id && post.author_id !== ownId ? routes.profile(post.author_id) : ('/profile' as never))} accessibilityRole="link" accessibilityLabel={`View ${name}'s profile`} style={styles.flex}><View style={styles.nameRow}><Text style={styles.author}>{name}</Text><VerifiedBadge username={post.author_name} uid={post.author_id} /></View><Text style={styles.muted}>{new Date(post.created_at).toLocaleString()}</Text></Interactive></View>{post.reshared_post_id ? <Pill label="Reposted" /> : null}{post.author_id === ownId ? <Button label="Delete" size="sm" variant="ghost" icon={<Icon name="trash" size={16} color={colors.error} />} onPress={onDelete} accessibilityLabel="Delete post" /> : null}</View>
-      {post.body ? <Interactive onPress={onOpen} accessibilityRole="button" accessibilityLabel="Open post" style={styles.postBodyOpen}><Text style={styles.body}>{post.body}</Text></Interactive> : null}
+      {post.stump && stumped ? <StumpCard postId={post.id} question={stumped} stump={post.stump} authorId={post.author_id} authorName={name} ownId={ownId} people={socialPeople} /> : post.body ? <Interactive onPress={onOpen} accessibilityRole="button" accessibilityLabel="Open post" style={styles.postBodyOpen}><Text style={styles.body}>{post.body}</Text></Interactive> : null}
       {post.reshared_post_id ? (
         <View style={styles.reshareBox}>
           <Text style={styles.muted}>Original post by {resharedName}</Text>

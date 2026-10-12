@@ -4,6 +4,7 @@ import { StyleSheet, View } from 'react-native';
 import { Text } from '@/components/ui/text';
 
 import { MemoryStateBadge } from '@/components/learning/memory-ui';
+import { StumpComposer } from '@/components/social/stump-card';
 import { Breadcrumbs, StatTile } from '@/components/learning/nav-bits';
 import { Button } from '@/components/ui/button';
 import { Card, Interactive } from '@/components/ui/interactive';
@@ -26,7 +27,8 @@ import type { ConceptMemory } from '@/data/learning/memory';
 import { describeDue, formatDuration } from '@/data/learning/time';
 import { useLearning } from '@/data/learning/use-learning';
 import { formatXp, XP_RULES } from '@/data/learning/xp-rules';
-import { type Answer, correctAnswerText, isAnswerComplete, isAnswerCorrect, type Question } from '@/data/questions';
+import { type Answer, type ChoiceQuestion, correctAnswerText, isAnswerComplete, isAnswerCorrect, type Question } from '@/data/questions';
+import { canStump } from '@/data/stumps';
 import { type AttemptKind, type QuizAttempt, useQuizHistory } from '@/data/quiz-history';
 import { useRotatingCompliment, useRotatingRemark } from '@/hooks/use-learning-remark';
 import { useTheme, useThemedStyles } from '@/hooks/use-theme';
@@ -123,6 +125,7 @@ function ResultsView({ attempt }: { attempt: QuizAttempt }) {
   const { memory, now } = useLearning();
   const [xpReward, setXpReward] = useState<XpReward | null>(null);
   const [showAll, setShowAll] = useState(false);
+  const [stumpQuestion, setStumpQuestion] = useState<ChoiceQuestion | null>(null);
 
   // Show the reward once, right after submitting.
   useFocusEffect(
@@ -301,7 +304,7 @@ function ResultsView({ attempt }: { attempt: QuizAttempt }) {
             style={styles.sectionTop}
           />
           {(showAll ? rows : missed).map((row, index) => (
-            <QuestionReview key={row.question.id} row={row} index={index} />
+            <QuestionReview key={row.question.id} row={row} index={index} onStump={canStump(row.question) ? () => setStumpQuestion(row.question as ChoiceQuestion) : undefined} />
           ))}
         </>
       ) : rows.length > 0 ? (
@@ -422,11 +425,12 @@ function ResultsView({ attempt }: { attempt: QuizAttempt }) {
         <Columns main={main} side={side} sideWidth={360} />
       </Screen>
       <XpToast reward={xpReward} onHide={() => setXpReward(null)} />
+      <StumpComposer question={stumpQuestion} onClose={() => setStumpQuestion(null)} />
     </View>
   );
 }
 
-function QuestionReview({ row, index }: { row: Row; index: number }) {
+function QuestionReview({ row, index, onStump }: { row: Row; index: number; onStump?: () => void }) {
   const styles = useThemedStyles(createStyles);
   const yourAnswer =
     row.answer === undefined
@@ -455,6 +459,7 @@ function QuestionReview({ row, index }: { row: Row; index: number }) {
         {correctAnswerText(row.question)}
       </Text>
       {row.question.explanation ? <Text style={styles.reviewExplanation}>{row.question.explanation}</Text> : null}
+      {onStump ? <Button label="Stump a friend" size="sm" variant="ghost" onPress={onStump} style={styles.stumpButton} accessibilityLabel="Share this question to the feed for friends to answer" /> : null}
     </Card>
   );
 }
@@ -498,6 +503,7 @@ function createStyles(colors: ThemeColors) {
     reviseArrow: { fontSize: 20, color: colors.textTertiary },
     actions: { gap: 8 },
     reviewCard: { gap: 6, borderLeftWidth: 4 },
+    stumpButton: { alignSelf: 'flex-start' },
     reviewRight: { borderLeftColor: colors.success },
     reviewWrong: { borderLeftColor: colors.error },
     reviewIndex: { fontSize: 11, fontWeight: '800', letterSpacing: 0.6, color: colors.textTertiary },
