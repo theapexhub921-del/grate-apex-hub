@@ -16,6 +16,8 @@ import { APEX } from '@/data/learning/apex';
 import { dayKey } from '@/data/learning/time';
 import { XP_RULES } from '@/data/learning/xp-rules';
 import { bankQuestions, buildPractice, legacyCourse, loadLegacyBank, loadLegacyLessonList } from '@/data/legacy-study';
+import { buildLocalPractice, hb2LessonById, hb2Sets } from '@/data/hb2-study';
+import { getLessonQuizBank } from '@/data/curriculum';
 import { awardXp } from '@/data/progress';
 import { isAnswerCorrect, type Question } from '@/data/questions';
 import { useThemedStyles } from '@/hooks/use-theme';
@@ -44,6 +46,22 @@ export default function LegacyPracticeScreen() {
   useEffect(() => {
     if (!course) return;
     let live = true;
+    if (course.subject) {
+      // HB2: this app's questions (their ids feed spaced review), mixed the original way.
+      const sets = hb2Sets(course.id);
+      const set = setId ? sets.find((item) => item.id === setId) : undefined;
+      const source = lessonId ? getLessonQuizBank(lessonId) : set ? set.questions : sets.flatMap((item) => item.questions);
+      const lessonTitle = lessonId ? hb2LessonById(lessonId)?.lesson.title : undefined;
+      const label = apex ? `${course.name} · Apex Challenge` : set ? `${course.name} · ${set.name}` : lessonTitle ? `${lessonTitle} · practice` : `${course.name} · practice`;
+      const count = apex ? APEX.questionsPerRun : setId ? Math.min(30, source.length) : lessonId ? 15 : 20;
+      queueMicrotask(() => {
+        if (!live) return;
+        if (source.length === 0) { setError('There are no questions here yet.'); return; }
+        setTitle(label);
+        setQuestions(buildLocalPractice(source, count, seed));
+      });
+      return () => { live = false; };
+    }
     Promise.all([loadLegacyBank(course.id), lessonId ? loadLegacyLessonList() : Promise.resolve([])])
       .then(([bank, lessons]) => {
         if (!live) return;

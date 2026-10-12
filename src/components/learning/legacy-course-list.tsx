@@ -11,6 +11,7 @@ import { Text } from '@/components/ui/text';
 import { Type, type ThemeColors } from '@/constants/theme';
 import type { ClassSelection } from '@/data/class-curriculum';
 import { type LegacyCourse, type LegacyLessonMeta, loadLegacyLessonList } from '@/data/legacy-study';
+import { hb2Lessons } from '@/data/hb2-study';
 import { useProgress } from '@/data/progress';
 import { useTheme, useThemedStyles } from '@/hooks/use-theme';
 import { routes } from '@/lib/routes';
@@ -33,7 +34,7 @@ export function LegacyCourseList({ courses, selection }: { courses: readonly Leg
       <SectionHeader title="Courses" subtitle={`${selection.classId} · Semester ${selection.semester} · ${courses.length} courses`} style={styles.header} />
       <View style={styles.grid}>
         {courses.map((course) => {
-          const own = (lessons ?? []).filter((lesson) => lesson.course === course.id);
+          const own = course.subject ? hb2Lessons(course.id) : (lessons ?? []).filter((lesson) => lesson.course === course.id);
           const done = own.filter((lesson) => completed.has(lesson.id)).length;
           const questions = own.reduce((sum, lesson) => sum + (lesson.qids?.length ?? lesson.qcount ?? 0), 0);
           return (
@@ -44,7 +45,7 @@ export function LegacyCourseList({ courses, selection }: { courses: readonly Leg
                 <Text style={styles.desc} numberOfLines={2}>{course.desc}</Text>
                 <View style={styles.progressRow}>
                   <ProgressBar value={own.length ? done / own.length : 0} height={6} style={styles.flex} label={`${course.name} lessons completed`} />
-                  <Text style={styles.meta}>{lessons ? `${done}/${own.length} lessons${questions ? ` · ${questions.toLocaleString()} questions` : ''}` : 'Loading…'}</Text>
+                  <Text style={styles.meta}>{lessons || course.subject ? `${done}/${own.length} lessons${questions ? ` · ${questions.toLocaleString()} questions` : ''}` : 'Loading…'}</Text>
                 </View>
               </View>
               <Icon name="chevronRight" size={20} color={colors.textTertiary} />

@@ -21,12 +21,13 @@ import {
   type LegacyLessonBody,
   type LegacyLessonMeta,
   loadLegacyLessonBody,
-  loadLegacyLessonList,
+  loadLegacyLessonMeta,
   loadLegacySectionProgress,
   plainText,
   saveLegacySectionProgress,
 } from '@/data/legacy-study';
 import { completeLesson, useProgress } from '@/data/progress';
+import { finishLesson } from '@/data/learning/actions';
 import { useThemedStyles } from '@/hooks/use-theme';
 import { param, routes } from '@/lib/routes';
 
@@ -54,10 +55,9 @@ export default function LegacyLessonScreen() {
   useEffect(() => {
     if (!lessonId) return;
     let live = true;
-    Promise.all([loadLegacyLessonList(), loadLegacyLessonBody(lessonId), loadLegacySectionProgress()])
-      .then(([list, lessonBody, read]) => {
+    Promise.all([loadLegacyLessonMeta(lessonId), loadLegacyLessonBody(lessonId), loadLegacySectionProgress()])
+      .then(([found, lessonBody, read]) => {
         if (!live) return;
-        const found = list.find((item) => item.id === lessonId) ?? null;
         setMeta(found);
         setBody(lessonBody);
         const already = read[lessonId] ?? 0;
@@ -100,10 +100,17 @@ export default function LegacyLessonScreen() {
       go(index + 1);
       return;
     }
-    const xp = lessonCompletionXp(undefined);
-    const awarded = await completeLesson(meta!.id, 'biochemistry', xp, undefined, meta!.title);
-    if (awarded) setPendingXpReward({ amount: xp, message: `Lesson completed · ${meta!.title}` });
-    setFinished({ xp: awarded ? xp : 0 });
+    if (meta!.subject) {
+      // HB2: this app's lesson, finished the same way as on its lesson page (XP, power-ups, topic milestones).
+      const result = await finishLesson(meta!.id);
+      if (result.awarded) setPendingXpReward({ amount: result.xp, message: `Lesson completed · ${meta!.title}` });
+      setFinished({ xp: result.xp });
+    } else {
+      const xp = lessonCompletionXp(undefined);
+      const awarded = await completeLesson(meta!.id, 'biochemistry', xp, undefined, meta!.title);
+      if (awarded) setPendingXpReward({ amount: xp, message: `Lesson completed · ${meta!.title}` });
+      setFinished({ xp: awarded ? xp : 0 });
+    }
     scroll.current?.scrollTo({ y: 0, animated: true });
   }
 
@@ -159,6 +166,7 @@ export default function LegacyLessonScreen() {
           {meta.sub ? <Text style={styles.sub}>{meta.sub}</Text> : null}
         </View>
         {done ? <Pill label="Completed" tone="success" /> : <Pill label={`${Math.min(readCount, total)}/${total} sections`} tone="primary" />}
+        {meta.subject ? <Button label="Learn by answering" variant="ghost" size="sm" onPress={() => router.push(routes.lesson(meta.id, { layer: 'learn' }))} accessibilityLabel="Open the interactive version of this lesson" /> : null}
       </View>
       {wide ? (
         <View style={styles.columns}>

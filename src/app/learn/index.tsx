@@ -313,11 +313,11 @@ export default function LearnScreen() {
 
       {blockedSelection && ownSelection ? (
         <ClassAccessCard target={blockedSelection} current={requiredLevel?.selection ?? ownSelection} lessonsComplete={requiredLevel?.completed ?? currentCompletion.completed} lessonsTotal={requiredLevel?.total ?? currentCompletion.total} trialUsed={trial.used} trialExpiresAt={trial.active ? trial.expiresAt : undefined} onStartTrial={() => { if (blockedSelection) { setRequestedFuture(null); router.replace(routes.learnEnvironment(blockedSelection)); } }} onBack={() => { setRequestedFuture(null); showEnvironment(ownSelection); }} />
+      ) : viewing && legacyCourses.length > 0 ? (
+        // HB1 (the original app's courses) and HB2 Semester 1 (this app's lessons), in the original study style.
+        <Columns main={<LegacyCourseList courses={legacyCourses} selection={viewing} />} side={side} sideWidth={360} />
       ) : offeredSubjects.length > 0 ? (
         <Columns main={main} side={side} sideWidth={360} />
-      ) : viewing && legacyCourses.length > 0 ? (
-        // HB1: the original app's courses for this class and semester.
-        <Columns main={<LegacyCourseList courses={legacyCourses} selection={viewing} />} side={side} sideWidth={360} />
       ) : (
         <Card tone="insight" style={styles.comingSoon}>
           <View style={styles.comingIcon}><Icon name="book" size={22} color={colors.primaryText} /></View>

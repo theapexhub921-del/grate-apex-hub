@@ -18,10 +18,13 @@ import { Platform } from 'react-native';
 import type { ClassSelection } from '@/data/class-curriculum';
 import { auth, db } from '@/lib/firebase';
 import { type BankQuestion } from '@/data/legacy-questions';
+import { HB2_COURSES, hb2Course, hb2LessonById, hb2Lessons, hb2Sets, lessonBody } from '@/data/hb2-study';
+import type { SubjectId } from '@/data/lesson-types';
 
 export { buildPractice, parseRich, plainText, toQuestion, type BankQuestion, type Run } from '@/data/legacy-questions';
 
-export type LegacyCourse = { id: string; name: string; icon: string; desc: string; classId: 'HB1'; semester: 1 | 2; gradient: readonly [string, string] };
+/** A course: the original app's (HB1), or an HB2 course built from this app's lessons (`subject` set; data/hb2-study.ts). */
+export type LegacyCourse = { id: string; name: string; icon: string; desc: string; classId: 'HB1' | 'HB2'; semester: 1 | 2; gradient: readonly [string, string]; subject?: SubjectId };
 
 // From old-reference/src/data/catalog.ts and access.json (and the course colours of the original Study screen).
 export const LEGACY_COURSES: readonly LegacyCourse[] = [
@@ -40,10 +43,11 @@ export const LEGACY_COURSES: readonly LegacyCourse[] = [
   { id: 'entomology', name: 'Entomology', icon: '🦟', desc: 'Insects, vectors, and the essentials of medical entomology.', classId: 'HB1', semester: 2, gradient: ['#f59e0b', '#d97706'] },
 ];
 
-export const legacyCourse = (id: string | undefined) => LEGACY_COURSES.find((course) => course.id === id) ?? null;
+export const legacyCourse = (id: string | undefined): LegacyCourse | null => LEGACY_COURSES.find((course) => course.id === id) ?? hb2Course(id);
 
-/** The original courses of a class (HB1 only: the original app taught HB1). */
+/** The courses of a class in the original study style: HB1 (the original app's) and HB2 Semester 1 (this app's lessons). */
 export function legacyCoursesForClass(selection: ClassSelection | null | undefined): LegacyCourse[] {
+  if (selection?.classId === 'HB2' && selection.semester === 1) return [...HB2_COURSES];
   if (!selection || selection.classId !== 'HB1') return [];
   return LEGACY_COURSES.filter((course) => course.semester === selection.semester);
 }
@@ -53,6 +57,8 @@ export function legacyCoursesForClass(selection: ClassSelection | null | undefin
 export type LegacyLessonMeta = {
   id: string; course: string; order: number; title: string; sub?: string; icon: string; summary: string; minutes: number;
   sections: { id: string; title: string }[]; qids?: string[]; qcount?: number; extras?: string[]; v?: string;
+  /** HB2 only: the topic the lesson belongs to, its subject and completion XP. */
+  group?: string; subject?: SubjectId; xp?: number;
 };
 export type Rich = string;
 export type Block =
@@ -85,14 +91,24 @@ export function loadLegacyLessonList(): Promise<LegacyLessonMeta[]> {
   return lessonList;
 }
 
-export async function loadLegacyLessons(courseId: string) {
+export async function loadLegacyLessons(courseId: string): Promise<LegacyLessonMeta[]> {
+  if (hb2Course(courseId)) return hb2Lessons(courseId);
   return (await loadLegacyLessonList()).filter((lesson) => lesson.course === courseId);
 }
 
 const bodyCache = new Map<string, LegacyLessonBody>();
 
 /** A lesson's body. Only the student's own class can read it (deployed rules); a copy is kept for offline reading. */
+/** A lesson's title and sections: an original lesson, or an HB2 one. */
+export async function loadLegacyLessonMeta(id: string): Promise<LegacyLessonMeta | null> {
+  const local = hb2LessonById(id);
+  if (local) return local.meta;
+  return (await loadLegacyLessonList()).find((item) => item.id === id) ?? null;
+}
+
 export async function loadLegacyLessonBody(id: string): Promise<LegacyLessonBody> {
+  const local = hb2LessonById(id);
+  if (local) return lessonBody(local.lesson) as LegacyLessonBody;
   const hit = bodyCache.get(id);
   if (hit) return hit;
   const key = `grateapex_legacy_lesson_${id}`;
@@ -153,6 +169,12 @@ export function loadLegacyBank(courseId: string): Promise<LegacyBank> {
     });
   banks.set(courseId, promise);
   return promise;
+}
+
+/** A course's question sets for the course page (name and size). */
+export async function loadCourseSets(courseId: string): Promise<{ id: string; name: string; count: number }[]> {
+  if (hb2Course(courseId)) return hb2Sets(courseId).map((set) => ({ id: set.id, name: set.name, count: set.questions.length }));
+  return (await loadLegacyBank(courseId)).sets.map((set) => ({ id: set.id, name: set.name, count: set.questions.length }));
 }
 
 export const bankQuestions = (bank: LegacyBank) => bank.sets.flatMap((set) => set.questions.map((q) => ({ ...q, set: set.id, setName: set.name })));

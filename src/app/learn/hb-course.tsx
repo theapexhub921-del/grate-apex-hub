@@ -13,7 +13,7 @@ import { Screen, SectionHeader } from '@/components/ui/screen';
 import { ErrorScreen, LoadingState } from '@/components/ui/state-views';
 import { Text } from '@/components/ui/text';
 import { Type, type ThemeColors } from '@/constants/theme';
-import { legacyCourse, loadLegacyBank, loadLegacyLessons, loadLegacySectionProgress, type LegacyBank, type LegacyLessonMeta, plainText } from '@/data/legacy-study';
+import { legacyCourse, loadCourseSets, loadLegacyLessons, loadLegacySectionProgress, type LegacyLessonMeta, plainText } from '@/data/legacy-study';
 import { useProgress } from '@/data/progress';
 import { useTheme, useThemedStyles } from '@/hooks/use-theme';
 import { param, routes } from '@/lib/routes';
@@ -29,7 +29,7 @@ export default function LegacyCourseScreen() {
   const course = legacyCourse(param(params.course));
   const progress = useProgress();
   const [lessons, setLessons] = useState<LegacyLessonMeta[] | null>(null);
-  const [bank, setBank] = useState<LegacyBank | null>(null);
+  const [sets, setSets] = useState<{ id: string; name: string; count: number }[] | null>(null);
   const [sectionsRead, setSectionsRead] = useState<Record<string, number>>({});
   const [error, setError] = useState<string | null>(null);
 
@@ -39,7 +39,7 @@ export default function LegacyCourseScreen() {
     Promise.all([loadLegacyLessons(course.id), loadLegacySectionProgress()])
       .then(([list, read]) => { if (live) { setLessons(list); setSectionsRead(read); } })
       .catch((problem) => { if (live) setError(problem instanceof Error ? problem.message : 'This course could not be loaded.'); });
-    loadLegacyBank(course.id).then((value) => { if (live) setBank(value); }).catch(() => {});
+    loadCourseSets(course.id).then((value) => { if (live) setSets(value); }).catch(() => {});
     return () => { live = false; };
   }, [course]);
 
@@ -49,7 +49,7 @@ export default function LegacyCourseScreen() {
   if (!lessons) return <LoadingState label="Loading lessons…" />;
 
   const done = lessons.filter((lesson) => completed.has(lesson.id)).length;
-  const totalQuestions = bank ? bank.sets.reduce((sum, set) => sum + set.questions.length, 0) : null;
+  const totalQuestions = sets ? sets.reduce((sum, set) => sum + set.count, 0) : null;
 
   return (
     <Screen width="content">
@@ -66,14 +66,20 @@ export default function LegacyCourseScreen() {
             <ProgressBar value={lessons.length ? done / lessons.length : 0} height={6} style={styles.flex} label={`${course.name} lessons completed`} />
             <Text style={styles.meta}>{done}/{lessons.length} lessons{totalQuestions !== null ? ` · ${totalQuestions.toLocaleString()} questions` : ''}</Text>
           </View>
-          <View style={styles.actions}>
+          {lessons.length ? <View style={styles.actions}>
             <Button label="Practice the course" size="sm" onPress={() => router.push(routes.legacyPractice({ course: course.id }))} />
             <Button label="Apex Challenge" size="sm" variant="gold" trailing="⚡" onPress={() => router.push(routes.legacyPractice({ course: course.id, apex: true }))} />
-          </View>
+          </View> : null}
         </View>
       </Card>
 
-      <SectionHeader title="Lessons" subtitle={`${lessons.length} lessons in order · ${done} completed`} style={styles.section} />
+      <SectionHeader title="Lessons" subtitle={lessons.length ? `${lessons.length} lessons in order · ${done} completed` : undefined} style={styles.section} />
+      {lessons.length === 0 ? (
+        <Card tone="insight" style={styles.empty}>
+          <Text style={styles.lessonTitle}>Lessons are on the way</Text>
+          <Text style={styles.summary}>{course.name} lessons are being prepared from the lecture files. They will appear here, in course order, as each topic is ready.</Text>
+        </Card>
+      ) : null}
       <View style={styles.path}>
         {lessons.map((lesson, index) => {
           const read = Math.min(sectionsRead[lesson.id] ?? 0, lesson.sections.length);
@@ -81,8 +87,11 @@ export default function LegacyCourseScreen() {
           const started = read > 0;
           const questions = lesson.qids?.length ?? lesson.qcount ?? 0;
           const last = index === lessons.length - 1;
+          const newGroup = lesson.group && lesson.group !== lessons[index - 1]?.group;
           return (
-            <View key={lesson.id} style={styles.pathRow}>
+            <View key={lesson.id}>
+            {newGroup ? <Text style={styles.group}>{lesson.group}</Text> : null}
+            <View style={styles.pathRow}>
               <View style={styles.rail}>
                 <View style={[styles.node, isDone ? styles.nodeDone : started ? styles.nodeActive : null]}>
                   {isDone ? <Icon name="check" size={14} color={colors.onPrimary} strokeWidth={2.6} /> : <Text style={[styles.nodeText, started && { color: colors.primaryText }]}>{index + 1}</Text>}
@@ -116,18 +125,19 @@ export default function LegacyCourseScreen() {
                 </PressableCard>
               </View>
             </View>
+            </View>
           );
         })}
       </View>
 
-      {bank ? (
+      {sets?.length ? (
         <>
-          <SectionHeader title="Question sets" subtitle="The course’s quizzes and past questions, as in the original app." style={styles.section} />
+          <SectionHeader title="Question sets" subtitle={course.subject ? 'Practise each topic’s questions in mixed types.' : 'The course’s quizzes and past questions, as in the original app.'} style={styles.section} />
           <View style={styles.sets}>
-            {bank.sets.map((set) => (
+            {sets.map((set) => (
               <Interactive key={set.id} onPress={() => router.push(routes.legacyPractice({ course: course.id, set: set.id }))} accessibilityRole="button" style={({ hovered }) => [styles.set, hovered && styles.setHover]}>
                 <Text style={styles.setName}>{set.name}</Text>
-                <Text style={styles.metaSoft}>{set.questions.length} questions</Text>
+                <Text style={styles.metaSoft}>{set.count} questions</Text>
               </Interactive>
             ))}
           </View>
@@ -150,6 +160,8 @@ function createStyles(colors: ThemeColors) {
     metaSoft: { fontSize: 12.5, color: colors.textTertiary },
     actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 4 },
     section: { marginTop: 28 },
+    group: { ...Type.overline, color: colors.textSecondary, marginTop: 14, marginBottom: 2, marginLeft: 48 },
+    empty: { gap: 6, padding: 18 },
     path: { gap: 0 },
     pathRow: { flexDirection: 'row', gap: 14 },
     rail: { width: 34, alignItems: 'center' },
