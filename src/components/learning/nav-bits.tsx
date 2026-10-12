@@ -114,6 +114,8 @@ function createStyles(colors: ThemeColors) {
       paddingVertical: 7,
       paddingLeft: 10,
       paddingRight: 14,
+      // Room between the button and the page title or text under it.
+      marginBottom: 18,
       ...elevation(colors, 1),
     },
     backHover: { borderColor: colors.primaryBorder },

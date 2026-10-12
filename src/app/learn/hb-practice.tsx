@@ -17,7 +17,10 @@ import { Type, type ThemeColors } from '@/constants/theme';
 import { APEX } from '@/data/learning/apex';
 import { dayKey } from '@/data/learning/time';
 import { XP_RULES } from '@/data/learning/xp-rules';
-import { bankQuestions, buildPractice, legacyCourse, loadLegacyBank, loadLegacyLessonList } from '@/data/legacy-study';
+import { bankQuestions, buildPractice, legacyCourse, loadLegacyBank, loadLegacyLessonList, toQuestion } from '@/data/legacy-study';
+import { shuffleSeeded } from '@/data/legacy-questions';
+import { modeSettings, modeTitle, parsePracticeMode } from '@/data/practice-modes';
+import { loadPrePost, percentOf, savePrePost } from '@/data/prepost';
 import { buildLocalPractice, hb2LessonById, hb2Sets } from '@/data/hb2-study';
 import { legacyQuestionMemory, legacyReviewFor } from '@/data/legacy-review';
 import { useQuestionHistory } from '@/data/question-history';
@@ -36,18 +39,22 @@ export default function LegacyPracticeScreen() {
   const styles = useThemedStyles(createStyles);
   const params = useLocalSearchParams<Record<string, string | string[]>>();
   const course = legacyCourse(param(params.course));
-  const lessonId = param(params.lesson);
-  const setId = param(params.set);
-  const apex = param(params.apex) === '1';
-  const review = param(params.review) === 'due' ? 'due' : param(params.review) === 'missed' ? 'missed' : null;
+  const paramKey = JSON.stringify(params);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const practice = useMemo(() => parsePracticeMode((key) => param(params[key])), [paramKey]);
+  const settings = modeSettings(practice);
+  const apex = practice.kind === 'apex';
+  const lessonId = practice.kind === 'lesson' ? practice.lessonId : undefined;
+  const setId = practice.kind === 'set' ? practice.setId : undefined;
+  const review = practice.kind === 'review' ? practice.which : null;
   const history = useQuestionHistory();
   const [reviewIds] = useState(() => (review && course ? new Set(legacyReviewFor(course.id, legacyQuestionMemory(history), Date.now())[review]) : null));
   const attempt = param(params.attempt) ?? 'first';
   const [questions, setQuestions] = useState<Question[] | null>(null);
   const [title, setTitle] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [mode, setMode] = useState<FeedbackMode>(apex ? 'instant' : 'instant');
-  const [result, setResult] = useState<{ correct: number; total: number; xp: number } | null>(null);
+  const [mode, setMode] = useState<FeedbackMode>(settings.feedback);
+  const [result, setResult] = useState<{ correct: number; total: number; xp: number; pre?: number | null } | null>(null);
   // Apex Challenge: the arena intro, then 3 · 2 · 1 · GO, then the run (as on the Apex Challenge screen).
   const [apexPhase, setApexPhase] = useState<'intro' | 'countdown' | 'run'>(apex ? 'intro' : 'run');
   const [count, setCount] = useState<number>(APEX.countdownSeconds);
@@ -59,56 +66,69 @@ export default function LegacyPracticeScreen() {
     }, 800);
     return () => clearTimeout(timer);
   }, [apexPhase, count]);
-  const seed = useMemo(() => `${course?.id}:${lessonId ?? setId ?? 'all'}:${apex ? 'apex' : 'practice'}:${attempt}`, [course?.id, lessonId, setId, apex, attempt]);
+  // Mock exams are the same paper every time; everything else is new each attempt.
+  const seed = useMemo(() => `${course?.id}:${settings.key}:${settings.fixed ? 'fixed' : attempt}`, [course?.id, settings.key, settings.fixed, attempt]);
 
   useEffect(() => {
     if (!course) return;
     let live = true;
-    if (course.subject) {
-      // HB2: this app's questions (their ids feed spaced review), mixed the original way.
-      const sets = hb2Sets(course.id);
-      const set = setId ? sets.find((item) => item.id === setId) : undefined;
-      const source = lessonId ? getLessonQuizBank(lessonId) : set ? set.questions : sets.flatMap((item) => item.questions);
-      const lessonTitle = lessonId ? hb2LessonById(lessonId)?.lesson.title : undefined;
-      const label = apex ? `${course.name} · Apex Challenge` : set ? `${course.name} · ${set.name}` : lessonTitle ? `${lessonTitle} · practice` : `${course.name} · practice`;
-      const count = apex ? APEX.questionsPerRun : setId ? Math.min(30, source.length) : lessonId ? 15 : 20;
-      queueMicrotask(() => {
-        if (!live) return;
-        if (source.length === 0) { setError('There are no questions here yet.'); return; }
-        setTitle(label);
-        setQuestions(buildLocalPractice(source, count, seed));
-      });
-      return () => { live = false; };
-    }
-    Promise.all([loadLegacyBank(course.id), lessonId ? loadLegacyLessonList() : Promise.resolve([])])
-      .then(([bank, lessons]) => {
-        if (!live) return;
-        const all = bankQuestions(bank);
-        let source = all;
-        let label = `${course.name} · practice`;
-        if (lessonId) {
-          const lesson = lessons.find((item) => item.id === lessonId);
-          const ids = new Set(lesson?.qids ?? []);
-          source = all.filter((q) => ids.has(q.id));
-          label = lesson ? `${lesson.title} · practice` : label;
-        } else if (setId) {
-          const set = bank.sets.find((item) => item.id === setId);
-          source = all.filter((q) => q.set === setId);
-          label = set ? `${course.name} · ${set.name}` : label;
-        } else if (reviewIds) {
-          // Spaced review of the original questions (data/legacy-review.ts).
-          source = all.filter((q) => reviewIds.has(q.id));
-          label = `${course.name} · ${review === 'due' ? 'Due for review' : 'Fix your mistakes'}`;
+    const fail = (message: string) => { if (live) setError(message); };
+    (async () => {
+      // The pre-test's questions are left out of the post-test.
+      const before = practice.kind === 'prepost' && practice.phase === 'post' ? new Set((await loadPrePost(course.id)).pre?.ids ?? []) : null;
+      const take = (size: number) => (settings.count === Infinity ? size : Math.min(settings.count, size));
+      if (course.subject) {
+        // HB2: this app's questions (their ids feed spaced review).
+        const sets = hb2Sets(course.id);
+        const all = sets.flatMap((item) => item.questions);
+        const set = setId ? sets.find((item) => item.id === setId) : undefined;
+        let source: Question[] = all;
+        if (lessonId) source = getLessonQuizBank(lessonId);
+        else if (set) source = set.questions;
+        else if (practice.kind === 'custom') {
+          const chosen = [...practice.custom.lessons.flatMap((id) => getLessonQuizBank(id)), ...sets.filter((item) => practice.custom.sets.includes(item.id)).flatMap((item) => item.questions)];
+          source = chosen.length ? [...new Map(chosen.map((question) => [question.id, question])).values()] : all;
         }
-        if (apex) label = `${course.name} · Apex Challenge`;
-        const count = apex ? APEX.questionsPerRun : setId ? Math.min(30, source.length) : reviewIds ? Math.min(20, source.length) : lessonId ? 15 : 20;
-        if (source.length === 0) throw new Error(reviewIds ? 'Nothing to review here right now — well done.' : 'There are no questions here yet.');
-        setTitle(label);
-        setQuestions(buildPractice(source, { course: course.id, lessonId }, count, seed));
-      })
-      .catch((problem) => { if (live) setError(problem instanceof Error ? problem.message : 'The questions could not be loaded.'); });
+        if (before) source = source.filter((question) => !before.has(question.id));
+        if (!live) return;
+        if (source.length === 0) return fail('There are no questions here yet.');
+        setTitle(modeTitle(practice, course.name, { lesson: lessonId ? hb2LessonById(lessonId)?.lesson.title : undefined, set: set?.name }));
+        setQuestions(settings.variants ? buildLocalPractice(source, take(source.length), seed) : shuffleSeeded(source, seed).slice(0, take(source.length)));
+        return;
+      }
+      const [bank, lessons] = await Promise.all([loadLegacyBank(course.id), lessonId || practice.kind === 'custom' ? loadLegacyLessonList() : Promise.resolve([])]);
+      if (!live) return;
+      const all = bankQuestions(bank);
+      let source = all;
+      const set = setId ? bank.sets.find((item) => item.id === setId) : undefined;
+      const lesson = lessonId ? lessons.find((item) => item.id === lessonId) : undefined;
+      if (lessonId) {
+        const ids = new Set(lesson?.qids ?? []);
+        source = all.filter((q) => ids.has(q.id));
+      } else if (setId) {
+        source = all.filter((q) => q.set === setId);
+      } else if (reviewIds) {
+        // Spaced review of the original questions (data/legacy-review.ts).
+        source = all.filter((q) => reviewIds.has(q.id));
+      } else if (practice.kind === 'custom') {
+        const lessonQids = new Set(lessons.filter((item) => practice.custom.lessons.includes(item.id)).flatMap((item) => item.qids ?? []));
+        const setIds = new Set(practice.custom.sets);
+        const chosen = all.filter((q) => lessonQids.has(q.id) || setIds.has(q.set));
+        if (chosen.length) source = chosen;
+      }
+      if (before) source = source.filter((q) => !before.has(`legacy:${course.id}:${q.id}`));
+      if (source.length === 0) return fail(reviewIds ? 'Nothing to review here right now — well done.' : 'There are no questions here yet.');
+      setTitle(modeTitle(practice, course.name, { lesson: lesson?.title, set: set?.name }));
+      const size = take(source.length);
+      setQuestions(
+        settings.variants
+          ? buildPractice(source, { course: course.id, lessonId }, size, seed)
+          : shuffleSeeded(source, seed).slice(0, size).map((q) => toQuestion(q, { course: course.id, lessonId, concept: q.t || q.setName || 'General' }))
+      );
+    })().catch((problem) => fail(problem instanceof Error ? problem.message : 'The questions could not be loaded.'));
     return () => { live = false; };
-  }, [course, lessonId, setId, apex, seed, reviewIds, review]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [course, seed, paramKey, reviewIds]);
 
   const items = useMemo(() => (questions ?? []).map((question) => ({ question })), [questions]);
 
@@ -155,12 +175,18 @@ export default function LegacyPracticeScreen() {
     const amount = Math.min(XP_RULES.taskMax, base + bonus);
     const xp = await awardXp({
       sourceType: apex ? 'apex' : 'practice',
-      sourceId: `hb:${course!.id}:${lessonId ?? setId ?? 'all'}:${dayKey(Date.now())}`,
+      sourceId: `hb:${course!.id}:${settings.key}:${dayKey(Date.now())}`,
       amount,
       label: title,
     });
     if (xp > 0) setPendingXpReward({ amount: xp, message: `${title} · ${correct}/${total}` });
-    setResult({ correct, total, xp });
+    let pre: number | null | undefined;
+    if (practice.kind === 'prepost') {
+      const saved = await loadPrePost(course!.id);
+      pre = practice.phase === 'post' ? percentOf(saved.pre) : undefined;
+      await savePrePost(course!.id, practice.phase, { correct, total, ids: questions!.map((question) => question.id), at: Date.now() });
+    }
+    setResult({ correct, total, xp, pre });
   }
 
   if (result) {
@@ -173,8 +199,10 @@ export default function LegacyPracticeScreen() {
           <Text style={styles.resultTitle}>{title}</Text>
           <Pill label={`${percent}%`} tone={percent >= 75 ? 'success' : percent >= 50 ? 'gold' : 'neutral'} />
           <Text style={styles.resultText}>{result.xp > 0 ? `+${result.xp} XP` : 'XP for this practice was already earned today.'}</Text>
+          {practice.kind === 'prepost' && practice.phase === 'pre' ? <Text style={styles.resultText}>Now study the course, then take the post-test to see how much you’ve improved.</Text> : null}
+          {practice.kind === 'prepost' && practice.phase === 'post' && result.pre != null ? <Text style={styles.resultText}>Pre-test {result.pre}% → post-test {percent}% ({percent - result.pre >= 0 ? '+' : ''}{percent - result.pre} points)</Text> : null}
           <View style={styles.resultActions}>
-            <Button label="Try again" onPress={() => router.replace(routes.legacyPractice({ course: course!.id, lesson: lessonId, set: setId, apex }))} />
+            {practice.kind !== 'prepost' ? <Button label="Try again" onPress={() => router.replace(`/learn/hb-practice?${new URLSearchParams({ ...Object.fromEntries(Object.entries(params).map(([key, value]) => [key, String(param(value) ?? '')])), attempt: String(Date.now()) })}` as never)} /> : null}
             <Button label="Back to the course" variant="secondary" onPress={() => router.replace(routes.legacyCourse(course!.id))} />
           </View>
         </Card>
@@ -187,8 +215,8 @@ export default function LegacyPracticeScreen() {
       <QuestionSession
         items={items}
         mode={mode}
-        onModeChange={apex ? undefined : setMode}
-        perQuestionSeconds={apex ? APEX.secondsPerQuestion : undefined}
+        onModeChange={settings.seconds || settings.feedback === 'submit' ? undefined : setMode}
+        perQuestionSeconds={settings.seconds}
         attemptMode={apex ? 'apex' : 'practice'}
         sessionId={`hb:${seed}`}
         seed={seed}
@@ -199,7 +227,7 @@ export default function LegacyPracticeScreen() {
           <View style={styles.header}>
             <BackLink fallback={routes.legacyCourse(course.id)} />
             <Text style={styles.title} numberOfLines={2}>{title}</Text>
-            <Text style={styles.sub}>{apex ? `${APEX.secondsPerQuestion} seconds a question · ${questions.length} questions` : `${questions.length} questions · multiple choice, typing, true/false and matching`}</Text>
+            <Text style={styles.sub}>{[`${questions.length} questions`, settings.seconds ? `${settings.seconds} seconds a question` : null, settings.feedback === 'submit' ? 'answers at the end, like the real paper' : null, settings.variants ? 'multiple choice, typing, true/false and matching' : null].filter(Boolean).join(' · ')}</Text>
           </View>
         }
       />

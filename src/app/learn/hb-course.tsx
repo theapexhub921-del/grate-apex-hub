@@ -4,6 +4,7 @@ import { StyleSheet, View } from 'react-native';
 
 import { BackLink } from '@/components/learning/nav-bits';
 import { LegacyCourseTile } from '@/components/learning/legacy-course-tile';
+import { CoursePracticeModes } from '@/components/learning/course-practice-modes';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
 import { Card, Interactive, PressableCard } from '@/components/ui/interactive';
@@ -98,6 +99,8 @@ export default function LegacyCourseScreen() {
           </View>
         </Card>
       ) : null}
+
+      {lessons.length ? <CoursePracticeModes course={course} lessons={lessons} sets={sets ?? []} /> : null}
 
       <SectionHeader title="Lessons" subtitle={lessons.length ? `${lessons.length} lessons in order · ${done} completed` : undefined} style={styles.section} />
       {lessons.length === 0 ? (

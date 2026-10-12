@@ -41,6 +41,12 @@ export function parseRich(src: string): Run[] {
   return runs;
 }
 
+/** A deterministic shuffle for a seed (the same list every time for the same seed). */
+export function shuffleSeeded<T>(items: readonly T[], seed: string): T[] {
+  const random = seeded(seed);
+  return [...items].map((item) => ({ item, key: random() })).sort((a, b) => a.key - b.key).map((entry) => entry.item);
+}
+
 // ── Original questions as this app's question types ────────────────
 
 const ORDER_WORDS = /\b(all|none|both|neither) of the (above|following)|\b(a|b|c|d) (and|&) (b|c|d|e)\b|^all the above|^none of the above/i;
