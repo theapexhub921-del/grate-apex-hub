@@ -1,0 +1,28 @@
+# Files the Vercel CLI should NOT upload when deploying.
+# Vercel builds the web app itself, so it only needs the source code.
+
+# Secrets: Vercel reads the EXPO_PUBLIC_* values from its own
+# Environment Variables settings instead of this file.
+.env
+.env.*
+
+# Lecture material (several GB). The app does not import it at build time.
+content/
+
+# The original app, kept locally for reference during the merger. Never deployed.
+old-reference/
+
+# Local build output and caches (Vercel makes its own).
+node_modules/
+dist/
+dist-verify/
+web-build/
+.expo/
+supabase/.temp/
+
+# Editor / tool folders
+.claude/
+.vscode/
+.kilo/
+.qodo/
+dist-mobile-fix/
