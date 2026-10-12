@@ -315,6 +315,14 @@ export async function addPostComment(postId: string, body: string) {
   await batch.commit();
 }
 
+/** Remove a comment (its writer, or the post's author, under the shared rules). */
+export async function deletePostComment(postId: string, commentId: string) {
+  const batch = writeBatch(db);
+  batch.delete(doc(db, 'posts', postId, 'replies', commentId));
+  batch.update(doc(db, 'posts', postId), { replyCount: increment(-1) });
+  await batch.commit();
+}
+
 /**
  * A report becomes a support ticket for the admins (the shared rules' review
  * channel): only the reporter and admins can read it.

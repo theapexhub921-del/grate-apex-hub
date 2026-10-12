@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
-import { useCallback, useRef } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, type TextInput as RNTextInput, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -10,6 +10,7 @@ import { PersonAvatar } from '@/components/social/profile-card';
 import { StumpCard } from '@/components/social/stump-card';
 import { Icon, type IconName } from '@/components/ui/icon';
 import { Interactive } from '@/components/ui/interactive';
+import { Sheet } from '@/components/ui/sheet';
 import { Text } from '@/components/ui/text';
 import { VerifiedBadge } from '@/components/ui/verified-badge';
 import { webStyle } from '@/components/ui/web';
@@ -44,11 +45,11 @@ function short(iso: string) {
  */
 export function PostDetail({
   post, comments, people, ownId, ownName, draft, onDraft, replyingTo, onReply, onCancelReply, onSend, busy,
-  onClose, onLike, onReshare, onShare, onReport, onReportComment, onDelete,
+  onClose, onLike, onReshare, onShare, onReport, onReportComment, onDeleteComment, onDelete,
 }: {
   post: CommunityPost | null; comments: readonly PostComment[]; people: readonly SocialPerson[]; ownId: string | null; ownName: string;
   draft: string; onDraft: (value: string) => void; replyingTo: string | null; onReply: (comment: PostComment) => void; onCancelReply: () => void; onSend: () => void; busy: boolean;
-  onClose: () => void; onLike: () => void; onReshare: () => void; onShare: () => void; onReport: () => void; onReportComment: (comment: PostComment) => void; onDelete: () => void;
+  onClose: () => void; onLike: () => void; onReshare: () => void; onShare: () => void; onReport: () => void; onReportComment: (comment: PostComment) => void; onDeleteComment: (comment: PostComment) => void; onDelete: () => void;
 }) {
   const styles = useThemedStyles(createStyles);
   const colors = useTheme();
@@ -56,6 +57,8 @@ export function PostDetail({
   const { width, height } = useWindowDimensions();
   const input = useRef<RNTextInput>(null);
   const focusInput = useCallback(() => input.current?.focus(), []);
+  // Long-press (or tap, on touch screens) a comment for its options, like a message.
+  const [menu, setMenu] = useState<PostComment | null>(null);
   if (!post) return null;
 
   const desktop = isDesktopWidth(width);
@@ -132,7 +135,7 @@ export function PostDetail({
         const canReply = Boolean(comment.author_name) && comment.author_id !== ownId;
         return (
           <SwipeToReply key={comment.id} onReply={() => { onReply(comment); focusInput(); }} enabled={canSwipe && canReply}>
-            <View style={styles.row}>
+            <Interactive onLongPress={() => setMenu(comment)} onPress={canSwipe ? () => setMenu(comment) : undefined} accessibilityLabel={`Comment by ${who}. Options`} style={styles.row}>
               <Interactive onPress={() => openProfile(comment.author_id)} accessibilityRole="link" accessibilityLabel={`View ${who}'s profile`}>
                 <PersonAvatar uid={comment.author_id} uri={person?.avatarUrl ?? null} name={who} size={32} />
               </Interactive>
@@ -147,7 +150,7 @@ export function PostDetail({
                   {comment.author_id !== ownId ? <Text style={styles.metaAction} onPress={() => onReportComment(comment)} accessibilityRole="button">Report</Text> : null}
                 </View>
               </View>
-            </View>
+            </Interactive>
           </SwipeToReply>
         );
       })}
@@ -181,7 +184,7 @@ export function PostDetail({
       ) : null}
       <View style={styles.composer}>
         <View style={styles.flex}>
-          <MentionInput ref={input} compact people={people} value={draft} onChangeText={onDraft} maxLength={2000} placeholder="Add a comment…" placeholderTextColor={colors.textTertiary} accessibilityLabel="Write a comment" style={styles.input} onSubmitEditing={onSend} />
+          <MentionInput ref={input} compact people={people} value={draft} onChangeText={onDraft} maxLength={1000} placeholder="Add a comment…" placeholderTextColor={colors.textTertiary} accessibilityLabel="Write a comment" style={styles.input} onSubmitEditing={onSend} />
         </View>
         <Interactive onPress={onSend} disabled={!draft.trim() || busy} accessibilityRole="button" accessibilityLabel="Post comment">
           <Text style={[styles.post, (!draft.trim() || busy) && styles.postOff]}>{busy ? 'Posting…' : 'Post'}</Text>
@@ -218,7 +221,28 @@ export function PostDetail({
           {side}
         </View>
       </View>
+      <Sheet visible={menu !== null} onClose={() => setMenu(null)} title="Comment" width={380}>
+        {menu ? (
+          <View style={styles.menu}>
+            {menu.author_name && menu.author_id !== ownId ? <MenuRow icon="reply" label="Reply" onPress={() => { onReply(menu); setMenu(null); focusInput(); }} /> : null}
+            <MenuRow icon="copy" label="Copy" onPress={() => { void globalThis.navigator?.clipboard?.writeText(menu.body).catch(() => {}); setMenu(null); }} />
+            {menu.author_id === ownId || post.author_id === ownId ? <MenuRow icon="trash" label="Delete comment" danger onPress={() => { onDeleteComment(menu); setMenu(null); }} /> : null}
+            {menu.author_id !== ownId ? <MenuRow icon="warning" label="Report" danger onPress={() => { onReportComment(menu); setMenu(null); }} /> : null}
+          </View>
+        ) : null}
+      </Sheet>
     </Modal>
+  );
+}
+
+function MenuRow({ icon, label, onPress, danger = false }: { icon: IconName; label: string; onPress: () => void; danger?: boolean }) {
+  const styles = useThemedStyles(createStyles);
+  const colors = useTheme();
+  return (
+    <Interactive onPress={onPress} accessibilityRole="button" accessibilityLabel={label} style={({ hovered }) => [styles.menuRow, hovered && styles.menuHover]}>
+      <Icon name={icon} size={19} color={danger ? colors.error : colors.text} />
+      <Text style={[styles.menuText, danger && { color: colors.error }]}>{label}</Text>
+    </Interactive>
   );
 }
 
@@ -235,6 +259,10 @@ function ActionIcon({ icon, label, onPress, active = false }: { icon: IconName; 
 function createStyles(colors: ThemeColors) {
   return StyleSheet.create({
     flex: { flex: 1, minWidth: 0 },
+    menu: { gap: 2 },
+    menuRow: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 12, paddingHorizontal: 8, borderRadius: Radius.md },
+    menuHover: { backgroundColor: colors.surfaceMuted },
+    menuText: { fontSize: 15, fontWeight: '600', color: colors.text },
     root: { flex: 1 },
     rootDesktop: { alignItems: 'center', justifyContent: 'center' },
     panel: { backgroundColor: colors.surfaceElevated, overflow: 'hidden', flexDirection: 'row' },
@@ -268,7 +296,7 @@ function createStyles(colors: ThemeColors) {
     likes: { fontSize: 14, fontWeight: '800', color: colors.text },
     replying: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginHorizontal: 14, marginBottom: 6, paddingHorizontal: 10, paddingVertical: 6, borderRadius: Radius.md, backgroundColor: colors.surfaceMuted },
     composer: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingVertical: 8, borderTopWidth: 1, borderTopColor: colors.divider },
-    input: { minHeight: 40, paddingVertical: 8, color: colors.text, fontSize: 14 },
+    input: { minHeight: 40, paddingVertical: 8, color: colors.text, fontSize: 14, borderWidth: 0, ...(webStyle({ outlineStyle: 'none', outlineWidth: 0 }) as object) },
     post: { fontSize: 14, fontWeight: '800', color: colors.primaryText },
     postOff: { opacity: 0.4 },
   });

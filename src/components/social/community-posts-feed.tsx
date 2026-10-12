@@ -18,7 +18,7 @@ import { ReportSheet, type ReportTarget } from '@/components/social/report-sheet
 import { StumpCard } from '@/components/social/stump-card';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Sheet } from '@/components/ui/sheet';
-import { addPostComment, createCommunityPost, deleteCommunityPost, listCommunityFeed, listPostsBy, listPostComments, togglePostLike, type CommunityMedia, type CommunityPost } from '@/data/community';
+import { addPostComment, deletePostComment, createCommunityPost, deleteCommunityPost, listCommunityFeed, listPostsBy, listPostComments, togglePostLike, type CommunityMedia, type CommunityPost } from '@/data/community';
 import { personName, type SocialPerson, useSocial } from '@/data/social';
 import { stumpQuestion } from '@/data/stumps';
 import { useDisplayName } from '@/data/user';
@@ -180,6 +180,18 @@ export function CommunityPostsFeed({ authorId, showComposer = true }: { authorId
   }
 
   // Report: opens the reasons sheet (components/social/report-sheet.tsx).
+  async function removeComment(comment: PostComment) {
+    if (!selectedPost) return;
+    const postId = selectedPost.id;
+    try {
+      await deletePostComment(postId, comment.id);
+      setComments((list) => list.filter((item) => item.id !== comment.id));
+      setPosts((all) => all.map((post) => post.id === postId ? { ...post, comments: Math.max(0, post.comments - 1) } : post));
+      setSelectedPost((post) => post?.id === postId ? { ...post, comments: Math.max(0, post.comments - 1) } : post);
+      setNotice('Comment deleted.');
+    } catch (caught) { setError(getErrorMessage(caught, 'Could not delete the comment.')); }
+  }
+
   // Reply to a comment the Instagram way: the answer starts with their @username.
   function replyTo(comment: PostComment) {
     const handle = comment.author_name?.trim();
@@ -265,6 +277,7 @@ export function CommunityPostsFeed({ authorId, showComposer = true }: { authorId
         onShare={() => { if (selectedPost) void sharePost(selectedPost); }}
         onReport={() => { if (selectedPost) report('post', selectedPost.id, `post by ${selectedPost.author_name ? `@${selectedPost.author_name}` : 'a learner'}`); }}
         onReportComment={(comment) => report('comment', comment.id, `comment by ${comment.author_name ? `@${comment.author_name}` : 'a learner'}`)}
+        onDeleteComment={(comment) => void removeComment(comment)}
         onDelete={() => { if (selectedPost) confirmDeletePost(selectedPost); }}
       />
     </View>

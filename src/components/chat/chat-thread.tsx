@@ -636,7 +636,7 @@ function createStyles(colors: ThemeColors) {
     composer: { flexDirection: 'row', alignItems: 'center', gap: 6, margin: 12, paddingHorizontal: 8, paddingVertical: 6, borderRadius: 999, borderWidth: 1, borderColor: colors.borderStrong, backgroundColor: colors.surfaceSunken },
     tool: { padding: 8, borderRadius: 999 },
     emojiButton: { fontSize: 21 },
-    input: { flex: 1, minHeight: 38, maxHeight: 120, paddingVertical: 8, paddingHorizontal: 6, color: colors.text, fontSize: 14.5, textAlignVertical: 'center' },
+    input: { flex: 1, minHeight: 38, maxHeight: 120, paddingVertical: 8, paddingHorizontal: 6, color: colors.text, fontSize: 14.5, textAlignVertical: 'center', borderWidth: 0, ...(webStyle({ outlineStyle: 'none', outlineWidth: 0 }) as object) },
     sendButton: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primary },
     recDot: { width: 10, height: 10, borderRadius: 5, marginLeft: 8, backgroundColor: colors.error },
     recText: { flex: 1, fontSize: 14, fontWeight: '700', color: colors.text },

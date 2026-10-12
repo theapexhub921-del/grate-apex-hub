@@ -87,3 +87,34 @@ export function useVerifiedTier(uid: string | null | undefined): VerifiedTier | 
   }, [uid]);
   return uid && verified?.uid === uid ? verified.value : null;
 }
+
+export type SuggestedAccount = { uid: string; username: string; displayName: string | null; avatarUrl: string | null; bio: string | null };
+
+/** The gold-tick accounts, for "Suggested for you" after onboarding (not including you). */
+export async function loadGoldAccounts(): Promise<SuggestedAccount[]> {
+  await auth.authStateReady();
+  const me = auth.currentUser?.uid;
+  if (!me) return [];
+  const spellings = usernameSpellings(VERIFIED_USERNAMES);
+  const batches = Array.from({ length: Math.ceil(spellings.length / 30) }, (_, index) => spellings.slice(index * 30, index * 30 + 30));
+  const snaps = await Promise.all(batches.map((batch) => getDocs(query(collection(db, 'users'), where('username', 'in', batch))).catch(() => null)));
+  const seen = new Set<string>();
+  const accounts: SuggestedAccount[] = [];
+  for (const snap of snaps) {
+    for (const item of snap?.docs ?? []) {
+      const data = item.data();
+      if (item.id === me || seen.has(item.id) || verifiedTierOf(data.username as string) !== 'gold') continue;
+      seen.add(item.id);
+      accounts.push({
+        uid: item.id,
+        username: String(data.username),
+        displayName: typeof data.displayName === 'string' && data.displayName.trim() ? data.displayName.trim() : null,
+        avatarUrl: data.avatar_url || data.photo || null,
+        bio: typeof data.bio === 'string' && data.bio.trim() ? data.bio.trim() : null,
+      });
+    }
+  }
+  // The owner's order (the list above).
+  const order = (name: string) => VERIFIED_USERNAMES.indexOf(name.toLowerCase());
+  return accounts.sort((a, b) => order(a.username) - order(b.username));
+}
