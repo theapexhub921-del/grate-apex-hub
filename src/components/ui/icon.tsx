@@ -331,6 +331,24 @@ const ICONS = {
       <Rect x={13.6} y={5.6} width={3.6} height={12.8} rx={1} {...stroke(color, sw)} fill={filled ? color : 'none'} />
     </>
   ),
+  reply: ({ color, sw }) => <Path d="M9.5 7 4.5 12l5 5M5 12h9.5a5 5 0 0 1 5 5v1" {...stroke(color, sw)} />,
+  forward: ({ color, sw }) => <Path d="m14.5 7 5 5-5 5M19 12H9.5a5 5 0 0 0-5 5v1" {...stroke(color, sw)} />,
+  copy: ({ color, sw }) => (
+    <>
+      <Rect x={8.5} y={8.5} width={11} height={11} rx={2.2} {...stroke(color, sw)} />
+      <Path d="M15.5 8.5V6.2a1.7 1.7 0 0 0-1.7-1.7H6.2a1.7 1.7 0 0 0-1.7 1.7v7.6a1.7 1.7 0 0 0 1.7 1.7h2.3" {...stroke(color, sw)} />
+    </>
+  ),
+  star: ({ color, filled, sw }) => <Path d="m12 3.8 2.5 5.1 5.6.8-4 3.9 1 5.6-5.1-2.7-5.1 2.7 1-5.6-4-3.9 5.6-.8z" {...stroke(color, sw)} fill={filled ? color : 'none'} />,
+  pin: ({ color, filled, sw }) => <Path d="M9 4.5h6l-1 5 3 3v1.5H7V12.5l3-3zM12 14v6" {...stroke(color, sw)} fill={filled ? color : 'none'} />,
+  attach: ({ color, sw }) => <Path d="m19.5 11.5-7.4 7.4a4.6 4.6 0 0 1-6.5-6.5l7.8-7.8a3 3 0 0 1 4.3 4.3l-7.6 7.6a1.5 1.5 0 0 1-2.1-2.1l7-7" {...stroke(color, sw)} />,
+  more: ({ color }) => (
+    <>
+      <Circle cx={6} cy={12} r={1.7} fill={color} />
+      <Circle cx={12} cy={12} r={1.7} fill={color} />
+      <Circle cx={18} cy={12} r={1.7} fill={color} />
+    </>
+  ),
   send: ({ color, filled, sw }) => <Path d="M4 11.6 20 4.4l-5.6 15.4-3-6.6z" {...stroke(color, sw)} fill={filled ? color : 'none'} />,
 } satisfies Record<string, Draw>;
 

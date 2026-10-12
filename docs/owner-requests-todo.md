@@ -10,3 +10,9 @@ Continue these in order; deploy (Vercel production + GitHub master, merge/legacy
 6. Check the Study page sections on phones and the "Your progress" row heights.
 
 Owner-dependent (unchanged): paste `docs/firestore-rules-to-paste.txt` in the Firebase console; read-only admin key for the legacy progress repair (`docs/legacy-progress-repair-plan.md`); account deletion and voice calls on hold.
+
+## Messaging like WhatsApp (owner request 2026-10-12)
+Phase 1 (chats): reply (swipe to reply), reactions with who reacted, forward, copy, delete for me / for everyone, star, pin, photos and documents, report, typing indicator, search in chat.
+Phase 2 (groups): WhatsApp-style group creation (name, picture, description, admins, add/remove members, invite links, announcements-only), group chats with the same message features, reply privately, @mentions.
+Phase 3: comments with replies and reactions; edit sent messages (needs a rules change: chats/{cid}/messages update of `text`); broadcast lists; polls; chat list search, pin/archive/mute chats, unread counts; voice note speed 1×/1.5×/2× and waveform; stickers/GIFs; formatting (*bold*, _italic_, ~strike~, ```mono```); stories replies; notification controls per chat; disappearing messages; calls stay on hold (owner).
+Past question bank from content/HB1 first semester: text extracted to scratchpad (BIOL CHEM nucleic acids MCQs has no answer key in the file; check each file for answers before adding).

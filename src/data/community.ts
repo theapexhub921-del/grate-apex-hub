@@ -97,6 +97,12 @@ export type CommunityMessage = {
   deleted_at?: string | null;
   /** A voice note (the original app's `audio`: a Cloudinary URL and its length in seconds). */
   audio?: { url: string; seconds: number } | null;
+  /** WhatsApp-style extras (data/chat.ts). */
+  reply?: { mid: string; from: string; text: string } | null;
+  reactions?: Record<string, string>;
+  media?: { t: 'image' | 'video'; url: string; w?: number; h?: number }[];
+  doc?: { url: string; name: string } | null;
+  fwd?: boolean;
 };
 
 /** One of my chats, for the recent-messages list. */
@@ -545,7 +551,14 @@ export async function listConversationMessages(conversationId: string): Promise<
   return snap.docs.map((item) => {
     const d = item.data();
     const audio = d.audio && typeof d.audio.url === 'string' ? { url: d.audio.url as string, seconds: Number(d.audio.d) || 0 } : null;
-    return { id: item.id, conversation_id: conversationId, sender_id: String(d.from ?? ''), body: String(d.text ?? ''), created_at: iso(d.createdAt), audio };
+    return {
+      id: item.id, conversation_id: conversationId, sender_id: String(d.from ?? ''), body: String(d.text ?? ''), created_at: iso(d.createdAt), audio,
+      reply: d.reply && typeof d.reply === 'object' ? { mid: String(d.reply.mid ?? ''), from: String(d.reply.from ?? ''), text: String(d.reply.text ?? '') } : null,
+      reactions: d.reactions && typeof d.reactions === 'object' ? (d.reactions as Record<string, string>) : {},
+      media: cleanMedia(d.media),
+      doc: d.doc && typeof d.doc.url === 'string' && safeUrl(d.doc.url) ? { url: d.doc.url as string, name: String(d.doc.name ?? 'Document') } : null,
+      fwd: d.fwd === true,
+    };
   });
 }
 
@@ -681,6 +694,8 @@ export type ConversationMeta = {
   /** Shown only when they share it (Settings → Privacy). */
   otherOnline: boolean;
   otherLastSeen: number | null;
+  /** When the other person last typed (ms), for “typing…”. */
+  otherTyping: number | null;
 };
 
 const millisOf = (value: unknown) => {
@@ -704,6 +719,7 @@ export async function loadConversationMeta(conversationId: string, mine: { readR
     // Online and last seen are shown only to learners who share their own.
     otherOnline: mine.shareOnlineStatus && other.isOnline === true && lastSeen !== null && Date.now() - lastSeen < 2 * 60_000,
     otherLastSeen: mine.shareOnlineStatus ? lastSeen : null,
+    otherTyping: otherId ? millisOf((chat.typing ?? {})[otherId]) : null,
   };
 }
 
