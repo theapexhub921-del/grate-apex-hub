@@ -16,3 +16,15 @@ Phase 1 (chats): reply (swipe to reply), reactions with who reacted, forward, co
 Phase 2 (groups): WhatsApp-style group creation (name, picture, description, admins, add/remove members, invite links, announcements-only), group chats with the same message features, reply privately, @mentions.
 Phase 3: comments with replies and reactions; edit sent messages (needs a rules change: chats/{cid}/messages update of `text`); broadcast lists; polls; chat list search, pin/archive/mute chats, unread counts; voice note speed 1×/1.5×/2× and waveform; stickers/GIFs; formatting (*bold*, _italic_, ~strike~, ```mono```); stories replies; notification controls per chat; disappearing messages; calls stay on hold (owner).
 Past question bank from content/HB1 first semester: text extracted to scratchpad (BIOL CHEM nucleic acids MCQs has no answer key in the file; check each file for answers before adding).
+
+## Update 2026-10-12 (evening)
+
+Done and live: group chats, swipe to reply (messages and comments, phones), weekly XP in leagues, seen stories (grey ring, unviewed first), phone-friendly "Your learning this week", Instagram-style opened posts (phone and web).
+
+Still to do:
+- Messaging Phase 3: edit messages (needs a rules change), polls, stickers/GIFs, formatting, voice-note speed and waveform, chat pin/archive/mute and unread counts, group admins and picture (rules), story replies, per-chat notification settings. Calls stay on hold.
+- Comment likes and threaded "View replies" (comments only support @replies for now; real threads need a rules change).
+- Past question bank from content/HB1 first semester (only questions with given answers).
+- Explore feature guide: add messaging, groups, friend streaks, stories, the new post view.
+- Legacy progress repair: waiting for the owner's read-only admin key.
+- Lessons and slide images (the other session is working on these).
