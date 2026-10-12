@@ -1,4 +1,4 @@
-import { type Href, router } from 'expo-router';
+import { router } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Text } from '@/components/ui/text';
@@ -13,6 +13,9 @@ import { pickQuestion, qotdDay, readCloudAnswer, readLocalAnswer, readTally, sav
 import { type Answer, isAnswerCorrect } from '@/data/questions';
 import { useThemedStyles } from '@/hooks/use-theme';
 import { routes } from '@/lib/routes';
+import { setPendingXpReward } from '@/components/xp-toast';
+import { XP_RULES } from '@/data/learning/xp-rules';
+import { awardXp } from '@/data/progress';
 
 // Question of the Day (ported from the older Grate Apex Hub site).
 // One single-answer question per day from the published question banks —
@@ -30,6 +33,7 @@ export function QuestionOfTheDay() {
   const [revealed, setRevealed] = useState(false);
   const [status, setStatus] = useState<Status>('loading');
   const [tally, setTally] = useState<Tally | null>(null);
+  const [earned, setEarned] = useState<number | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -70,8 +74,16 @@ export function QuestionOfTheDay() {
   async function check() {
     if (answer === undefined || typeof answer !== 'number' || !question) return;
     setRevealed(true);
-    const result = await saveAnswer(day, question.id, answer, isAnswerCorrect(question, answer));
+    const correct = isAnswerCorrect(question, answer);
+    const result = await saveAnswer(day, question.id, answer, correct);
     setStatus(statusFor(result));
+    // XP once a day (the award key is the day).
+    const amount = correct ? XP_RULES.questionOfTheDay.correct : XP_RULES.questionOfTheDay.answered;
+    const xp = await awardXp({ sourceType: 'practice', sourceId: `qotd:${day}`, amount, label: 'Question of the Day' });
+    if (xp > 0) {
+      setEarned(xp);
+      setPendingXpReward({ amount: xp, message: correct ? 'Question of the Day · correct' : 'Question of the Day' });
+    }
     readTally(day).then(setTally).catch(() => undefined);
   }
 
@@ -81,7 +93,7 @@ export function QuestionOfTheDay() {
     <Card style={styles.card}>
       <View style={styles.header}>
         <Text style={styles.title}>Question of the Day</Text>
-        <Pill label="Practice · not scored" />
+        <Pill label={`+${XP_RULES.questionOfTheDay.correct} XP`} tone="gold" />
       </View>
       {entry ? <Text style={styles.source}>{entry.topic.title} · {entry.lesson.title}</Text> : null}
       {status === 'loading' ? <Text style={styles.source}>Checking today’s answer…</Text> : null}
@@ -91,15 +103,15 @@ export function QuestionOfTheDay() {
           {status === 'elsewhere' ? (
             <Text style={styles.result}>You already answered today’s question — on another device or in the original app. Come back tomorrow.</Text>
           ) : (
-            <Text style={styles.result}>{isAnswerCorrect(question, answer) ? 'Correct — nice start to the day.' : 'Not this time — see why above.'}</Text>
+            <Text style={styles.result}>{isAnswerCorrect(question, answer) ? 'Correct — nice start to the day.' : 'Not this time — see why above.'}{earned ? ` +${earned} XP` : ''}</Text>
           )}
           {status === 'not-saved' ? <Text style={styles.note}>Your answer is saved on this device only. It will count once you’re back online.</Text> : null}
           {status === 'local' ? <Text style={styles.note}>Sign in to add your answer to today’s class results.</Text> : null}
           {share ? <Text style={styles.note}>{share}</Text> : null}
           {entry ? (
             <View style={styles.links}>
-              <Button label="Open the lesson" size="sm" variant="secondary" onPress={() => router.push(routes.lesson(entry.lesson.id, { layer: 'read' }))} />
-              <Button label="Flashcards" size="sm" variant="secondary" onPress={() => router.push(`/learn/flashcards?lesson=${encodeURIComponent(entry.lesson.id)}` as Href)} />
+              <Button label="Open the lesson" size="sm" variant="secondary" onPress={() => router.push(routes.legacyLesson(entry.lesson.id))} />
+              <Button label="Flashcards" size="sm" variant="secondary" onPress={() => router.push(routes.legacyLesson(entry.lesson.id, undefined, 'cards'))} />
             </View>
           ) : null}
         </View>

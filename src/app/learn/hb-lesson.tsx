@@ -41,7 +41,7 @@ import { param, routes } from '@/lib/routes';
 export default function LegacyLessonScreen() {
   const styles = useThemedStyles(createStyles);
   const colors = useTheme();
-  const params = useLocalSearchParams<{ lesson?: string | string[]; section?: string | string[] }>();
+  const params = useLocalSearchParams<{ lesson?: string | string[]; section?: string | string[]; tab?: string | string[] }>();
   const lessonId = param(params.lesson);
   const { width } = useWindowDimensions();
   const wide = width >= 1000;
@@ -54,7 +54,7 @@ export default function LegacyLessonScreen() {
   const [error, setError] = useState<string | null>(null);
   const [term, setTerm] = useState<{ word: string; meaning: string } | null>(null);
   const [finished, setFinished] = useState<{ xp: number } | null>(null);
-  const [tab, setTab] = useState<ToolTab>('read');
+  const [tab, setTab] = useState<ToolTab>(() => (param(params.tab) === 'cards' ? 'cards' : param(params.tab) === 'glossary' ? 'glossary' : 'read'));
   // The lesson's study tools (data/flashcards.ts): its key words as a glossary and flashcards.
   const glossary = useMemo(() => (body ? glossaryOf(body.sections) : []), [body]);
   const cards = useMemo(() => (lessonId ? cardsFor(lessonId, glossary) : []), [lessonId, glossary]);

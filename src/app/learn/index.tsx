@@ -170,12 +170,85 @@ export default function LearnScreen() {
     </View>
   );
 
-  const side = (
-    <View style={styles.column}>
+  // Study tools (also under the course list on wide screens, so Learn uses the space under the courses).
+  const studyToolsLeft = (
+    <View style={styles.toolColumn}>
+        <LearningWeekCard />
+        <Card style={styles.reviewCard}>
+          <View style={styles.reviewHeader}>
+            <View style={styles.reviewIcon}>
+              <Icon name="reinforce" size={18} color={colors.primaryText} />
+            </View>
+            <Text style={styles.kicker}>SPACED REVIEW</Text>
+          </View>
+          <Text style={styles.reviewTitle}>
+            {overall.due > 0 ? `${overall.due} concept${overall.due === 1 ? '' : 's'} due` : 'Nothing due right now'}
+          </Text>
+          <Text style={styles.reviewText}>
+            {overall.counts.tracked > 0
+              ? 'Review brings back what you are most likely to forget — weak and due concepts first.'
+              : 'Complete a lesson and its concepts will start coming back for review.'}
+          </Text>
+          {overall.counts.tracked > 0 ? <MemoryDistribution counts={overall.counts} /> : null}
+          <Button
+            label={overall.due > 0 ? 'Review now' : 'Practise anyway'}
+            variant={overall.due > 0 ? 'primary' : 'secondary'}
+            onPress={() => router.push(routes.review({ focus: overall.due > 0 ? 'due' : 'mixed' }))}
+            disabled={overall.counts.tracked === 0}
+            fullWidth
+          />
+        </Card>
+    </View>
+  );
+  const studyToolsRight = (
+    <View style={styles.toolColumn}>
+        <Card style={styles.reviewCard}>
+          <View style={styles.reviewHeader}>
+            <View style={styles.reviewIcon}>
+              <Icon name="edit" size={18} color={colors.primaryText} />
+            </View>
+            <Text style={styles.kicker}>CUSTOM QUIZ</Text>
+          </View>
+          <Text style={styles.reviewTitle}>Build your own quiz</Text>
+          <Text style={styles.reviewText}>Pick the lessons, how many questions, feedback after each or at the end, and an optional timer for a drill.</Text>
+          <Button label="Create a custom quiz" variant="secondary" fullWidth onPress={() => router.push(routes.customQuizBuilder())} />
+        </Card>
+        <Card style={styles.reviewCard}>
+          <View style={styles.reviewHeader}>
+            <View style={styles.reviewIcon}>
+              <Icon name="calendar" size={18} color={colors.primaryText} />
+            </View>
+            <Text style={styles.kicker}>OPTIONAL PLANNING</Text>
+          </View>
+          <Text style={styles.reviewTitle}>Plan your study week</Text>
+          <Text style={styles.reviewText}>Choose topics for a personal lesson path, set a study goal or add recurring blocks to your timetable.</Text>
+          <Button label="Open study planner" variant="secondary" fullWidth onPress={() => router.push('/learn/planner' as never)} />
+        </Card>
+        <Card style={styles.reviewCard} tone="outline">
+          <View style={styles.reviewHeader}>
+            <View style={styles.reviewIcon}>
+              <Icon name="book" size={18} color={colors.primaryText} />
+            </View>
+            <Text style={styles.kicker}>QUESTION BANK</Text>
+            <Pill label="Coming soon" />
+          </View>
+          <Text style={styles.reviewTitle}>Past questions</Text>
+          <Text style={styles.reviewText}>A past-question bank is planned for Study. Materials will be added when they are ready to share.</Text>
+        </Card>
+        {actions.length > 1 ? (
+          <>
+            <Text style={styles.kicker}>ALSO SUGGESTED</Text>
+            <NextActionList actions={actions.slice(1, 4)} />
+          </>
+        ) : null}
+    </View>
+  );
+
+  const sideTop = (
+    <>
       <QuestionOfTheDay />
       <RankProgressCard lifetimeXp={progress.xp} />
       <PersonalGoalsCard />
-      <LearningWeekCard />
       <Card style={styles.calendarCard}>
         <SectionHeader
           title="Your week"
@@ -184,69 +257,14 @@ export default function LearnScreen() {
         />
         <ReviewCalendar memory={memory} attempts={attempts} now={now} />
       </Card>
-      <Card style={styles.reviewCard}>
-        <View style={styles.reviewHeader}>
-          <View style={styles.reviewIcon}>
-            <Icon name="reinforce" size={18} color={colors.primaryText} />
-          </View>
-          <Text style={styles.kicker}>SPACED REVIEW</Text>
-        </View>
-        <Text style={styles.reviewTitle}>
-          {overall.due > 0 ? `${overall.due} concept${overall.due === 1 ? '' : 's'} due` : 'Nothing due right now'}
-        </Text>
-        <Text style={styles.reviewText}>
-          {overall.counts.tracked > 0
-            ? 'Review brings back what you are most likely to forget — weak and due concepts first.'
-            : 'Complete a lesson and its concepts will start coming back for review.'}
-        </Text>
-        {overall.counts.tracked > 0 ? <MemoryDistribution counts={overall.counts} /> : null}
-        <Button
-          label={overall.due > 0 ? 'Review now' : 'Practise anyway'}
-          variant={overall.due > 0 ? 'primary' : 'secondary'}
-          onPress={() => router.push(routes.review({ focus: overall.due > 0 ? 'due' : 'mixed' }))}
-          disabled={overall.counts.tracked === 0}
-          fullWidth
-        />
-      </Card>
-      <Card style={styles.reviewCard}>
-        <View style={styles.reviewHeader}>
-          <View style={styles.reviewIcon}>
-            <Icon name="edit" size={18} color={colors.primaryText} />
-          </View>
-          <Text style={styles.kicker}>CUSTOM QUIZ</Text>
-        </View>
-        <Text style={styles.reviewTitle}>Build your own quiz</Text>
-        <Text style={styles.reviewText}>Pick the lessons, how many questions, feedback after each or at the end, and an optional timer for a drill.</Text>
-        <Button label="Create a custom quiz" variant="secondary" fullWidth onPress={() => router.push(routes.customQuizBuilder())} />
-      </Card>
-      <Card style={styles.reviewCard} tone="outline">
-        <View style={styles.reviewHeader}>
-          <View style={styles.reviewIcon}>
-            <Icon name="book" size={18} color={colors.primaryText} />
-          </View>
-          <Text style={styles.kicker}>QUESTION BANK</Text>
-          <Pill label="Coming soon" />
-        </View>
-        <Text style={styles.reviewTitle}>Past questions</Text>
-        <Text style={styles.reviewText}>A past-question bank is planned for Study. Materials will be added when they are ready to share.</Text>
-      </Card>
-      <Card style={styles.reviewCard}>
-        <View style={styles.reviewHeader}>
-          <View style={styles.reviewIcon}>
-            <Icon name="calendar" size={18} color={colors.primaryText} />
-          </View>
-          <Text style={styles.kicker}>OPTIONAL PLANNING</Text>
-        </View>
-        <Text style={styles.reviewTitle}>Plan your study week</Text>
-        <Text style={styles.reviewText}>Choose topics for a personal lesson path, set a study goal or add recurring blocks to your timetable.</Text>
-        <Button label="Open study planner" variant="secondary" fullWidth onPress={() => router.push('/learn/planner' as never)} />
-      </Card>
-      {actions.length > 1 ? (
-        <>
-          <Text style={styles.kicker}>ALSO SUGGESTED</Text>
-          <NextActionList actions={actions.slice(1, 4)} />
-        </>
-      ) : null}
+    </>
+  );
+
+  const side = (
+    <View style={styles.column}>
+      {sideTop}
+      {studyToolsLeft}
+      {studyToolsRight}
     </View>
   );
 
@@ -328,7 +346,19 @@ export default function LearnScreen() {
         <ClassAccessCard target={blockedSelection} current={requiredLevel?.selection ?? ownSelection} lessonsComplete={requiredLevel?.completed ?? currentCompletion.completed} lessonsTotal={requiredLevel?.total ?? currentCompletion.total} trialUsed={trial.used} trialExpiresAt={trial.active ? trial.expiresAt : undefined} onStartTrial={() => { if (blockedSelection) { setRequestedFuture(null); router.replace(routes.learnEnvironment(blockedSelection)); } }} onBack={() => { setRequestedFuture(null); showEnvironment(ownSelection); }} />
       ) : viewing && legacyCourses.length > 0 ? (
         // HB1 (the original app's courses) and HB2 Semester 1 (this app's lessons), in the original study style.
-        <Columns main={<LegacyCourseList courses={legacyCourses} selection={viewing} />} side={side} sideWidth={360} />
+        <Columns
+          main={
+            <View style={styles.column}>
+              <LegacyCourseList courses={legacyCourses} selection={viewing} />
+              <View style={styles.toolGrid}>
+                {studyToolsLeft}
+                {studyToolsRight}
+              </View>
+            </View>
+          }
+          side={<View style={styles.column}>{sideTop}</View>}
+          sideWidth={360}
+        />
       ) : offeredSubjects.length > 0 ? (
         <Columns main={main} side={side} sideWidth={360} />
       ) : (
@@ -352,6 +382,8 @@ function createStyles(colors: ThemeColors) {
     tutorEyebrow: { ...Type.overline, color: colors.primaryText },
     tutorTitle: { ...Type.headline, color: colors.text },
     section: { marginTop: 14, marginBottom: 0 },
+    toolGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 16, alignItems: 'flex-start' },
+    toolColumn: { flexGrow: 1, flexBasis: 320, minWidth: 0, gap: 16 },
     calendarCard: { gap: 12 },
     calendarHeading: { marginBottom: 0 },
     welcomeHeader: { marginBottom: 0 },

@@ -23,6 +23,8 @@ export const XP_RULES = {
   review: { base: 15, perRecalledDue: 2, max: 50 },
   apex: { completion: 20, bonusAt90: 30, bonusAt75: 20, bonusAt50: 10 },
   milestones: { topicCompleted: 50, conceptMastered: 5 },
+  // Question of the Day: once a day, more for a correct answer.
+  questionOfTheDay: { correct: 15, answered: 5 },
   passPercent: 70, // a lesson quiz "passed" (also the mastery-check bar is 80)
   masteryCheckPercent: 80,
 } as const;

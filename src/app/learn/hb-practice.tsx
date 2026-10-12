@@ -3,6 +3,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { BackLink } from '@/components/learning/nav-bits';
+import { Arena, Countdown, Rule } from '@/components/learning/apex-arena';
+import { ApexWordmark } from '@/components/motion/apex-wordmark';
 import { type FeedbackMode, QuestionSession, type SessionResult } from '@/components/learning/question-session';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/interactive';
@@ -46,6 +48,17 @@ export default function LegacyPracticeScreen() {
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<FeedbackMode>(apex ? 'instant' : 'instant');
   const [result, setResult] = useState<{ correct: number; total: number; xp: number } | null>(null);
+  // Apex Challenge: the arena intro, then 3 · 2 · 1 · GO, then the run (as on the Apex Challenge screen).
+  const [apexPhase, setApexPhase] = useState<'intro' | 'countdown' | 'run'>(apex ? 'intro' : 'run');
+  const [count, setCount] = useState<number>(APEX.countdownSeconds);
+  useEffect(() => {
+    if (apexPhase !== 'countdown') return;
+    const timer = setTimeout(() => {
+      if (count <= 1) setApexPhase('run');
+      else setCount(count - 1);
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [apexPhase, count]);
   const seed = useMemo(() => `${course?.id}:${lessonId ?? setId ?? 'all'}:${apex ? 'apex' : 'practice'}:${attempt}`, [course?.id, lessonId, setId, apex, attempt]);
 
   useEffect(() => {
@@ -102,6 +115,33 @@ export default function LegacyPracticeScreen() {
   if (!course) return <ErrorScreen title="Course not found" message="Open practice from a course in Study." primary={{ label: 'Back to Study', onPress: () => router.replace(routes.learn()) }} />;
   if (error) return <ErrorScreen title="Practice unavailable" message={error} primary={{ label: 'Back to the course', onPress: () => router.replace(routes.legacyCourse(course.id)) }} />;
   if (!questions) return <LoadingState label="Preparing your questions…" />;
+
+  if (apex && apexPhase === 'intro' && !result) {
+    return (
+      <Arena>
+        <Text style={styles.apexKicker}>APEX CHALLENGE · {course.name.toUpperCase()}</Text>
+        <ApexWordmark size={76} />
+        <Text style={styles.apexLead}>The whole course. {APEX.secondsPerQuestion} seconds a question. No second chances.</Text>
+        <View style={styles.apexRules}>
+          <Rule text={`${questions.length} questions drawn from across ${course.name}`} />
+          <Rule text={`${APEX.secondsPerQuestion} seconds per question — time out and it counts as missed`} />
+          <Rule text="Multiple choice, typing, true or false and matching, mixed" />
+          <Rule text="A mastery and endurance event, separate from lesson practice" />
+        </View>
+        <View style={styles.apexActions}>
+          <Button label="Enter the arena" variant="apex" size="lg" trailing="⚡" onPress={() => { setCount(APEX.countdownSeconds); setApexPhase('countdown'); }} />
+          <Button label="Not now" variant="ghost" onPress={() => router.back()} />
+        </View>
+      </Arena>
+    );
+  }
+  if (apex && apexPhase === 'countdown' && !result) {
+    return (
+      <Arena intensity="high">
+        <Countdown count={count} total={APEX.countdownSeconds} />
+      </Arena>
+    );
+  }
 
   async function submit(session: SessionResult) {
     const correct = questions!.filter((question) => isAnswerCorrect(question, session.answers[question.id])).length;
@@ -170,6 +210,10 @@ export default function LegacyPracticeScreen() {
 function createStyles(colors: ThemeColors) {
   return StyleSheet.create({
     header: { gap: 4, marginBottom: 10 },
+    apexKicker: { ...Type.overline, letterSpacing: 1.6, color: '#FDC00A', textAlign: 'center' },
+    apexLead: { fontSize: 18, fontWeight: '700', textAlign: 'center', lineHeight: 26, color: colors.apexText },
+    apexRules: { gap: 12, padding: 18, borderRadius: 18, borderWidth: 1, borderColor: 'rgba(253,192,10,0.28)', backgroundColor: 'rgba(10,20,60,0.55)' },
+    apexActions: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 10, marginTop: 8 },
     title: { ...Type.title2, color: colors.text },
     sub: { fontSize: 13, color: colors.textSecondary },
     result: { alignItems: 'center', gap: 10, padding: 28, marginTop: 20 },

@@ -1,29 +1,17 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { StyleSheet, View } from 'react-native';
 import { Text } from '@/components/ui/text';
-import Animated, {
-  cancelAnimation,
-  Easing,
-  useAnimatedStyle,
-  useReducedMotion,
-  useSharedValue,
-  withRepeat,
-  withSpring,
-  withTiming,
-} from 'react-native-reanimated';
-import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
+import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 
 import { ApexWordmark } from '@/components/motion/apex-wordmark';
+import { Arena, Countdown, Rule } from '@/components/learning/apex-arena';
 import { QuestionCard } from '@/components/question-card';
-import { useTabBarScroll } from '@/components/tab-bar-visibility';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
 import { Interactive } from '@/components/ui/interactive';
-import { ProgressRing } from '@/components/ui/progress-ring';
 import { isWeb, webStyle } from '@/components/ui/web';
 import { XpToast, type XpReward } from '@/components/xp-toast';
-import { SPRING } from '@/constants/motion';
 import { Type } from '@/constants/theme';
 import { courseCatalog, getCourseInfo, getCourseTopics, getTopicQuestions } from '@/data/curriculum';
 import { logSessionStart, submitQuiz, type QuizOutcome } from '@/data/learning/actions';
@@ -349,96 +337,6 @@ function ApexArena({ courseId, available }: { courseId?: string; available: stri
       </View>
       <XpToast reward={xpReward} onHide={() => setXpReward(null)} />
     </Arena>
-  );
-}
-
-// The arena: a deep stage lit from above by gold rays, with a slow pulse
-// behind the content. Deliberately unlike a lesson quiz. `intensity`
-// dims the light while questions are on screen, so reading stays easy.
-function Arena({ children, scroll = true, intensity = 'high' }: { children: ReactNode; scroll?: boolean; intensity?: 'high' | 'low' }) {
-  const colors = useTheme();
-  const tabBarScroll = useTabBarScroll();
-  const inner = <View style={styles.inner}>{children}</View>;
-  return (
-    <View style={[styles.arena, { backgroundColor: colors.apexBackground }]}>
-      <ArenaLight intensity={intensity} />
-      {scroll ? <ScrollView {...tabBarScroll} contentContainerStyle={styles.scroll}>{inner}</ScrollView> : <View style={styles.scroll}>{inner}</View>}
-    </View>
-  );
-}
-
-function ArenaLight({ intensity }: { intensity: 'high' | 'low' }) {
-  const reduceMotion = useReducedMotion();
-  const pulse = useSharedValue(0);
-  useEffect(() => {
-    if (reduceMotion) return;
-    pulse.value = withRepeat(withTiming(1, { duration: 2600, easing: Easing.inOut(Easing.sin) }), -1, true);
-  }, [pulse, reduceMotion]);
-  const ring = useAnimatedStyle(() => ({
-    opacity: (intensity === 'high' ? 0.5 : 0.18) * (0.55 + pulse.value * 0.45),
-    transform: [{ scale: 0.92 + pulse.value * 0.1 }],
-  }));
-  const strength = intensity === 'high' ? 1 : 0.45;
-  return (
-    <View style={[StyleSheet.absoluteFill, styles.noTouch]}>
-      <Svg style={StyleSheet.absoluteFill} width="100%" height="100%">
-        <Defs>
-          <RadialGradient id="apexTop" cx="50%" cy="-10%" rx="70%" ry="60%" fx="50%" fy="-10%">
-            <Stop offset="0" stopColor="#FDC00A" stopOpacity={0.22 * strength} />
-            <Stop offset="1" stopColor="#FDC00A" stopOpacity={0} />
-          </RadialGradient>
-          <RadialGradient id="apexBlue" cx="50%" cy="45%" rx="75%" ry="60%" fx="50%" fy="45%">
-            <Stop offset="0" stopColor="#1C3FA8" stopOpacity={0.55 * strength} />
-            <Stop offset="1" stopColor="#1C3FA8" stopOpacity={0} />
-          </RadialGradient>
-          <RadialGradient id="apexEdge" cx="50%" cy="50%" rx="85%" ry="75%" fx="50%" fy="50%">
-            <Stop offset="0.55" stopColor="#000000" stopOpacity={0} />
-            <Stop offset="1" stopColor="#000000" stopOpacity={0.6} />
-          </RadialGradient>
-        </Defs>
-        <Rect x="0" y="0" width="100%" height="100%" fill="url(#apexBlue)" />
-        <Rect x="0" y="0" width="100%" height="100%" fill="url(#apexTop)" />
-        <Rect x="0" y="0" width="100%" height="100%" fill="url(#apexEdge)" />
-      </Svg>
-      {isWeb ? <View style={[StyleSheet.absoluteFill, styles.rays, { opacity: strength }]} /> : null}
-      <View style={styles.ringWrap}>
-        <Animated.View style={[styles.ring, ring]} />
-      </View>
-    </View>
-  );
-}
-
-// 3 · 2 · 1 · GO inside a ring that drains with each beat.
-function Countdown({ count, total }: { count: number; total: number }) {
-  const reduceMotion = useReducedMotion();
-  const beat = useSharedValue(1);
-  useEffect(() => {
-    if (reduceMotion) return;
-    beat.value = 1.18;
-    beat.value = withSpring(1, SPRING.pop);
-  }, [count, beat, reduceMotion]);
-  const style = useAnimatedStyle(() => ({ transform: [{ scale: beat.value }] }));
-  return (
-    <View style={styles.countdownWrap}>
-      <ProgressRing value={count > 0 ? count / total : 1} size={220} thickness={6} color="#FDC00A" trackColor="rgba(255,255,255,0.08)" label="Countdown">
-        <Animated.Text style={[styles.countdown, style]} accessibilityLiveRegion="assertive">
-          {count > 0 ? count : 'GO'}
-        </Animated.Text>
-      </ProgressRing>
-      <Text style={styles.countdownHint}>Answer fast. Answers lock instantly.</Text>
-    </View>
-  );
-}
-
-function Rule({ text }: { text: string }) {
-  const colors = useTheme();
-  return (
-    <View style={styles.rule}>
-      <View style={styles.ruleIcon}>
-        <Icon name="challenge" size={13} color="#0A1F5C" filled />
-      </View>
-      <Text style={[styles.ruleText, { color: colors.apexText }]}>{text}</Text>
-    </View>
   );
 }
 
