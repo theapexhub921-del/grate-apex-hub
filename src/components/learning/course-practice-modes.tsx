@@ -1,11 +1,12 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { StyleSheet, useWindowDimensions, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/ui/button';
-import { Icon, type IconName } from '@/components/ui/icon';
-import { Interactive, PressableCard } from '@/components/ui/interactive';
+import { Icon } from '@/components/ui/icon';
+import { Interactive } from '@/components/ui/interactive';
 import { SectionHeader } from '@/components/ui/screen';
+import { type Tile, TileGrid } from '@/components/ui/tile-grid';
 import { SegmentedControl } from '@/components/ui/segmented-control';
 import { Sheet } from '@/components/ui/sheet';
 import { Text } from '@/components/ui/text';
@@ -18,16 +19,12 @@ import { routes } from '@/lib/routes';
 
 type CourseSet = { id: string; name: string; count: number };
 
-const rows = <T,>(items: readonly T[], size: number) => Array.from({ length: Math.ceil(items.length / size) }, (_, i) => items.slice(i * size, i * size + size));
 
 // A course's practice modes, from the original app (in this app's look):
 // predicted tests, a custom quiz builder, a timed drill, past questions and a
 // pre-test / post-test.
 export function CoursePracticeModes({ course, lessons, sets }: { course: LegacyCourse; lessons: readonly LegacyLessonMeta[]; sets: readonly CourseSet[] }) {
   const styles = useThemedStyles(createStyles);
-  const colors = useTheme();
-  const { width } = useWindowDimensions();
-  const columns = width >= 760 ? 2 : 1;
   const [sheet, setSheet] = useState<'predicted' | 'past' | 'custom' | null>(null);
   const [prepost, setPrepost] = useState<PrePost>({});
   useFocusEffect(useCallback(() => {
@@ -42,7 +39,7 @@ export function CoursePracticeModes({ course, lessons, sets }: { course: LegacyC
   const pre = percentOf(prepost.pre);
   const post = percentOf(prepost.post);
 
-  const tiles: { id: string; icon: IconName; title: string; detail: string; onPress: () => void; hidden?: boolean }[] = [
+  const tiles: Tile[] = [
     { id: 'predicted', icon: 'achievement', title: 'Predicted Tests', detail: predicted.length ? `${predicted.length} predicted papers, plus ${MOCK_TESTS} mock exams of ${MOCK_SIZE} questions. Answers are shown at the end, like the real paper.` : `Sit one of ${MOCK_TESTS} full mock exams of ${MOCK_SIZE} questions. Answers are shown at the end, like the real paper.`, onPress: () => setSheet('predicted') },
     { id: 'custom', icon: 'grid', title: 'Custom Quiz Builder', detail: 'Pick your lessons, number of questions, timing and when you see the answers.', onPress: () => setSheet('custom') },
     { id: 'drill', icon: 'timer', title: 'Timed Drill', detail: `Rapid fire with a countdown on every question (${DRILL.questions} questions, ${DRILL.seconds} seconds each). Beat the clock.`, onPress: () => router.push(routes.legacyPractice({ course: course.id, drill: true })) },
@@ -59,23 +56,7 @@ export function CoursePracticeModes({ course, lessons, sets }: { course: LegacyC
   return (
     <>
       <SectionHeader title="Practice modes" subtitle="Exams, drills and quizzes built from this course’s questions." style={styles.section} />
-      {/* Uniform tiles: the same width and height in every row (an empty slot keeps a last odd tile the same size). */}
-      <View style={styles.grid}>
-        {rows(tiles.filter((tile) => !tile.hidden), columns).map((row, r) => (
-          <View key={r} style={styles.row2}>
-            {row.map((tile) => (
-              <PressableCard key={tile.id} onPress={tile.onPress} accessibilityLabel={`${tile.title}. ${tile.detail}`} style={styles.tile}>
-                <View style={styles.tileIcon}><Icon name={tile.icon} size={20} color={colors.accentText} /></View>
-                <View style={styles.flex}>
-                  <Text style={styles.tileTitle}>{tile.title}</Text>
-                  <Text style={styles.tileText}>{tile.detail}</Text>
-                </View>
-              </PressableCard>
-            ))}
-            {Array.from({ length: columns - row.length }, (_, i) => <View key={`gap${i}`} style={styles.tileGap} />)}
-          </View>
-        ))}
-      </View>
+      <TileGrid columns={2} tiles={tiles} />
 
       <Sheet visible={sheet === 'predicted'} onClose={() => setSheet(null)} title="Predicted Tests" subtitle="Answers are shown at the end, like the real paper.">
         <View style={styles.list}>

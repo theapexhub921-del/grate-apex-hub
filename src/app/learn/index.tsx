@@ -12,6 +12,7 @@ import { MemoryDistribution } from '@/components/learning/memory-ui';
 import { NextActionHero, NextActionList } from '@/components/learning/next-action-card';
 import { PersonalGoalsCard } from '@/components/learning/personal-goals-card';
 import { QuestionOfTheDay } from '@/components/learning/question-of-the-day';
+import { type Tile, TileGrid } from '@/components/ui/tile-grid';
 import { LearningWeekCard } from '@/components/learning/learning-week-card';
 import { ReviewCalendar } from '@/components/learning/review-calendar';
 import { RankProgressCard } from '@/components/rank-progress';
@@ -268,6 +269,44 @@ export default function LearnScreen() {
     </View>
   );
 
+  // Study, organised in sections (courses, practise and plan, your progress), with uniform tiles.
+  const studyTiles: Tile[] = [
+    {
+      id: 'review', icon: 'reinforce', title: 'Spaced review',
+      detail: overall.counts.tracked > 0 ? (overall.due > 0 ? 'What you are most likely to forget comes back first.' : 'Nothing due right now. Practise anyway to stay sharp.') : 'Finish a lesson and its ideas start coming back for review.',
+      badge: overall.due > 0 ? `${overall.due} due` : undefined,
+      onPress: () => router.push(routes.review({ focus: overall.due > 0 ? 'due' : 'mixed' })),
+      disabled: overall.counts.tracked === 0,
+    },
+    { id: 'custom', icon: 'edit', title: 'Custom quiz', detail: 'Choose the lessons, how many questions, a timer and when you see the answers.', onPress: () => router.push(routes.customQuizBuilder()) },
+    { id: 'past', icon: 'book', title: 'Past question bank', detail: 'Real past papers and predicted papers, sat like the exam.', onPress: () => router.push('/learn/past-questions' as never) },
+    { id: 'planner', icon: 'calendar', title: 'Timetable and plans', detail: 'Your weekly calendar, and a lesson path for your goals.', onPress: () => router.push('/learn/planner' as never) },
+  ];
+  const reviewCalendar = (
+    <Card style={styles.calendarCard}>
+      <SectionHeader
+        title="Your week"
+        subtitle={`${lessonsThisWeek} lessons · ${reviewsThisWeek} reviews this week · your spaced-review plan`}
+        style={styles.calendarHeading}
+      />
+      <ReviewCalendar memory={memory} attempts={attempts} now={now} />
+    </Card>
+  );
+  const studyHub = (
+    <View style={styles.column}>
+      <Columns main={<LegacyCourseList courses={legacyCourses} selection={viewing as ClassSelection} />} side={<QuestionOfTheDay />} sideWidth={360} />
+      <SectionHeader title="Practise and plan" subtitle="Ways to practise beyond the lessons, and your week." style={styles.hubSection} />
+      <TileGrid columns={4} tiles={studyTiles} />
+      <SectionHeader title="Your progress" subtitle="Your rank, this week and your goals." style={styles.hubSection} />
+      <View style={styles.progressRow}>
+        <View style={styles.progressItem}><RankProgressCard lifetimeXp={progress.xp} /></View>
+        <View style={styles.progressItem}><LearningWeekCard /></View>
+        <View style={styles.progressItem}><PersonalGoalsCard /></View>
+      </View>
+      {reviewCalendar}
+    </View>
+  );
+
   return (
     <Screen width="wide">
       <LearningWelcomeAtmosphere>
@@ -346,19 +385,7 @@ export default function LearnScreen() {
         <ClassAccessCard target={blockedSelection} current={requiredLevel?.selection ?? ownSelection} lessonsComplete={requiredLevel?.completed ?? currentCompletion.completed} lessonsTotal={requiredLevel?.total ?? currentCompletion.total} trialUsed={trial.used} trialExpiresAt={trial.active ? trial.expiresAt : undefined} onStartTrial={() => { if (blockedSelection) { setRequestedFuture(null); router.replace(routes.learnEnvironment(blockedSelection)); } }} onBack={() => { setRequestedFuture(null); showEnvironment(ownSelection); }} />
       ) : viewing && legacyCourses.length > 0 ? (
         // HB1 (the original app's courses) and HB2 Semester 1 (this app's lessons), in the original study style.
-        <Columns
-          main={
-            <View style={styles.column}>
-              <LegacyCourseList courses={legacyCourses} selection={viewing} />
-              <View style={styles.toolGrid}>
-                {studyToolsLeft}
-                {studyToolsRight}
-              </View>
-            </View>
-          }
-          side={<View style={styles.column}>{sideTop}</View>}
-          sideWidth={360}
-        />
+        studyHub
       ) : offeredSubjects.length > 0 ? (
         <Columns main={main} side={side} sideWidth={360} />
       ) : (
@@ -383,6 +410,9 @@ function createStyles(colors: ThemeColors) {
     tutorTitle: { ...Type.headline, color: colors.text },
     section: { marginTop: 14, marginBottom: 0 },
     toolGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 16, alignItems: 'flex-start' },
+    hubSection: { marginTop: 18, marginBottom: 2 },
+    progressRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 16, alignItems: 'stretch' },
+    progressItem: { flexGrow: 1, flexBasis: 300, minWidth: 0 },
     toolColumn: { flexGrow: 1, flexBasis: 320, minWidth: 0, gap: 16 },
     calendarCard: { gap: 12 },
     calendarHeading: { marginBottom: 0 },
