@@ -19,6 +19,7 @@ import { useNotificationPreferences, usePushNotificationsPreference } from '@/da
 import { markSocialNotificationsRead, readSocialNotificationIds, socialAppNotifications, useSocial } from '@/data/social';
 import { useTheme, useThemedStyles } from '@/hooks/use-theme';
 import { showDeviceNotification } from '@/lib/device-notifications';
+import { registerWebPush } from '@/lib/web-push';
 import { useMessageNotifications } from '@/data/message-notifications';
 import { usePromotionNotifications } from '@/components/league-promotion';
 
@@ -75,6 +76,11 @@ export function DeviceNotificationBridge() {
   const seen = useRef(new Set<string>());
   const started = useRef(false);
   const [toast, setToast] = useState<AppNotification | null>(null);
+
+  // With alerts on, this browser also registers for push, so messages arrive even when the app is closed.
+  useEffect(() => {
+    if (enabled) void registerWebPush();
+  }, [enabled]);
 
   useEffect(() => {
     const unread = items.filter((item) => !read.has(item.id));

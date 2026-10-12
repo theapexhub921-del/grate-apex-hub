@@ -15,6 +15,7 @@ import { InlineNotice, LoadingState } from '@/components/ui/state-views';
 import { MentionInput } from '@/components/social/mention-input';
 import { clock, useVoiceRecorder, voiceNotesSupported, VoiceNotePlayer } from '@/components/social/voice-note';
 import { uploadVoiceNote } from '@/lib/media';
+import { announceMessage } from '@/lib/web-push';
 import { Radius, ReadReceiptBlues, Type, type ThemeColors } from '@/constants/theme';
 import { contrastRatio } from '@/data/contrast';
 import { deleteCommunityMessage, getOrCreateFriendConversation, listConversationMessages, loadConversationMeta, markConversationSeen, messageStatus, sendCommunityMessage, sendVoiceNote, VOICE_NOTE_MAX_SECONDS, type CommunityMessage, type ConversationMeta, type MessageStatus } from '@/data/community';
@@ -103,6 +104,7 @@ export default function DirectMessageScreen() {
     try {
       const url = await uploadVoiceNote(note.blob);
       await sendVoiceNote(conversationId, url, note.seconds);
+      void announceMessage(conversationId, friendId);
       await refresh(conversationId);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not send this voice note.');
@@ -117,6 +119,7 @@ export default function DirectMessageScreen() {
     setError(null);
     try {
       await sendCommunityMessage(conversationId, draft);
+      void announceMessage(conversationId, friendId);
       setDraft('');
       await refresh(conversationId);
     } catch (caught) {

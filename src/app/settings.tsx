@@ -60,6 +60,7 @@ import { routes } from '@/lib/routes';
 import { signOut } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { enableDeviceNotifications } from '@/lib/device-notifications';
+import { unregisterWebPush } from '@/lib/web-push';
 
 const HOME_HREF = '/' as Href;
 type ThemeSwatchScheme = Exclude<AppearancePreference, 'system'>;
@@ -205,6 +206,7 @@ export default function SettingsScreen() {
     setPushNotificationNotice(null);
     if (!enabled) {
       await setPushNotificationsPreference(false);
+      void unregisterWebPush();
       return;
     }
     const result = await enableDeviceNotifications();

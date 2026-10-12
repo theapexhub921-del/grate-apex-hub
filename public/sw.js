@@ -1,4 +1,4 @@
-const CACHE_NAME = 'grateapex-pwa-v5';
+const CACHE_NAME = 'grateapex-pwa-v6';
 const CACHE_PREFIX = 'grateapex-pwa-';
 const APP_SHELL = ['/', '/manifest.webmanifest', '/icons/grateapex-192.png', '/icons/grateapex-512.png'];
 const CACHEABLE_DESTINATIONS = new Set(['font', 'image', 'script', 'style']);
@@ -46,6 +46,25 @@ self.addEventListener('fetch', (event) => {
       await cache.put(request, response.clone());
     }
     return response;
+  })());
+});
+
+// Push from the server (api/push.mjs): new messages while the app is closed or in the background.
+// When the app is open on screen it shows its own toast, so no system alert then.
+self.addEventListener('push', (event) => {
+  let data = {};
+  try { data = event.data ? event.data.json() : {}; } catch { data = { body: event.data ? event.data.text() : '' }; }
+  event.waitUntil((async () => {
+    const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    if (windows.some((client) => client.visibilityState === 'visible' && client.focused)) return;
+    await self.registration.showNotification(data.title || 'GrAte Apex Hub', {
+      body: data.body || '',
+      icon: '/icons/grateapex-192.png',
+      badge: '/icons/grateapex-192.png',
+      tag: data.tag || undefined,
+      renotify: Boolean(data.tag),
+      data: { href: data.href || '/' },
+    });
   })());
 });
 
