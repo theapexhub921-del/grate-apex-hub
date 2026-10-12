@@ -18,6 +18,7 @@ import { Interactive } from '@/components/ui/interactive';
 import { Sheet } from '@/components/ui/sheet';
 import { Text, TextInput } from '@/components/ui/text';
 import { VerifiedBadge } from '@/components/ui/verified-badge';
+import { webStyle } from '@/components/ui/web';
 import { Radius, ReadReceiptBlues, Type, type ThemeColors } from '@/constants/theme';
 import { hideMessage, isHidden, isStarred, previewOf, REACTIONS, reactToMessage, type ReplyRef, sendChatMessage, setTyping, toggleStar, togglePin, uploadChatDocument, useChatPrefs } from '@/data/chat';
 import { contrastRatio } from '@/data/contrast';
@@ -380,7 +381,7 @@ export function ChatThread({ friendId = '', groupId, name }: { friendId?: string
         <View style={styles.replyBar}>
           <View style={styles.replyEdge} />
           <View style={styles.flex}>
-            <Text style={styles.quoteWho}>Replying to {reply.from === user?.id ? 'yourself' : title}</Text>
+            <Text style={styles.quoteWho}>Replying to {reply.from === user?.id ? 'You' : title}</Text>
             <Text style={styles.quoteText} numberOfLines={1}>{reply.text}</Text>
           </View>
           <Interactive onPress={() => setReply(null)} accessibilityLabel="Cancel reply" style={styles.headButton}><Icon name="close" size={16} color={colors.textSecondary} /></Interactive>
@@ -591,20 +592,20 @@ function createStyles(colors: ThemeColors) {
     sender: { fontSize: 12, fontWeight: '700', color: colors.primaryText, marginLeft: 10, marginBottom: 2 },
     stack: { maxWidth: '78%', alignItems: 'flex-start' },
     stackMine: { alignItems: 'flex-end' },
-    bubbleWrap: { borderRadius: 20 },
+    bubbleWrap: { borderRadius: 20, maxWidth: '100%', minWidth: 0 },
     hovered: {},
-    bubbleLine: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    bubbleLine: { flexDirection: 'row', alignItems: 'center', gap: 6, maxWidth: '100%', minWidth: 0 },
     bubbleLineMine: { flexDirection: 'row-reverse' },
-    bubble: { paddingHorizontal: 13, paddingVertical: 8, borderRadius: 20, gap: 4, maxWidth: 520 },
+    bubble: { paddingHorizontal: 13, paddingVertical: 8, borderRadius: 20, gap: 4, maxWidth: 520, minWidth: 0, flexShrink: 1 },
     mine: { backgroundColor: colors.primary, borderBottomRightRadius: 6 },
     theirs: { backgroundColor: colors.surfaceMuted, borderWidth: 1, borderColor: colors.border, borderBottomLeftRadius: 6 },
     mediaBubble: { padding: 4 },
     fwd: { fontSize: 11.5, fontStyle: 'italic', color: colors.textTertiary },
-    quote: { borderLeftWidth: 3, borderRadius: 8, paddingVertical: 4, paddingHorizontal: 8 },
+    quote: { borderLeftWidth: 3, borderRadius: 8, paddingVertical: 4, paddingHorizontal: 8, minWidth: 0, maxWidth: '100%' },
     quoteMine: { borderLeftColor: colors.onPrimary, backgroundColor: 'rgba(255,255,255,0.14)' },
     quoteTheirs: { borderLeftColor: colors.primary, backgroundColor: colors.surface },
     quoteWho: { fontSize: 12, fontWeight: '800', color: colors.primaryText },
-    quoteText: { fontSize: 12.5, color: colors.textSecondary },
+    quoteText: { fontSize: 12.5, color: colors.textSecondary, ...(webStyle({ overflowWrap: 'anywhere', wordBreak: 'break-word' }) as object) },
     mediaGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 4 },
     media: { width: 240, height: 300, borderRadius: 16, backgroundColor: colors.surfaceSunken },
     mediaSmall: { width: 150, height: 150 },
@@ -612,7 +613,7 @@ function createStyles(colors: ThemeColors) {
     doc: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 10, borderRadius: 12, backgroundColor: colors.surface, minWidth: 200 },
     docMine: { backgroundColor: 'rgba(255,255,255,0.16)' },
     docName: { flex: 1, fontSize: 13.5, fontWeight: '700', color: colors.text },
-    text: { ...Type.callout, color: colors.text },
+    text: { ...Type.callout, color: colors.text, flexShrink: 1, ...(webStyle({ overflowWrap: 'anywhere', wordBreak: 'break-word' }) as object) },
     mineText: { color: colors.onPrimary },
     mineSoft: { color: colors.onPrimaryMuted },
     meta: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 5 },

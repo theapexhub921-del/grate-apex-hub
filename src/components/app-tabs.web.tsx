@@ -1,5 +1,5 @@
 import Tabs from 'expo-router/js-tabs';
-import { type Href, router, useSegments } from 'expo-router';
+import { type Href, router, useGlobalSearchParams, useSegments } from 'expo-router';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import { useReducedMotion } from 'react-native-reanimated';
 
@@ -46,6 +46,8 @@ export default function AppTabs() {
 
   // Unauthenticated screens must not show the authenticated navigation.
   const isAuthRoute = ['login', 'onboarding', 'privacy', 'terms'].includes(segments[0] as string);
+  const params = useGlobalSearchParams<{ friend?: string; group?: string }>();
+  const inChat = segments.join('/') === 'social/message' && Boolean(params.friend || params.group);
   const isWidgetRoute = segments[0] === 'widget';
   // The Originals keeps the original app's desktop width for its sidebar.
   const isDesktop = width >= (originals ? LEGACY_DESKTOP_MIN : DESKTOP_BREAKPOINT);
@@ -72,7 +74,7 @@ export default function AppTabs() {
         <Tabs
           backBehavior="history"
           tabBar={({ navigation }) =>
-            useRail || isAuthRoute || isWidgetRoute ? null : originals ? (
+            useRail || isAuthRoute || isWidgetRoute || inChat ? null : originals ? (
               <LegacyFloatingBar onNavigate={(route) => navigation.navigate(route as never)} />
             ) : (
               <FloatingTabBar onNavigate={(route) => navigation.navigate(route as never)} />

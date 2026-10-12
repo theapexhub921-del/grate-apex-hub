@@ -1,16 +1,34 @@
 import { router, type Href } from 'expo-router';
-import { StyleSheet, useWindowDimensions, View } from 'react-native';
+import { useSyncExternalStore } from 'react';
+import { Platform, StyleSheet, useWindowDimensions, View } from 'react-native';
 
 import { ChatList } from '@/components/chat/chat-list';
 import { ChatThread } from '@/components/chat/chat-thread';
-import { BackLink } from '@/components/learning/nav-bits';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
 import { Card } from '@/components/ui/interactive';
 import { Screen } from '@/components/ui/screen';
 import { Text } from '@/components/ui/text';
+import { webStyle } from '@/components/ui/web';
 import { Type, type ThemeColors } from '@/constants/theme';
 import { useTheme, useThemedStyles } from '@/hooks/use-theme';
+
+// The part of the screen not covered by the phone keyboard (web only).
+const viewport = () => (Platform.OS === 'web' && typeof window !== 'undefined' ? window.visualViewport : null);
+function subscribeViewport(onChange: () => void) {
+  const vv = viewport();
+  vv?.addEventListener('resize', onChange);
+  vv?.addEventListener('scroll', onChange);
+  return () => { vv?.removeEventListener('resize', onChange); vv?.removeEventListener('scroll', onChange); };
+}
+const viewportSnapshot = () => { const vv = viewport(); return vv ? `${Math.round(vv.height)}|${Math.round(vv.offsetTop)}` : ''; };
+function useVisibleViewport() {
+  const snap = useSyncExternalStore(subscribeViewport, viewportSnapshot, () => '');
+  if (!snap) return null;
+  const [height, top] = snap.split('|').map(Number);
+  return { height, top };
+}
 
 // Messages like Instagram / WhatsApp on the web: on a computer, the chats list
 // on the left and the open chat on the right; on a phone, one at a time.
@@ -18,6 +36,8 @@ export function ChatShell({ friendId, groupId, name }: { friendId?: string | nul
   const styles = useThemedStyles(createStyles);
   const colors = useTheme();
   const { width, height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const visible = useVisibleViewport();
   const wide = width >= 900;
   const open = (id: string, label: string) => {
     const href = `/social/message?friend=${encodeURIComponent(id)}&name=${encodeURIComponent(label)}` as Href;
@@ -33,13 +53,11 @@ export function ChatShell({ friendId, groupId, name }: { friendId?: string | nul
   const paneHeight = Math.max(480, height - (wide ? 70 : 150));
 
   if (!wide) {
+    // The chats list leaves room for the bottom bar; an open chat has the whole screen.
     return (
-      <Screen width="prose">
-        <BackLink fallback={(friendId || groupId ? '/social/messages' : '/social') as never} />
-        <Card style={[styles.pane, { height: paneHeight }]}>
-          {thread ?? <ChatList onOpen={open} onOpenGroup={openGroup} />}
-        </Card>
-      </Screen>
+      <View style={[styles.phone, thread && visible ? [styles.fixed, { top: visible.top, height: visible.height }] : { height }, { paddingTop: insets.top, paddingBottom: thread ? insets.bottom : 96 + insets.bottom }]}>
+        {thread ?? <ChatList onOpen={open} onOpenGroup={openGroup} />}
+      </View>
     );
   }
   return (
@@ -65,7 +83,8 @@ export function ChatShell({ friendId, groupId, name }: { friendId?: string | nul
 
 function createStyles(colors: ThemeColors) {
   return StyleSheet.create({
-    pane: { padding: 0, overflow: 'hidden' },
+    phone: { width: '100%', backgroundColor: colors.surface, overflow: 'hidden' },
+    fixed: { left: 0, right: 0, zIndex: 50, ...(webStyle({ position: 'fixed' }) as object) },
     shell: { flexDirection: 'row', padding: 0, overflow: 'hidden' },
     side: { width: 360, borderRightWidth: 1, borderRightColor: colors.divider },
     main: { flex: 1, minWidth: 0 },

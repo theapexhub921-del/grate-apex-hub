@@ -1,7 +1,7 @@
 import type { Href } from 'expo-router';
 import { router } from 'expo-router';
 import type { ReactNode } from 'react';
-import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Platform, StyleSheet, useWindowDimensions, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Text } from '@/components/ui/text';
 
 import { Icon, type IconName } from '@/components/ui/icon';
@@ -10,12 +10,18 @@ import { elevation, Radius, Type, type ThemeColors } from '@/constants/theme';
 import { useBackNavigation } from '@/hooks/use-back-navigation';
 import { useTheme, useThemedStyles } from '@/hooks/use-theme';
 
+// Phones and tablets (touch screens below desktop width) have their own back
+// gesture or button, so the on-page one is hidden there.
+const touchScreen = Platform.OS !== 'web' || (typeof window !== 'undefined' && ('ontouchstart' in window || (navigator.maxTouchPoints ?? 0) > 0));
+
 // "← Back": returns to the previous page, or the given parent when the
 // page was opened directly.
 export function BackLink({ fallback, label = 'Back' }: { fallback: Href; label?: string }) {
   const styles = useThemedStyles(createStyles);
   const colors = useTheme();
   const { goBack } = useBackNavigation();
+  const { width } = useWindowDimensions();
+  if (touchScreen && width < 1024) return null;
   return (
     <Interactive
       onPress={() => goBack(fallback)}

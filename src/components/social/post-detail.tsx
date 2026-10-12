@@ -12,6 +12,7 @@ import { Icon, type IconName } from '@/components/ui/icon';
 import { Interactive } from '@/components/ui/interactive';
 import { Text } from '@/components/ui/text';
 import { VerifiedBadge } from '@/components/ui/verified-badge';
+import { webStyle } from '@/components/ui/web';
 import { VideoPlayer } from '@/components/ui/video-player';
 import { isDesktopWidth, Radius, Type, type ThemeColors } from '@/constants/theme';
 import { type CommunityPost } from '@/data/community';
@@ -251,7 +252,7 @@ function createStyles(colors: ThemeColors) {
     scroll: { padding: 14, gap: 18 },
     row: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
     rowText: { flex: 1, minWidth: 0, gap: 4 },
-    text: { fontSize: 14, lineHeight: 20, color: colors.text },
+    text: { fontSize: 14, lineHeight: 20, color: colors.text, ...(webStyle({ overflowWrap: 'anywhere', wordBreak: 'break-word' }) as object) },
     bold: { fontWeight: '800', color: colors.text },
     metaRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
     meta: { fontSize: 12, color: colors.textTertiary },
