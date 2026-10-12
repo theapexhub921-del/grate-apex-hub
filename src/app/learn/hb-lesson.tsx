@@ -6,7 +6,7 @@ import { LegacyBlocks, Rich, TermContext } from '@/components/learning/legacy-bl
 import { BackLink } from '@/components/learning/nav-bits';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
-import { Card, Interactive } from '@/components/ui/interactive';
+import { Card, Interactive, PressableCard } from '@/components/ui/interactive';
 import { Pill } from '@/components/ui/pill';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import { Screen } from '@/components/ui/screen';
@@ -28,7 +28,7 @@ import {
 } from '@/data/legacy-study';
 import { completeLesson, useProgress } from '@/data/progress';
 import { finishLesson } from '@/data/learning/actions';
-import { useThemedStyles } from '@/hooks/use-theme';
+import { useTheme, useThemedStyles } from '@/hooks/use-theme';
 import { param, routes } from '@/lib/routes';
 
 // /learn/hb-lesson?lesson=<id>[&section=n] — an original-app lesson, read the
@@ -38,6 +38,7 @@ import { param, routes } from '@/lib/routes';
 // section completes the lesson here (XP once), then its practice questions.
 export default function LegacyLessonScreen() {
   const styles = useThemedStyles(createStyles);
+  const colors = useTheme();
   const params = useLocalSearchParams<{ lesson?: string | string[]; section?: string | string[] }>();
   const lessonId = param(params.lesson);
   const { width } = useWindowDimensions();
@@ -137,6 +138,7 @@ export default function LegacyLessonScreen() {
       <Text style={styles.finishedText}>{finished.xp > 0 ? `+${finished.xp} XP · ${meta.title}` : `${meta.title} — already completed earlier.`}</Text>
       <View style={styles.finishedActions}>
         {questions > 0 && course ? <Button label={`Practice · ${questions} questions`} onPress={() => router.push(routes.legacyPractice({ course: course.id, lesson: meta.id }))} /> : null}
+        {meta.subject ? <Button label="Learn by answering" variant="secondary" onPress={() => router.push(routes.lesson(meta.id, { layer: 'learn' }))} /> : null}
         <Button label="Back to the course" variant="secondary" onPress={() => router.push(course ? routes.legacyCourse(course.id) : routes.learn())} />
       </View>
       <StudyAids body={body} />
@@ -166,8 +168,21 @@ export default function LegacyLessonScreen() {
           {meta.sub ? <Text style={styles.sub}>{meta.sub}</Text> : null}
         </View>
         {done ? <Pill label="Completed" tone="success" /> : <Pill label={`${Math.min(readCount, total)}/${total} sections`} tone="primary" />}
-        {meta.subject ? <Button label="Learn by answering" variant="ghost" size="sm" onPress={() => router.push(routes.lesson(meta.id, { layer: 'learn' }))} accessibilityLabel="Open the interactive version of this lesson" /> : null}
       </View>
+      {meta.subject && !finished ? (
+        // HB2 lessons also have an interactive version (this app's lesson page): offer it clearly.
+        <PressableCard onPress={() => router.push(routes.lesson(meta.id, { layer: 'learn' }))} accessibilityLabel="Learn by answering: the interactive version of this lesson" style={styles.modeCard}>
+          <View style={styles.modeIcon}><Icon name="challenge" size={20} color={colors.onPrimary} /></View>
+          <View style={styles.flex}>
+            <Text style={styles.modeTitle}>Learn by answering</Text>
+            <Text style={styles.modeText}>Prefer learning by doing? Study this lesson step by step, answering short questions as you go.</Text>
+          </View>
+          <View style={styles.modeGo}>
+            <Text style={styles.modeGoText}>Start</Text>
+            <Icon name="chevronRight" size={16} color={colors.onPrimary} />
+          </View>
+        </PressableCard>
+      ) : null}
       {wide ? (
         <View style={styles.columns}>
           <View style={styles.main}>{reader}</View>
@@ -227,6 +242,12 @@ function createStyles(colors: ThemeColors) {
     title: { ...Type.title1, color: colors.text },
     sub: { fontSize: 14, color: colors.textSecondary, marginTop: 2 },
     columns: { flexDirection: 'row', gap: 24, alignItems: 'flex-start' },
+    modeCard: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 14, marginBottom: 18, borderWidth: 1.5, borderColor: colors.primaryBorder },
+    modeIcon: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primary },
+    modeTitle: { ...Type.headline, color: colors.text },
+    modeText: { fontSize: 13.5, lineHeight: 19, color: colors.textSecondary, marginTop: 2 },
+    modeGo: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 8, paddingHorizontal: 14, borderRadius: 999, backgroundColor: colors.primary },
+    modeGoText: { fontSize: 13.5, fontWeight: '800', color: colors.onPrimary },
     main: { flex: 1, minWidth: 0, maxWidth: 780 },
     side: { width: 300 },
     stack: { gap: 18 },

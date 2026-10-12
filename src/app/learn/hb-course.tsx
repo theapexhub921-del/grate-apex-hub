@@ -135,12 +135,20 @@ export default function LegacyCourseScreen() {
                   </View>
                   <View style={styles.lessonFoot}>
                     <Text style={styles.metaSoft}>{lesson.sections.length} sections · ~{lesson.minutes} min</Text>
-                    {questions > 0 ? (
-                      <Interactive onPress={() => router.push(routes.legacyPractice({ course: course.id, lesson: lesson.id }))} accessibilityRole="button" style={styles.practice}>
-                        <Icon name="edit" size={14} color={colors.accentText} />
-                        <Text style={styles.practiceText}>Practice · {questions} questions</Text>
-                      </Interactive>
-                    ) : null}
+                    <View style={styles.chips}>
+                      {lesson.subject ? (
+                        <Interactive onPress={() => router.push(routes.lesson(lesson.id, { layer: 'learn' }))} accessibilityRole="button" accessibilityLabel={`Learn by answering: ${lesson.title}`} style={styles.answerChip}>
+                          <Icon name="challenge" size={14} color={colors.primaryText} />
+                          <Text style={styles.answerText}>Learn by answering</Text>
+                        </Interactive>
+                      ) : null}
+                      {questions > 0 ? (
+                        <Interactive onPress={() => router.push(routes.legacyPractice({ course: course.id, lesson: lesson.id }))} accessibilityRole="button" style={styles.practice}>
+                          <Icon name="edit" size={14} color={colors.accentText} />
+                          <Text style={styles.practiceText}>Practice · {questions} questions</Text>
+                        </Interactive>
+                      ) : null}
+                    </View>
                   </View>
                 </PressableCard>
               </View>
@@ -205,6 +213,9 @@ function createStyles(colors: ThemeColors) {
     lessonFoot: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 },
     practice: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 6, paddingHorizontal: 10, borderRadius: 999, backgroundColor: colors.accentSubtle },
     practiceText: { fontSize: 12.5, fontWeight: '800', color: colors.accentText },
+    chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+    answerChip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 6, paddingHorizontal: 10, borderRadius: 999, backgroundColor: colors.primarySubtle, borderWidth: 1, borderColor: colors.primaryBorder },
+    answerText: { fontSize: 12.5, fontWeight: '800', color: colors.primaryText },
     sets: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
     set: { minWidth: 160, flexGrow: 1, flexBasis: '30%', padding: 14, borderRadius: 14, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, gap: 4 },
     setHover: { borderColor: colors.primaryBorder },

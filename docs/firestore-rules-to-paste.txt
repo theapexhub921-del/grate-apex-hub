@@ -1,0 +1,116 @@
+// GrAte Apex Hub — Firestore rules to ADD (2026-10-12)
+//
+// These four blocks only ADD permissions for new features. They do not change or
+// remove anything in the rules that are live now.
+//
+// Where to paste (Firebase console → project grate-apex → Firestore Database → Rules):
+//   1. Scroll to the very bottom of the rules. The last two lines are each just  }
+//   2. Click at the start of the SECOND-TO-LAST line (the first of those two  }  lines).
+//   3. Paste everything below the dashed line, then press Publish.
+//
+//   - Quiz attempts      → quiz results saved to your account (all devices)
+//   - Lesson completions → new-app lessons kept out of the original app's lessons map
+//   - Study planner      → plans, timetable and goals saved to your account
+//   - Apex Coin gifts    → send coins to friends (coins only, never XP)
+//
+// The full rules file with these blocks already in place is firestore.rules in the repository.
+// ---------------------------------------------------------------------------
+
+    // Quiz attempts (new app): one document per attempt, private to the owner.
+    // The id is the attempt's UUID, made once on the device, so sending an attempt
+    // again can never add a second copy; attempts are never edited. They carry no
+    // XP field. The owner may delete them (reset progress, account deletion).
+    match /progress/{uid}/attempts/{attemptId} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow create: if request.auth != null && request.auth.uid == uid
+        && attemptId.matches('^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$')
+        && request.resource.data.keys().hasAll(['id', 'userId', 'attemptType', 'courseId', 'lessonId', 'score', 'total',
+             'percentage', 'timeSeconds', 'wrongConcepts', 'wrongQuestionIds', 'practice', 'completedAt', 'savedAt'])
+        && request.resource.data.keys().hasOnly(['id', 'userId', 'attemptType', 'courseId', 'lessonId', 'score', 'total',
+             'percentage', 'timeSeconds', 'wrongConcepts', 'wrongQuestionIds', 'practice', 'completedAt', 'savedAt'])
+        && request.resource.data.id == attemptId
+        && request.resource.data.userId == uid
+        && request.resource.data.attemptType in ['lesson', 'apex_challenge', 'topic', 'review', 'practice']
+        && (request.resource.data.courseId == null || (request.resource.data.courseId is string && request.resource.data.courseId.size() <= 120))
+        && (request.resource.data.lessonId == null || (request.resource.data.lessonId is string && request.resource.data.lessonId.size() <= 120))
+        && request.resource.data.total is int && request.resource.data.total >= 1 && request.resource.data.total <= 100
+        && request.resource.data.score is int && request.resource.data.score >= 0
+        && request.resource.data.score <= request.resource.data.total
+        && request.resource.data.percentage is number
+        && request.resource.data.percentage >= 0 && request.resource.data.percentage <= 100
+        && request.resource.data.timeSeconds is number
+        && request.resource.data.timeSeconds >= 0 && request.resource.data.timeSeconds <= 86400
+        && request.resource.data.wrongConcepts is list && request.resource.data.wrongConcepts.size() <= 100
+        && request.resource.data.wrongQuestionIds is list && request.resource.data.wrongQuestionIds.size() <= 100
+        && request.resource.data.practice is bool
+        && request.resource.data.completedAt is int
+        && request.resource.data.savedAt == request.time;
+      allow update: if false;
+      allow delete: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // Lesson completions (new app): one document per completed lesson, private to
+    // the owner. Kept out of the shared `lessons` map, which the original app
+    // rewrites. The id is the lesson id; XP here is a record of the lesson's
+    // value, not a balance.
+    match /progress/{uid}/completions/{lessonId} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow create, update: if request.auth != null && request.auth.uid == uid
+        && lessonId.matches('^[a-z0-9-]{1,120}$')
+        && request.resource.data.keys().hasAll(['lessonId', 'completedAt', 'xp', 'savedAt'])
+        && request.resource.data.keys().hasOnly(['lessonId', 'completedAt', 'xp', 'savedAt'])
+        && request.resource.data.lessonId == lessonId
+        && request.resource.data.completedAt is int && request.resource.data.completedAt > 0
+        && request.resource.data.xp is int && request.resource.data.xp >= 0 && request.resource.data.xp <= 1000
+        && request.resource.data.savedAt == request.time;
+      allow delete: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // Study planner (new app): one private document each for study plans, the
+    // timetable and personal goals. Owner only; nothing else can read them.
+    match /users/{uid}/planner/{kind} {
+      allow read, delete: if request.auth != null && request.auth.uid == uid;
+      allow create, update: if request.auth != null && request.auth.uid == uid
+        && kind in ['studyPlans', 'timetableBlocks', 'goals']
+        && request.resource.data.keys().hasOnly(['items', 'updatedAt'])
+        && request.resource.data.items is list
+        && request.resource.data.items.size() <= 200
+        && request.resource.data.updatedAt == request.time;
+    }
+
+    // Apex Coin gifts between friends (new app). Coins only — XP can never be
+    // transferred. The sender pays and records the gift in ONE batch (the rule
+    // checks the sender's balance really went down by the amount); the friend's
+    // app then claims it, adding exactly that amount to their own balance in one
+    // batch. Only the two people involved can read a gift; it is never deleted.
+    match /coinTransfers/{id} {
+      allow read: if request.auth != null
+        && (resource.data.from == request.auth.uid || resource.data.to == request.auth.uid);
+      allow create: if request.auth != null
+        && request.resource.data.keys().hasOnly(['from', 'to', 'amount', 'status', 'createdAt'])
+        && request.resource.data.from == request.auth.uid
+        && request.resource.data.to is string
+        && request.resource.data.to != request.auth.uid
+        && request.resource.data.amount is int
+        && request.resource.data.amount >= 1
+        && request.resource.data.amount <= 1000
+        && request.resource.data.status == 'pending'
+        && request.resource.data.createdAt == request.time
+        // Friends only: each follows the other.
+        && exists(/databases/$(database)/documents/follows/$(request.auth.uid + '_' + request.resource.data.to))
+        && exists(/databases/$(database)/documents/follows/$(request.resource.data.to + '_' + request.auth.uid))
+        // The sender paid in the same batch.
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('coins', 0) >= request.resource.data.amount
+        && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('coins', 0)
+             == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('coins', 0) - request.resource.data.amount;
+      allow update: if request.auth != null
+        && resource.data.to == request.auth.uid
+        && resource.data.status == 'pending'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'claimedAt'])
+        && request.resource.data.status == 'claimed'
+        && request.resource.data.claimedAt == request.time
+        // The friend receives exactly the amount, in the same batch.
+        && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('coins', 0)
+             == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('coins', 0) + resource.data.amount;
+      allow delete: if false;
+    }
