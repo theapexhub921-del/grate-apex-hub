@@ -51,6 +51,8 @@ export function CommunityPostsFeed({ authorId, showComposer = true }: { authorId
   const [comments, setComments] = useState<PostComment[]>([]);
   const [commentDraft, setCommentDraft] = useState('');
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
+  // The top-level comment a reply is filed under (set together with replyingTo).
+  const [replyParent, setReplyParent] = useState<string | null>(null);
   const [notice, setNotice] = useState('');
   const [reportTarget, setReportTarget] = useState<ReportTarget | null>(null);
   const [hiddenIds, setHiddenIds] = useState<readonly string[]>([]);
@@ -178,6 +180,7 @@ export function CommunityPostsFeed({ authorId, showComposer = true }: { authorId
     setComments([]);
     setCommentDraft('');
     setReplyingTo(null);
+    setReplyParent(null);
     try { setComments(await listPostComments(post.id) as PostComment[]); }
     catch (caught) { setError(getErrorMessage(caught, 'Could not load comments.')); }
   }
@@ -186,9 +189,10 @@ export function CommunityPostsFeed({ authorId, showComposer = true }: { authorId
     if (!selectedPost || !commentDraft.trim()) return;
     setBusy(true);
     try {
-      await addPostComment(selectedPost.id, commentDraft);
+      await addPostComment(selectedPost.id, commentDraft, replyParent ? { parentId: replyParent, replyTo: replyingTo } : undefined);
       setCommentDraft('');
       setReplyingTo(null);
+      setReplyParent(null);
       setComments(await listPostComments(selectedPost.id) as PostComment[]);
       setPosts((all) => all.map((post) => post.id === selectedPost.id ? { ...post, comments: post.comments + 1 } : post));
       setSelectedPost((post) => post?.id === selectedPost.id ? { ...post, comments: post.comments + 1 } : post);
@@ -209,11 +213,12 @@ export function CommunityPostsFeed({ authorId, showComposer = true }: { authorId
     } catch (caught) { setError(getErrorMessage(caught, 'Could not delete the comment.')); }
   }
 
-  // Reply to a comment the Instagram way: the answer starts with their @username.
+  // Reply to a comment the Instagram way: the reply sits under the top-level comment and starts with their @username.
   function replyTo(comment: PostComment) {
     const handle = comment.author_name?.trim();
     if (!handle) return;
     setReplyingTo(handle);
+    setReplyParent(comment.parent_id ?? comment.id);
     setCommentDraft((draft) => (draft.startsWith(`@${handle} `) ? draft : `@${handle} ${draft.replace(/^@\S+\s/, '')}`));
   }
 
@@ -286,7 +291,7 @@ export function CommunityPostsFeed({ authorId, showComposer = true }: { authorId
         onDraft={setCommentDraft}
         replyingTo={replyingTo}
         onReply={replyTo}
-        onCancelReply={() => { const handle = replyingTo; setReplyingTo(null); if (handle) setCommentDraft((text) => text.replace(`@${handle} `, '')); }}
+        onCancelReply={() => { const handle = replyingTo; setReplyingTo(null); setReplyParent(null); if (handle) setCommentDraft((text) => text.replace(`@${handle} `, '')); }}
         onSend={() => void sendComment()}
         busy={busy}
         onClose={() => setSelectedPost(null)}
@@ -368,7 +373,7 @@ function PostCard({ post, socialPeople, ownId, ownName, onOpen, onLike, onCommen
           {post.reshared_media_url && post.reshared_media_type === 'video' ? <VideoPlayer url={post.reshared_media_url} height={260} label="Reshared video" /> : null}
         </View>
       ) : null}
-      {postMedia(post).length ? <MediaCarousel items={postMedia(post)} height={320} onPress={onOpen} /> : null}
+      {postMedia(post).length ? <MediaCarousel items={postMedia(post)} height={560} minHeight={260} adaptive fit="contain" onPress={onOpen} /> : null}
       {!verticalActions ? <Text style={styles.counts}>{post.reactions} likes · {post.comments} comments · {post.reshares} reshares{views}</Text> : <Text style={styles.counts}>{post.reactions} likes{views}</Text>}
       {!verticalActions ? <View style={styles.postActions}>
         <Interactive onPress={onLike} accessibilityRole="button" accessibilityLabel={post.my_reaction ? 'Unlike post' : 'Like post'} style={styles.action}><Icon name="heart" size={20} color={post.my_reaction ? colors.primaryText : colors.textSecondary} filled={Boolean(post.my_reaction)} /></Interactive>

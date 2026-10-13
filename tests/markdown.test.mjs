@@ -50,8 +50,17 @@ describe('Markdown blocks', () => {
 describe('Inline text', () => {
   it('finds bold, italic, code and maths without touching snake_case words', () => {
     const spans = parseInline('Use **ATP**, *fast*, `NADH` and $x^2$ in snake_case_name.');
-    const kinds = spans.filter((s) => s.kind !== 'text').map((s) => [s.kind, s.text]);
-    assert.deepEqual(kinds, [['bold', 'ATP'], ['italic', 'fast'], ['code', 'NADH'], ['math', 'x²']]);
+    const kinds = spans.filter((s) => s.kind !== 'text' || s.bold || s.italic).map((s) => [s.kind, s.text, Boolean(s.bold), Boolean(s.italic)]);
+    assert.deepEqual(kinds, [['text', 'ATP', true, false], ['text', 'fast', false, true], ['code', 'NADH', false, false], ['math', 'x²', false, false]]);
+  });
+
+  it('converts maths inside bold and italic text', () => {
+    const spans = parseInline('**$\\gamma$** and *$\\alpha$*');
+    assert.deepEqual(spans.map((s) => [s.kind, s.text, Boolean(s.bold), Boolean(s.italic)]), [
+      ['math', 'γ', true, false],
+      ['text', ' and ', false, false],
+      ['math', 'α', false, true],
+    ]);
   });
 
   it('does not treat prices as maths', () => {

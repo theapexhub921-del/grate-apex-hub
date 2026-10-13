@@ -4,7 +4,7 @@ import { Text } from '@/components/ui/text';
 
 import { MemoryDistribution } from '@/components/learning/memory-ui';
 import { ClassAccessCard } from '@/components/learning/class-access-card';
-import { Breadcrumbs } from '@/components/learning/nav-bits';
+import { Breadcrumbs, BackLink } from '@/components/learning/nav-bits';
 import { NextActionHero } from '@/components/learning/next-action-card';
 import { PendingTopicCard, TopicCard } from '@/components/learning/topic-card';
 import { Button } from '@/components/ui/button';
@@ -66,6 +66,7 @@ export default function CourseRoute() {
 
   return (
     <Screen width="wide">
+      <BackLink fallback={'/learn' as never} />
       <Breadcrumbs
         items={[
           { label: 'Study', href: routes.learn() },

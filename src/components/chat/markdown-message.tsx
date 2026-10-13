@@ -90,18 +90,13 @@ export function MarkdownMessage({ text, selectable = true }: { text: string; sel
 
 function renderSpans(spans: InlineSpan[], styles: ReturnType<typeof createStyles>) {
   return spans.map((span, index) => {
-    switch (span.kind) {
-      case 'bold':
-        return <Text key={index} style={styles.bold}>{span.text}</Text>;
-      case 'italic':
-        return <Text key={index} style={styles.italic}>{span.text}</Text>;
-      case 'code':
-        return <Text key={index} style={styles.inlineCode}>{span.text}</Text>;
-      case 'math':
-        return <Text key={index} style={styles.inlineMath}>{span.text}</Text>;
-      default:
-        return span.text;
-    }
+    if (!span.bold && !span.italic && span.kind === 'text') return span.text;
+    const kindStyle = span.kind === 'code' ? styles.inlineCode : span.kind === 'math' ? styles.inlineMath : undefined;
+    return (
+      <Text key={index} style={[kindStyle, span.bold && styles.bold, span.italic && styles.italic]}>
+        {span.text}
+      </Text>
+    );
   });
 }
 

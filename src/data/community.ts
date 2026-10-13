@@ -367,13 +367,18 @@ export async function togglePostLike(postId: string): Promise<boolean> {
   return !liked;
 }
 
-export async function addPostComment(postId: string, body: string) {
+/**
+ * A comment, or a reply. A reply names the top-level comment it sits under (parentId)
+ * and the person it answers (replyTo). Replies to replies sit under the same top-level comment.
+ */
+export async function addPostComment(postId: string, body: string, reply?: { parentId: string; replyTo: string | null }) {
   const text = body.trim();
   if (text.length < 1) throw new Error('Write a comment first.');
   if (text.length > 1000) throw new Error('Comments can be up to 1,000 characters.');
   const me = await myUsername();
   const batch = writeBatch(db);
-  batch.set(doc(collection(db, 'posts', postId, 'replies')), { body: text, authorUid: me.uid, authorName: me.username, createdAt: serverTimestamp() });
+  const link = reply ? { parentId: reply.parentId.slice(0, 60), replyTo: reply.replyTo ? reply.replyTo.slice(0, 30) : null } : {};
+  batch.set(doc(collection(db, 'posts', postId, 'replies')), { body: text, authorUid: me.uid, authorName: me.username, createdAt: serverTimestamp(), ...link });
   batch.update(doc(db, 'posts', postId), { replyCount: increment(1), lastActivityAt: serverTimestamp() });
   await batch.commit();
 }
@@ -422,7 +427,15 @@ export async function listPostComments(postId: string) {
     .filter((item) => !blocked.has(String(item.data().authorUid)) && !item.data().stump)
     .map((item) => {
       const d = item.data();
-      return { id: item.id, author_id: String(d.authorUid ?? ''), author_name: d.authorName ?? null, body: String(d.body ?? ''), created_at: iso(d.createdAt) };
+      return {
+        id: item.id,
+        author_id: String(d.authorUid ?? ''),
+        author_name: d.authorName ?? null,
+        body: String(d.body ?? ''),
+        created_at: iso(d.createdAt),
+        parent_id: typeof d.parentId === 'string' ? d.parentId : null,
+        reply_to: typeof d.replyTo === 'string' ? d.replyTo : null,
+      };
     });
 }
 

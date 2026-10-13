@@ -1,3 +1,4 @@
+import { BackLink } from '@/components/learning/nav-bits';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -50,6 +51,7 @@ export default function SuggestedScreen() {
 
   return (
     <Screen width="prose">
+      <BackLink fallback={'/' as never} />
       <PageHeader eyebrow="WELCOME TO GRATE APEX" title="Suggested for you" subtitle="Follow official and verified accounts for updates, tips and study help." />
       {accounts === null ? <LoadingState /> : null}
       {accounts && accounts.length > 1 && left.length ? <Button label={`Follow all (${left.length})`} variant="secondary" loading={busy !== null} onPress={() => void follow(left)} /> : null}

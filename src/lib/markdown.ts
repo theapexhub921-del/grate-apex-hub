@@ -13,7 +13,8 @@ export type MarkdownBlock =
   | { type: 'math'; text: string }
   | { type: 'rule' };
 
-export type InlineSpan = { kind: 'text' | 'bold' | 'italic' | 'code' | 'math'; text: string };
+// Bold and italic are flags, so maths and code inside **bold** or *italic* still work.
+export type InlineSpan = { kind: 'text' | 'code' | 'math'; text: string; bold?: boolean; italic?: boolean };
 
 const FENCE = /^```\s*([\w+-]*)\s*$/;
 const HEADING = /^(#{1,6})\s+(.*?)\s*#*\s*$/;
@@ -132,16 +133,16 @@ export function parseMarkdown(source: string): MarkdownBlock[] {
 // snake_case are left alone. Maths needs non-space text next to each $.
 const INLINE = /((?:`[^`\n]+`)|(?:\*\*[^*\n]+\*\*)|(?:\*[^*\s][^*\n]*\*)|(?:\$(?!\s)[^$\n]*?\S\$))/;
 
-export function parseInline(text: string): InlineSpan[] {
+export function parseInline(text: string, style: { bold?: boolean; italic?: boolean } = {}): InlineSpan[] {
   const parts = text.split(INLINE);
   const spans: InlineSpan[] = [];
   parts.forEach((part, index) => {
     if (!part) return;
-    if (index % 2 === 0) { spans.push({ kind: 'text', text: part }); return; }
-    if (part.startsWith('`')) spans.push({ kind: 'code', text: part.slice(1, -1) });
-    else if (part.startsWith('**')) spans.push({ kind: 'bold', text: part.slice(2, -2) });
-    else if (part.startsWith('$')) spans.push({ kind: 'math', text: latexToText(part.slice(1, -1)) });
-    else spans.push({ kind: 'italic', text: part.slice(1, -1) });
+    if (index % 2 === 0) { spans.push({ kind: 'text', text: part, ...style }); return; }
+    if (part.startsWith('`')) spans.push({ kind: 'code', text: part.slice(1, -1), ...style });
+    else if (part.startsWith('**')) spans.push(...parseInline(part.slice(2, -2), { ...style, bold: true }));
+    else if (part.startsWith('$')) spans.push({ kind: 'math', text: latexToText(part.slice(1, -1)), ...style });
+    else spans.push(...parseInline(part.slice(1, -1), { ...style, italic: true }));
   });
   return spans;
 }

@@ -7,7 +7,7 @@ import { AiFlashcardsPanel, AiQuestionsPanel, AskAiPanel } from '@/components/le
 import { InteractiveLayer } from '@/components/learning/interactive-layer';
 import { ClassAccessCard } from '@/components/learning/class-access-card';
 import { MemoryStateBadge } from '@/components/learning/memory-ui';
-import { Breadcrumbs } from '@/components/learning/nav-bits';
+import { Breadcrumbs, BackLink } from '@/components/learning/nav-bits';
 import { ReadingLayer } from '@/components/learning/reading-layer';
 import { Button } from '@/components/ui/button';
 import { Card, Interactive } from '@/components/ui/interactive';
@@ -371,6 +371,7 @@ function LessonPlayer({
   return (
     <View style={styles.screen}>
       <Screen ref={scrollRef} width="wide">
+        <BackLink fallback={'/learn' as never} />
         <Breadcrumbs
           items={[
             { label: 'Study', href: routes.learn() },

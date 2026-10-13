@@ -1,3 +1,4 @@
+import { BackLink } from '@/components/learning/nav-bits';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -43,7 +44,12 @@ export default function ApexRoute() {
   const requested = getCourseInfo(param(course));
   const available = courseCatalog.filter((item) => eligibleCount(item.id) >= APEX.minimumQuestions);
   const chosen = requested && eligibleCount(requested.id) >= APEX.minimumQuestions ? requested : available.length === 1 ? available[0] : undefined;
-  return <ApexArena key={chosen?.id ?? 'pick'} courseId={chosen?.id} available={available.map((item) => item.id)} />;
+  return (
+    <View style={{ flex: 1 }}>
+      <View style={{ paddingHorizontal: 24, paddingTop: 8 }}><BackLink fallback={'/learn' as never} /></View>
+      <View style={{ flex: 1 }}><ApexArena key={chosen?.id ?? 'pick'} courseId={chosen?.id} available={available.map((item) => item.id)} /></View>
+    </View>
+  );
 }
 
 function ApexArena({ courseId, available }: { courseId?: string; available: string[] }) {

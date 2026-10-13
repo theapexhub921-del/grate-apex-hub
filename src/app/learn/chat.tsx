@@ -25,6 +25,11 @@ import {
 // Study chat: ask the AI anything, not tied to a lesson.
 // Each conversation is saved to the learner's account (see data/tutor-chats.ts).
 
+const PROBLEM = 'A problem occurred. Please retry your message.';
+
+// A message whose answer failed, kept so it can be sent again.
+type FailedMessage = { message: string; history: ChatTurn[] };
+
 const SUGGESTIONS = [
   'Explain glycolysis like I am new to it',
   'Make me a 7-day study plan for my exams',
@@ -46,6 +51,7 @@ export default function StudyChatScreen() {
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [failed, setFailed] = useState<FailedMessage | null>(null);
   const [saveFailed, setSaveFailed] = useState(false);
   const [past, setPast] = useState<TutorChatSummary[]>([]);
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
@@ -69,22 +75,24 @@ export default function StudyChatScreen() {
     void refreshPast();
   }, [refreshPast]);
 
-  async function send(raw: string) {
-    const message = raw.trim();
-    if (!message || busyRef.current) return;
+  // Sends one message and saves the conversation. The learner's message stays in the thread
+  // even if the answer fails, so Retry can send it again without repeating it.
+  async function submit(message: string, history: ChatTurn[]) {
+    if (busyRef.current) return;
     busyRef.current = true;
-    const history = turns;
     const id = chatId ?? newTutorChatId();
     const started = createdAt ?? new Date().toISOString();
+    const asked: ChatTurn[] = [...history, { role: 'user', text: message }];
     setChatId(id);
     setCreatedAt(started);
-    setTurns([...history, { role: 'user', text: message }]);
+    setTurns(asked);
     setDraft('');
     setError(null);
+    setFailed(null);
     setBusy(true);
     try {
       const answer = await askStudyChat(message, history);
-      const finished: ChatTurn[] = [...history, { role: 'user', text: message }, { role: 'model', text: answer }];
+      const finished: ChatTurn[] = [...asked, { role: 'model', text: answer }];
       if (alive.current) setTurns(finished);
       try {
         await saveTutorChat({ id, turns: finished, createdAt: started });
@@ -93,12 +101,25 @@ export default function StudyChatScreen() {
       } catch {
         if (alive.current) setSaveFailed(true);
       }
-    } catch (problem) {
-      if (alive.current) setError(problem instanceof AiError ? problem.message : 'The AI could not answer right now. Please try again.');
+    } catch {
+      if (alive.current) {
+        setFailed({ message, history });
+        setError(PROBLEM);
+      }
     } finally {
       busyRef.current = false;
       if (alive.current) setBusy(false);
     }
+  }
+
+  function send(raw: string) {
+    const message = raw.trim();
+    if (!message) return;
+    void submit(message, turns);
+  }
+
+  function retry() {
+    if (failed) void submit(failed.message, failed.history);
   }
 
   function newChat() {
@@ -106,12 +127,14 @@ export default function StudyChatScreen() {
     setCreatedAt(null);
     setTurns([]);
     setError(null);
+    setFailed(null);
     setSaveFailed(false);
     setPendingDelete(null);
   }
 
   async function openChat(id: string) {
     setError(null);
+    setFailed(null);
     setPendingDelete(null);
     try {
       const chat = await getTutorChat(id);
@@ -180,7 +203,12 @@ export default function StudyChatScreen() {
         </View>
       )}
 
-      {error ? <InlineNotice tone="error" message={error} /> : null}
+      {error ? (
+        <View style={styles.problem}>
+          <InlineNotice tone="error" message={error} />
+          {failed ? <Button label="Retry" variant="secondary" size="sm" icon={<Icon name="send" size={15} color={colors.text} />} onPress={retry} disabled={busy} /> : null}
+        </View>
+      ) : null}
       {saveFailed ? <InlineNotice tone="error" message="This chat could not be saved to your account. Check your connection; it will stay on this screen until you leave it." /> : null}
 
       <View style={styles.composer}>
@@ -242,6 +270,7 @@ function createStyles(colors: ThemeColors) {
     hint: { fontSize: 14, lineHeight: 21, color: colors.textSecondary },
     composer: { gap: 10 },
     input: { minHeight: 74, borderWidth: 1, borderColor: colors.borderStrong, borderRadius: Radius.md, backgroundColor: colors.surfaceSunken, padding: 12, color: colors.text, fontSize: 14.5, textAlignVertical: 'top' },
+    problem: { gap: 10 },
     section: { marginTop: 30 },
     emptyPast: { padding: 16 },
     pastList: { gap: 9 },

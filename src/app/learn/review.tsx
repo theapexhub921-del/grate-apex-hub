@@ -4,7 +4,7 @@ import { StyleSheet, View } from 'react-native';
 import { Text } from '@/components/ui/text';
 
 import { MemoryDistribution } from '@/components/learning/memory-ui';
-import { Breadcrumbs, StatTile } from '@/components/learning/nav-bits';
+import { Breadcrumbs, StatTile, BackLink } from '@/components/learning/nav-bits';
 import { type FeedbackMode, QuestionSession, type SessionItem, type SessionResult } from '@/components/learning/question-session';
 import { Button } from '@/components/ui/button';
 import { Card, Interactive } from '@/components/ui/interactive';
@@ -217,6 +217,7 @@ function ReviewScreen({
 
   return (
     <Screen width="learning">
+      <BackLink fallback={'/learn' as never} />
       <Breadcrumbs
         items={[
           { label: 'Study', href: routes.learn() },

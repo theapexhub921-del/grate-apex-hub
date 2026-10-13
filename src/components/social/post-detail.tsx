@@ -23,7 +23,13 @@ import { stumpQuestion } from '@/data/stumps';
 import { useTheme, useThemedStyles } from '@/hooks/use-theme';
 import { routes } from '@/lib/routes';
 
-export type PostComment = { id: string; author_id: string; author_name?: string | null; body: string; created_at: string };
+export type PostComment = {
+  id: string; author_id: string; author_name?: string | null; body: string; created_at: string;
+  /** The top-level comment this reply sits under; null for a comment. */
+  parent_id?: string | null;
+  /** The username this reply answers, if any. */
+  reply_to?: string | null;
+};
 
 const now = () => Date.now();
 
@@ -89,7 +95,10 @@ export function PostDetail({
     return comment.author_name ?? (person ? personName(person) : 'Learner');
   };
 
-  const media = hasMedia ? <MediaCarousel items={items} height={split ? panelHeight : 360} fit={split ? 'contain' : 'cover'} rounded={!split} /> : null;
+  // On a phone the photo sits above a separate, scrolling comments list. A sideways photo
+  // carousel inside the same scroll view stops the comments from scrolling.
+  const phoneMediaHeight = Math.max(200, Math.min(360, Math.round(height * 0.4)));
+  const media = hasMedia ? <MediaCarousel items={items} height={split ? panelHeight : phoneMediaHeight} fit={split ? 'contain' : 'cover'} rounded={!split} /> : null;
 
   const header = (
     <View style={styles.head}>
@@ -131,31 +140,52 @@ export function PostDetail({
     </>
   );
 
+  // Replies sit under the comment they answer. A reply whose comment is gone is shown on its own.
+  const commentIds = new Set(comments.map((comment) => comment.id));
+  const topLevel = comments.filter((comment) => !comment.parent_id || !commentIds.has(comment.parent_id));
+  const repliesFor = (parentId: string) => comments.filter((comment) => comment.parent_id === parentId);
+
+  // @usernames in a comment are shown in the primary colour so they stand out from the text.
+  const withMentions = (body: string) => body.split(/(@[A-Za-z0-9_]{3,20})/).map((part, index) => (
+    index % 2 === 1 ? <Text key={index} style={styles.mention}>{part}</Text> : part
+  ));
+
+  const renderComment = (comment: PostComment, isReply: boolean) => {
+    const person = people.find((p) => p.userId === comment.author_id);
+    const who = commentName(comment);
+    const canReply = Boolean(comment.author_name);
+    const avatar = isReply ? 26 : 32;
+    return (
+      <SwipeToReply key={comment.id} onReply={() => { onReply(comment); focusInput(); }} enabled={canSwipe && canReply}>
+        <Interactive onLongPress={() => setMenu(comment)} onPress={canSwipe ? () => setMenu(comment) : undefined} accessibilityLabel={`Comment by ${who}. Options`} style={styles.row}>
+          <Interactive onPress={() => openProfile(comment.author_id)} accessibilityRole="link" accessibilityLabel={`View ${who}'s profile`}>
+            <PersonAvatar uid={comment.author_id} uri={person?.avatarUrl ?? null} name={who} size={avatar} />
+          </Interactive>
+          <View style={styles.rowText}>
+            <Text style={styles.text}>
+              <Text style={styles.bold} onPress={() => openProfile(comment.author_id)}>{who}</Text>{' '}
+              <VerifiedBadge username={comment.author_name} uid={comment.author_id} size={12} /> {withMentions(comment.body)}
+            </Text>
+            <View style={styles.metaRow}>
+              <Text style={styles.meta}>{short(comment.created_at)}</Text>
+              {canReply ? <Text style={styles.metaAction} onPress={() => { onReply(comment); focusInput(); }} accessibilityRole="button">Reply</Text> : null}
+              {comment.author_id !== ownId ? <Text style={styles.metaAction} onPress={() => onReportComment(comment)} accessibilityRole="button">Report</Text> : null}
+            </View>
+          </View>
+        </Interactive>
+      </SwipeToReply>
+    );
+  };
+
   const commentList = (
     <>
-      {comments.map((comment) => {
-        const person = people.find((p) => p.userId === comment.author_id);
-        const who = commentName(comment);
-        const canReply = Boolean(comment.author_name);
+      {topLevel.map((comment) => {
+        const replies = repliesFor(comment.id);
         return (
-          <SwipeToReply key={comment.id} onReply={() => { onReply(comment); focusInput(); }} enabled={canSwipe && canReply}>
-            <Interactive onLongPress={() => setMenu(comment)} onPress={canSwipe ? () => setMenu(comment) : undefined} accessibilityLabel={`Comment by ${who}. Options`} style={styles.row}>
-              <Interactive onPress={() => openProfile(comment.author_id)} accessibilityRole="link" accessibilityLabel={`View ${who}'s profile`}>
-                <PersonAvatar uid={comment.author_id} uri={person?.avatarUrl ?? null} name={who} size={32} />
-              </Interactive>
-              <View style={styles.rowText}>
-                <Text style={styles.text}>
-                  <Text style={styles.bold} onPress={() => openProfile(comment.author_id)}>{who}</Text>{' '}
-                  <VerifiedBadge username={comment.author_name} uid={comment.author_id} size={12} /> {comment.body}
-                </Text>
-                <View style={styles.metaRow}>
-                  <Text style={styles.meta}>{short(comment.created_at)}</Text>
-                  {canReply ? <Text style={styles.metaAction} onPress={() => { onReply(comment); focusInput(); }} accessibilityRole="button">Reply</Text> : null}
-                  {comment.author_id !== ownId ? <Text style={styles.metaAction} onPress={() => onReportComment(comment)} accessibilityRole="button">Report</Text> : null}
-                </View>
-              </View>
-            </Interactive>
-          </SwipeToReply>
+          <View key={comment.id} style={styles.thread}>
+            {renderComment(comment, false)}
+            {replies.length ? <View style={styles.replies}>{replies.map((reply) => renderComment(reply, true))}</View> : null}
+          </View>
         );
       })}
       {!comments.length ? (
@@ -203,8 +233,8 @@ export function PostDetail({
   const side = (
     <View style={[styles.side, split && styles.sideSplit]}>
       {header}
-      <ScrollView style={styles.flex} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-        {!split ? media : null}
+      {!split && media ? <View style={styles.mediaPhone}>{media}</View> : null}
+      <ScrollView style={styles.commentsArea} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         {caption}
         {commentList}
       </ScrollView>
@@ -333,11 +363,14 @@ function createStyles(colors: ThemeColors) {
     panel: { backgroundColor: colors.surfaceElevated, overflow: 'hidden', flexDirection: 'row' },
     panelDesktop: { borderRadius: Radius.lg, borderWidth: 1, borderColor: colors.hairline },
     panelPhone: { flex: 1 },
-    mediaPane: { flex: 1, minWidth: 0, backgroundColor: '#000', justifyContent: 'center' },
+    mediaPane: { flex: 1, minWidth: 0, minHeight: 0, overflow: 'hidden', backgroundColor: '#000', justifyContent: 'center' },
     mediaSplit: { width: '100%', height: '100%' },
     mediaStacked: { width: '100%', aspectRatio: 1, maxHeight: 420, borderRadius: Radius.md, backgroundColor: colors.surfaceMuted },
-    side: { flex: 1, minWidth: 0 },
-    sideSplit: { flex: 0, width: 400, borderLeftWidth: 1, borderLeftColor: colors.divider },
+    side: { flexGrow: 1, flexShrink: 1, flexBasis: 0, minWidth: 0 },
+    // The comments column is a fixed 400px on a computer. (flex: 0 used to make it 0px wide, hiding the comments.)
+    sideSplit: { flexGrow: 0, flexShrink: 0, flexBasis: 400, width: 400, borderLeftWidth: 1, borderLeftColor: colors.divider },
+    commentsArea: { flex: 1, minHeight: 0, minWidth: 0 },
+    mediaPhone: { flexShrink: 0 },
     head: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.divider },
     headWho: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 10 },
     headName: { ...Type.headline, fontSize: 14.5, color: colors.text, flexShrink: 1 },
@@ -347,6 +380,9 @@ function createStyles(colors: ThemeColors) {
     rowText: { flex: 1, minWidth: 0, gap: 4 },
     text: { fontSize: 14, lineHeight: 20, color: colors.text, ...(webStyle({ overflowWrap: 'anywhere', wordBreak: 'break-word' }) as object) },
     bold: { fontWeight: '800', color: colors.text },
+    mention: { fontWeight: '700', color: colors.primaryText },
+    thread: { gap: 10 },
+    replies: { marginLeft: 16, paddingLeft: 28, gap: 12, borderLeftWidth: 2, borderColor: colors.border },
     metaRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
     meta: { fontSize: 12, color: colors.textTertiary },
     metaAction: { fontSize: 12, fontWeight: '700', color: colors.textSecondary },
@@ -354,7 +390,7 @@ function createStyles(colors: ThemeColors) {
     noneTitle: { ...Type.title3, color: colors.text },
     reshare: { gap: 8, borderWidth: 1, borderColor: colors.border, borderRadius: Radius.md, padding: 12, backgroundColor: colors.surfaceMuted },
     reshareImage: { width: '100%', height: 220, borderRadius: Radius.sm },
-    bottom: { borderTopWidth: 1, borderTopColor: colors.divider },
+    bottom: { flexShrink: 0, borderTopWidth: 1, borderTopColor: colors.divider },
     actions: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingTop: 6 },
     action: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center' },
     counts: { paddingHorizontal: 14, paddingBottom: 10, gap: 2 },

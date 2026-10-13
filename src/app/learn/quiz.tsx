@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Text } from '@/components/ui/text';
 
-import { Breadcrumbs } from '@/components/learning/nav-bits';
+import { Breadcrumbs, BackLink } from '@/components/learning/nav-bits';
 import { type FeedbackMode, QuestionSession, type SessionItem, type SessionResult } from '@/components/learning/question-session';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
@@ -323,6 +323,7 @@ function QuizScreen({
 
   return (
     <Screen width="learning">
+      <BackLink fallback={'/learn' as never} />
       <Breadcrumbs items={[{ label: 'Study', href: routes.learn() }, ...plan.crumbs]} style={styles.crumbs} />
       <Text style={styles.kicker}>
         {plan.kind === 'mastery-check'

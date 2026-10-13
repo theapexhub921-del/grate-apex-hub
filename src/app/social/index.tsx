@@ -1,3 +1,4 @@
+import { BackLink } from '@/components/learning/nav-bits';
 import { router } from 'expo-router';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Text } from '@/components/ui/text';
@@ -149,6 +150,7 @@ export default function SocialScreen() {
 
   return (
     <Screen width="content">
+      <BackLink fallback={'/' as never} />
       <PageHeader title="Connect" subtitle="Find classmates, message friends and study together." right={<NotificationBell />} />
       <FollowRequestsCard />
       <RecentMessagesCard />
