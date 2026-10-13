@@ -161,6 +161,12 @@ Every lesson has an "Ask AI" tab (questions answered from the lesson's own text)
 * `expo start` does not run `api/`, so the AI shows a friendly "runs on the live app" message in a local preview. To try it locally use `vercel dev`, or set `EXPO_PUBLIC_API_BASE` to the live site.
 * `tests/ai-study.test.mjs` checks every lesson produces text for the AI.
 
+## Study chat (general AI chat, outside lessons)
+
+`/learn/chat` (`src/app/learn/chat.tsx`) is a general AI chat, linked from the Learn home. It calls `/api/chat` (`api/chat.mjs`) through `src/lib/ai-chat-api.ts`, with its own per-learner allowance (120 requests / 10 min) separate from the lesson AI.
+
+* Providers, tried in order: any OpenAI-compatible service (`CHAT_API_KEY`, optional `CHAT_API_BASE` default Groq, optional `CHAT_MODEL`), then Gemini (`GEMINI_API_KEY`, optional `GEMINI_CHAT_MODEL`). If the first is rate-limited or down, the next answers. Set at least one key in Vercel, then redeploy.
+
 ## Progress system
 
 GRATEAPEX has persistent progress using AsyncStorage.
