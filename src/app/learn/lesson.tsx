@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { Text } from '@/components/ui/text';
 
+import { AiFlashcardsPanel, AskAiPanel } from '@/components/learning/ai-study';
 import { InteractiveLayer } from '@/components/learning/interactive-layer';
 import { ClassAccessCard } from '@/components/learning/class-access-card';
 import { MemoryStateBadge } from '@/components/learning/memory-ui';
@@ -17,6 +18,7 @@ import { XpReward, XpToast } from '@/components/xp-toast';
 import type { ThemeColors } from '@/constants/theme';
 import { conceptKey, findLesson, getCourseInfo, getLessonQuizBank, isTrackableConcept } from '@/data/curriculum';
 import { classLessonCompletion, firstClassOffering, firstIncompleteClassBefore, isClassAhead, readAcademicTrial, readClassSelection } from '@/data/class-curriculum';
+import { lessonToText } from '@/data/ai-study';
 import { beginLesson, finishLesson, type LessonFinish } from '@/data/learning/actions';
 import { saveLessonSession, useLessonSessions } from '@/data/learning/lesson-sessions';
 import { describeDue } from '@/data/learning/time';
@@ -28,6 +30,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { param, routes } from '@/lib/routes';
 
 type View3 = 'learn' | 'read';
+type AiView = 'ask' | 'aicards';
 
 // /learn/lesson?lesson=<lesson id>[&layer=learn|read][&restart=1]
 export default function LessonRoute() {
@@ -85,6 +88,8 @@ function LessonPlayer({
   const requiredProgress = requiredLevel ? classLessonCompletion(requiredLevel.selection, progress.lessonCompletedAt) : null;
   const classLocked = Boolean(firstOffering && requiredLevel);
 
+  // Ask AI / AI Flashcards take over the main column while open.
+  const [ai, setAi] = useState<AiView | null>(null);
   const [view, setView] = useState<View3>(() => {
     if (requestedLayer) return requestedLayer;
     if (!hasInteractive) return 'read';
@@ -154,6 +159,7 @@ function LessonPlayer({
   }
 
   function goTo(next: View3) {
+    setAi(null);
     setView(next);
     scrollTop();
   }
@@ -188,7 +194,7 @@ function LessonPlayer({
         <Text style={styles.kicker}>THIS LESSON</Text>
         {(['learn', 'read'] as View3[]).map((layer, i) => {
           const disabled = layer === 'learn' && !hasInteractive;
-          const active = view === layer;
+          const active = view === layer && !ai;
           const label = layer === 'learn' ? 'Learn interactively' : 'Read & revise';
           const detail =
             layer === 'learn'
@@ -249,7 +255,8 @@ function LessonPlayer({
     </View>
   );
 
-  const main = (
+  const aiLesson = { id: lesson.id, title: lesson.title, text: lessonToText(lesson) };
+  const lessonMain = (
     <View style={styles.main}>
       {error ? <InlineNotice tone="error" title="SOMETHING WENT WRONG" message={error} /> : null}
 
@@ -350,6 +357,17 @@ function LessonPlayer({
     </View>
   );
 
+  const main = ai ? (
+    <View style={styles.main}>
+      {ai === 'ask' ? <AskAiPanel lesson={aiLesson} /> : <AiFlashcardsPanel lesson={aiLesson} />}
+    </View>
+  ) : lessonMain;
+
+  function openAi(next: AiView) {
+    setAi(next);
+    scrollTop();
+  }
+
   return (
     <View style={styles.screen}>
       <Screen ref={scrollRef} width="wide">
@@ -392,9 +410,9 @@ function LessonPlayer({
               accessibilityState={{ selected: view === layer }}
               disabled={layer === 'learn' && !hasInteractive}
               onPress={() => goTo(layer)}
-              style={({ hovered }) => [styles.tab, view === layer && styles.tabActive, hovered && styles.tabHover]}
+              style={({ hovered }) => [styles.tab, view === layer && !ai && styles.tabActive, hovered && styles.tabHover]}
             >
-              <Text style={[styles.tabText, view === layer && styles.tabTextActive]}>
+              <Text style={[styles.tabText, view === layer && !ai && styles.tabTextActive]}>
                 {i + 1} · {layer === 'learn' ? 'Learn' : 'Read'}
               </Text>
             </Interactive>
@@ -407,6 +425,17 @@ function LessonPlayer({
           >
             <Text style={styles.tabText}>3 · Quiz</Text>
           </Interactive>
+          {(['ask', 'aicards'] as AiView[]).map((layer) => (
+            <Interactive
+              key={layer}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: ai === layer }}
+              onPress={() => openAi(layer)}
+              style={({ hovered }) => [styles.tab, ai === layer && styles.tabActive, hovered && styles.tabHover]}
+            >
+              <Text style={[styles.tabText, ai === layer && styles.tabTextActive]}>{layer === 'ask' ? 'Ask AI' : 'AI Flashcards'}</Text>
+            </Interactive>
+          ))}
         </View>
 
         <Columns main={main} side={outline} sideWidth={320} />
@@ -429,6 +458,7 @@ function createStyles(colors: ThemeColors) {
     kicker: { fontSize: 11, fontWeight: '800', letterSpacing: 1.1, color: colors.textTertiary, marginBottom: 6 },
     tabs: {
       flexDirection: 'row',
+      flexWrap: 'wrap',
       gap: 6,
       marginTop: 18,
       marginBottom: 16,

@@ -77,7 +77,39 @@ function TitleSync() {
       window.dispatchEvent(new Event('grateapex-install-prompt'));
     };
     window.addEventListener('beforeinstallprompt', onInstallPrompt);
-    if (!('serviceWorker' in navigator)) return;
+
+    // Safety net: if a browser still zoomed in on a field, snap back to 100%
+    // once the keyboard closes (and undo the page scroll it left behind).
+    const isField = (el: EventTarget | null) =>
+      el instanceof HTMLElement && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable);
+    let resetTimer: ReturnType<typeof setTimeout> | undefined;
+    const onFocusOut = (event: FocusEvent) => {
+      if (!isField(event.target)) return;
+      clearTimeout(resetTimer);
+      resetTimer = setTimeout(() => {
+        if (isField(document.activeElement)) return;
+        const vv = window.visualViewport;
+        if (vv && vv.scale > 1.001) {
+          const meta = document.querySelector('meta[name="viewport"]');
+          const original = meta?.getAttribute('content');
+          if (meta && original) {
+            meta.setAttribute('content', `${original}, maximum-scale=1`);
+            setTimeout(() => meta.setAttribute('content', original), 300);
+          }
+        }
+        if (window.scrollX !== 0 || (window.scrollY !== 0 && document.documentElement.scrollHeight <= window.innerHeight + 1)) {
+          window.scrollTo(0, 0);
+        }
+      }, 120);
+    };
+    document.addEventListener('focusout', onFocusOut);
+    if (!('serviceWorker' in navigator)) {
+      return () => {
+        window.removeEventListener('beforeinstallprompt', onInstallPrompt);
+        document.removeEventListener('focusout', onFocusOut);
+        clearTimeout(resetTimer);
+      };
+    }
 
     const wasControlled = Boolean(navigator.serviceWorker.controller);
     let reloadingForUpdate = false;
@@ -100,6 +132,9 @@ function TitleSync() {
       .catch(() => undefined);
 
     return () => {
+      window.removeEventListener('beforeinstallprompt', onInstallPrompt);
+      document.removeEventListener('focusout', onFocusOut);
+      clearTimeout(resetTimer);
       navigator.serviceWorker.removeEventListener('controllerchange', onControllerChange);
       document.removeEventListener('visibilitychange', checkForUpdate);
     };
@@ -113,5 +148,20 @@ function TitleSync() {
 const responsiveBackground = `
 body {
   background-color: #1436B8;
+}
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+/* iOS Safari zooms the whole page when a field under 16px is focused, and
+   leaves it zoomed after the keyboard closes. Touch screens get 16px fields;
+   touch-action stops double-tap zoom without blocking pinch-zoom. */
+@media (pointer: coarse) {
+  input, textarea, select {
+    font-size: 16px !important;
+  }
+  html, body, button, a, [role="button"] {
+    touch-action: manipulation;
+  }
 }
 `;

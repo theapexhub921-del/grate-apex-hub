@@ -8,9 +8,10 @@
 // public/figures/<topic>/, describe its spots in the topic file, list it
 // below, then set `figure` on a reading section and/or questions.
 import { figures as cardiovascular } from '@/data/figures/cardiovascular-physiology';
+import { figures as upperLimb } from '@/data/figures/upper-limb';
 import type { FigureSpot, LessonFigure } from '@/data/lesson-types';
 
-export const allFigures: LessonFigure[] = [...cardiovascular];
+export const allFigures: LessonFigure[] = [...cardiovascular, ...upperLimb];
 
 const byId = new Map(allFigures.map((figure) => [figure.id, figure]));
 

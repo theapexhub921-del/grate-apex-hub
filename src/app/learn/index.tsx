@@ -91,6 +91,15 @@ export default function LearnScreen() {
     <View style={styles.column}>
       {actions[0] ? <NextActionHero action={actions[0]} /> : null}
 
+      <Card style={styles.tutorCard} tone="outline">
+        <View style={styles.tutorCopy}>
+          <Text style={styles.tutorEyebrow}>STUDY CHAT</Text>
+          <Text style={styles.tutorTitle}>Ask the AI anything</Text>
+          <Text style={styles.subjectTagline}>Concepts, study plans, memory tricks and quizzes, not tied to one lesson.</Text>
+        </View>
+        <Button label="Open Study chat" variant="secondary" trailing="chevronRight" onPress={() => router.push('/learn/chat' as never)} />
+      </Card>
+
       <Card style={styles.tutorCard} tone="primary">
         <View style={styles.tutorCopy}>
           <Text style={styles.tutorEyebrow}>VOICE STUDY PREVIEW</Text>
@@ -281,6 +290,7 @@ export default function LearnScreen() {
     { id: 'custom', icon: 'edit', title: 'Custom quiz', detail: 'Choose the lessons, how many questions, a timer and when you see the answers.', onPress: () => router.push(routes.customQuizBuilder()) },
     { id: 'past', icon: 'book', title: 'Past question bank', detail: 'Real past papers and predicted papers, sat like the exam.', onPress: () => router.push('/learn/past-questions' as never) },
     { id: 'planner', icon: 'calendar', title: 'Timetable and plans', detail: 'Your weekly calendar, and a lesson path for your goals.', onPress: () => router.push('/learn/planner' as never) },
+    { id: 'chat', icon: 'sparkle', title: 'Study chat', detail: 'Ask the AI anything: concepts, study plans, memory tricks and quizzes.', onPress: () => router.push('/learn/chat' as never) },
   ];
   const reviewCalendar = (
     <Card style={styles.calendarCard}>

@@ -11,6 +11,7 @@ import { AboutEditor } from '@/components/social/about-editor';
 import { AchievementBadge } from '@/components/achievements/achievement-badge';
 import { ApexCoinWalletCard } from '@/components/apex-coin-wallet-card';
 import { AvatarPicker } from '@/components/avatar/avatar-picker';
+import { FollowListSheet } from '@/components/social/follow-list-sheet';
 import { PersonAvatar, PersonLink } from '@/components/social/profile-card';
 import { AnimatedNumber } from '@/components/ui/animated-number';
 import { Avatar } from '@/components/ui/avatar';
@@ -19,7 +20,6 @@ import { Icon, type IconName } from '@/components/ui/icon';
 import { IconButton } from '@/components/ui/icon-button';
 import { Card, Interactive } from '@/components/ui/interactive';
 import { Columns, PageHeader, Screen, SectionHeader } from '@/components/ui/screen';
-import { FollowListSheet } from '@/components/social/follow-list-sheet';
 import { webStyle } from '@/components/ui/web';
 import { elevation, isDesktopWidth, Radius, Type, type ThemeColors } from '@/constants/theme';
 import { curriculumProgress } from '@/data/learning/progress-model';
@@ -119,33 +119,33 @@ export default function ProfileScreen() {
           </Text>
           <VerifiedBadge username={social.username} uid={user?.uid} size={20} />
         </View>
-        <View style={styles.countsRow}>
-          <Text style={styles.countText}>
-            <Text style={styles.countValue}>{myCounts ? myCounts.posts : 0}</Text> posts
-          </Text>
-          <Text style={styles.countDivider}> · </Text>
-          <Interactive
-            onPress={() => openFollowList('followers')}
-            accessibilityRole="button"
-            accessibilityLabel={`View ${myCounts ? myCounts.followers : 0} followers`}
-            style={styles.countPressable}
-          >
+        {myCounts ? (
+          <View style={styles.countsRow}>
             <Text style={styles.countText}>
-              <Text style={styles.countValueTappable}>{myCounts ? myCounts.followers : 0}</Text> followers
+              <Text style={styles.countValue}>{myCounts.posts}</Text> posts
             </Text>
-          </Interactive>
-          <Text style={styles.countDivider}> · </Text>
-          <Interactive
-            onPress={() => openFollowList('following')}
-            accessibilityRole="button"
-            accessibilityLabel={`View ${myCounts ? myCounts.following : 0} following`}
-            style={styles.countPressable}
-          >
-            <Text style={styles.countText}>
-              <Text style={styles.countValueTappable}>{myCounts ? myCounts.following : 0}</Text> following
-            </Text>
-          </Interactive>
-        </View>
+            <Text style={styles.countDivider}> · </Text>
+            <Interactive
+              onPress={() => openFollowList('followers')}
+              accessibilityLabel={`View ${myCounts.followers} followers`}
+              style={styles.countPressable}
+            >
+              <Text style={styles.countText}>
+                <Text style={styles.countValueTappable}>{myCounts.followers}</Text> followers
+              </Text>
+            </Interactive>
+            <Text style={styles.countDivider}> · </Text>
+            <Interactive
+              onPress={() => openFollowList('following')}
+              accessibilityLabel={`View ${myCounts.following} following`}
+              style={styles.countPressable}
+            >
+              <Text style={styles.countText}>
+                <Text style={styles.countValueTappable}>{myCounts.following}</Text> following
+              </Text>
+            </Interactive>
+          </View>
+        ) : null}
         <AboutEditor />
         <Text style={styles.username}>
           {social.status === 'loading' ? 'Username: Loading…' : `Username: ${social.username ? `@${social.username}` : '—'}`}
@@ -322,15 +322,9 @@ export default function ProfileScreen() {
           {menu}
         </View>
       )}
-      <FollowListSheet
-        visible={followSheetOpen}
-        onClose={() => setFollowSheetOpen(false)}
-        userId={user?.uid}
-        userName={displayName}
-        initialTab={followTab}
-        followersCount={myCounts?.followers}
-        followingCount={myCounts?.following}
-      />
+      {user?.uid ? (
+        <FollowListSheet visible={followSheetOpen} onClose={() => setFollowSheetOpen(false)} uid={user.uid} tab={followTab} onTabChange={setFollowTab} counts={myCounts} />
+      ) : null}
     </Screen>
   );
 }
@@ -415,14 +409,34 @@ function createStyles(colors: ThemeColors) {
     countPressable: { paddingVertical: 2, paddingHorizontal: 4, borderRadius: Radius.sm },
     countValue: { fontWeight: '800', color: colors.text },
     countValueTappable: { fontWeight: '800', color: colors.primaryText, textDecorationLine: 'underline' },
-    circleButtonsRow: {
+    sheetTabs: { marginBottom: 14 },
+    sheetLoading: { paddingVertical: 32, alignItems: 'center', justifyContent: 'center' },
+    sheetEmpty: { paddingVertical: 24 },
+    followUserList: { gap: 10, paddingVertical: 4 },
+    followUserRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      justifyContent: 'space-between',
-      flexWrap: 'wrap',
-      gap: 8,
-      marginTop: 4,
+      gap: 12,
+      padding: 10,
+      borderRadius: Radius.md,
+      backgroundColor: colors.surfaceMuted,
     },
+    followUserInfo: { flex: 1, minWidth: 0, gap: 2 },
+    followUserName: { fontSize: 14, fontWeight: '800', color: colors.text },
+    followUserHandle: { fontSize: 12, color: colors.textSecondary },
+    followUserBio: { fontSize: 11.5, color: colors.textTertiary, marginTop: 2 },
+    followUserXpPill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      paddingVertical: 4,
+      paddingHorizontal: 8,
+      borderRadius: Radius.pill,
+      backgroundColor: colors.surfaceElevated,
+      borderWidth: 1,
+      borderColor: colors.hairline,
+    },
+    followUserXp: { fontSize: 11.5, fontWeight: '800', color: colors.accentText },
     name: { ...Type.title1, color: colors.text },
     badges: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
     rankBadge: {
@@ -466,6 +480,7 @@ function createStyles(colors: ThemeColors) {
     socialCard: { gap: 12, marginTop: 12 },
     noMargin: { marginBottom: 0 },
     friendRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 3 },
+    circleButtonsRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginTop: 4 },
     friendText: { flex: 1, minWidth: 0, gap: 2 },
     nameLine: { flexDirection: 'row', alignItems: 'center', gap: 5, minWidth: 0 },
     friendName: { fontSize: 13.5, fontWeight: '800', color: colors.text },

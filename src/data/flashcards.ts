@@ -38,7 +38,7 @@ export function nextLabel(state: CardState | undefined, rating: Rating, now: num
   return days >= 30 ? `${Math.round(days / 30)}mo` : `${days}d`;
 }
 
-function hash(text: string) {
+export function hash(text: string) {
   let h = 2166136261;
   for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 16777619);
   return (h >>> 0).toString(36);

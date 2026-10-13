@@ -16,7 +16,7 @@ import { useTheme, useThemedStyles } from '@/hooks/use-theme';
 // flashcards with spaced repetition, the glossary, mnemonics, key facts and the
 // lesson's step-by-step process. (The review calendar lives in Study.)
 
-export type ToolTab = 'read' | 'cards' | 'glossary' | 'mnemonics' | 'facts' | 'steps' | 'practice';
+export type ToolTab = 'read' | 'cards' | 'glossary' | 'mnemonics' | 'facts' | 'steps' | 'practice' | 'ask' | 'aicards';
 export type ToolTabInfo = { id: ToolTab; label: string; icon: IconName };
 
 export function LessonToolTabs({ tabs, active, onChange }: { tabs: readonly ToolTabInfo[]; active: ToolTab; onChange: (tab: ToolTab) => void }) {
@@ -123,7 +123,16 @@ const RATINGS: { id: Rating; label: string; tone: 'error' | 'warning' | 'primary
   { id: 'easy', label: 'Easy', tone: 'success' },
 ];
 
-export function FlashcardsPanel({ cards }: { cards: readonly Flashcard[] }) {
+export type FlashcardLabels = { title: string; intro: string; front: string; back: string; hint: string };
+const TERM_LABELS: FlashcardLabels = {
+  title: 'Flashcards',
+  intro: 'Spaced repetition like Anki. See the term, say the meaning out loud, flip, then tell it how it went: Again, Hard, Good or Easy. The easier a card is, the longer it waits before it comes back.',
+  front: 'TERM',
+  back: 'MEANING',
+  hint: 'Say the meaning out loud, then tap to flip.',
+};
+
+export function FlashcardsPanel({ cards, labels = TERM_LABELS }: { cards: readonly Flashcard[]; labels?: FlashcardLabels }) {
   const styles = useThemedStyles(createStyles);
   const colors = useTheme();
   const [states, setStates] = useState<Record<string, CardState>>({});
@@ -203,9 +212,9 @@ export function FlashcardsPanel({ cards }: { cards: readonly Flashcard[] }) {
           <Button label="End" variant="ghost" size="sm" onPress={() => { setNow(timeNow()); setSession(null); }} />
         </View>
         <PressableCard onPress={() => setSession({ ...session, flipped: !session.flipped })} accessibilityLabel={session.flipped ? 'Card back. Tap to see the front' : 'Card front. Tap to flip'} style={styles.flashcard}>
-          <Text style={styles.cardSide}>{session.flipped ? 'MEANING' : 'TERM'}</Text>
+          <Text style={styles.cardSide}>{session.flipped ? labels.back : labels.front}</Text>
           <Text style={session.flipped ? styles.cardBack : styles.cardFront}>{session.flipped ? card.back : card.front}</Text>
-          {!session.flipped ? <Text style={styles.cardHint}>Say the meaning out loud, then tap to flip.</Text> : null}
+          {!session.flipped ? <Text style={styles.cardHint}>{labels.hint}</Text> : null}
         </PressableCard>
         {session.flipped ? (
           scheduled ? (
@@ -237,8 +246,8 @@ export function FlashcardsPanel({ cards }: { cards: readonly Flashcard[] }) {
   ];
   return (
     <View style={styles.panel}>
-      <Text style={styles.panelTitle}>Flashcards</Text>
-      <Text style={styles.panelText}>Spaced repetition like Anki. See the term, say the meaning out loud, flip, then tell it how it went: Again, Hard, Good or Easy. The easier a card is, the longer it waits before it comes back.</Text>
+      <Text style={styles.panelTitle}>{labels.title}</Text>
+      <Text style={styles.panelText}>{labels.intro}</Text>
       {options.map((option) => (
         <PressableCard key={option.mode} onPress={() => start(option.mode)} disabled={option.disabled} accessibilityLabel={`${option.title}. ${option.detail}`} style={[styles.option, option.disabled && styles.optionOff]}>
           <View style={styles.optionIcon}><Icon name={option.icon} size={18} color={colors.primaryText} /></View>

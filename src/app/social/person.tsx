@@ -4,8 +4,8 @@ import { StyleSheet, View } from 'react-native';
 
 import { BackLink } from '@/components/learning/nav-bits';
 import { CommunityPostsFeed } from '@/components/social/community-posts-feed';
-import { FollowListSheet } from '@/components/social/follow-list-sheet';
-import { Avatar } from '@/components/ui/avatar';
+import { FollowListSheet, type FollowTab } from '@/components/social/follow-list-sheet';
+import { EnlargeableAvatar } from '@/components/ui/avatar-lightbox';
 import { VerifiedBadge } from '@/components/ui/verified-badge';
 import { Button } from '@/components/ui/button';
 import { Card, Interactive } from '@/components/ui/interactive';
@@ -25,19 +25,15 @@ import { param } from '@/lib/routes';
 // Message once you follow each other, and their posts.
 export default function PersonScreen() {
   const styles = useThemedStyles(createStyles);
-  const params = useLocalSearchParams<{ user?: string | string[] }>();
+  const params = useLocalSearchParams<{ user?: string | string[]; list?: string | string[] }>();
   const uid = param(params.user);
   const { user } = useAuth();
   const [profile, setProfile] = useState<PublicProfile | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [followSheetOpen, setFollowSheetOpen] = useState(false);
-  const [followTab, setFollowTab] = useState<'followers' | 'following'>('followers');
-
-  const openFollowList = (tab: 'followers' | 'following') => {
-    setFollowTab(tab);
-    setFollowSheetOpen(true);
-  };
+  const listParam = param(params.list);
+  const [listTab, setListTab] = useState<FollowTab | null>(listParam === 'followers' || listParam === 'following' ? listParam : null);
+  const [listOpen, setListOpen] = useState(listTab !== null);
 
   const load = useCallback(async () => {
     if (!uid) return;
@@ -82,7 +78,7 @@ export default function PersonScreen() {
     <Screen width="content">
       <BackLink fallback={'/' as never} />
       <Card style={styles.header}>
-        <Avatar uri={profile.avatarUrl} name={name} size={92} ring="gold" />
+        <EnlargeableAvatar uri={profile.avatarUrl} name={name} size={92} ring="gold" />
         <View style={styles.info}>
           <View style={styles.nameRow}>
             <Text style={styles.username}>{profile.username ?? name}</Text>
@@ -92,22 +88,8 @@ export default function PersonScreen() {
           <Text style={styles.display}>{name}</Text>
           <View style={styles.counts}>
             <Count label="posts" value={profile.posts} />
-            <Interactive
-              onPress={() => openFollowList('followers')}
-              accessibilityRole="button"
-              accessibilityLabel={`View ${profile.followers} followers`}
-              style={styles.countPressable}
-            >
-              <Count label="followers" value={profile.followers} tappable />
-            </Interactive>
-            <Interactive
-              onPress={() => openFollowList('following')}
-              accessibilityRole="button"
-              accessibilityLabel={`View ${profile.following} following`}
-              style={styles.countPressable}
-            >
-              <Count label="following" value={profile.following} tappable />
-            </Interactive>
+            <Count label="followers" value={profile.followers} onPress={() => { setListTab('followers'); setListOpen(true); }} />
+            <Count label="following" value={profile.following} onPress={() => { setListTab('following'); setListOpen(true); }} />
             {profile.totalXp !== null ? <Count label="XP" value={profile.totalXp} /> : null}
           </View>
           {profile.classLabel || rank ? (
@@ -128,24 +110,30 @@ export default function PersonScreen() {
       <Text style={styles.section}>Posts</Text>
       <CommunityPostsFeed authorId={profile.userId} showComposer={false} />
       <FollowListSheet
-        visible={followSheetOpen}
-        onClose={() => setFollowSheetOpen(false)}
-        userId={profile.userId}
-        userName={name}
-        initialTab={followTab}
-        followersCount={profile.followers}
-        followingCount={profile.following}
+        visible={listOpen}
+        onClose={() => setListOpen(false)}
+        uid={profile.userId}
+        tab={listTab ?? 'followers'}
+        onTabChange={setListTab}
+        counts={{ followers: profile.followers, following: profile.following }}
+        ownerName={profile.username ?? name}
       />
     </Screen>
   );
 }
 
-function Count({ label, value, tappable }: { label: string; value: number; tappable?: boolean }) {
+function Count({ label, value, onPress }: { label: string; value: number; onPress?: () => void }) {
   const styles = useThemedStyles(createStyles);
-  return (
+  const text = (
     <Text style={styles.count}>
-      <Text style={[styles.countValue, tappable && styles.countValueTappable]}>{value.toLocaleString()}</Text> {label}
+      <Text style={onPress ? styles.countValueTappable : styles.countValue}>{value.toLocaleString()}</Text> {label}
     </Text>
+  );
+  if (!onPress) return text;
+  return (
+    <Interactive onPress={onPress} accessibilityRole="button" accessibilityLabel={`View ${value} ${label}`} style={styles.countPressable}>
+      {text}
+    </Interactive>
   );
 }
 
@@ -156,11 +144,11 @@ function createStyles(colors: ThemeColors) {
     nameRow: { flexDirection: 'row', alignItems: 'center', gap: 10, flexWrap: 'wrap' },
     username: { ...Type.title2, color: colors.text },
     display: { fontSize: 14, color: colors.textSecondary },
-    counts: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 14, marginTop: 4 },
+    counts: { flexDirection: 'row', flexWrap: 'wrap', gap: 18, marginTop: 4 },
     count: { fontSize: 14, color: colors.textSecondary },
-    countPressable: { paddingVertical: 2, paddingHorizontal: 4, borderRadius: 6 },
     countValue: { fontWeight: '800', color: colors.text },
-    countValueTappable: { color: colors.primaryText, textDecorationLine: 'underline' },
+    countValueTappable: { fontWeight: '800', color: colors.primaryText, textDecorationLine: 'underline' },
+    countPressable: { paddingVertical: 2, borderRadius: 6 },
     meta: { fontSize: 13, color: colors.textTertiary },
     bio: { fontSize: 14, lineHeight: 21, color: colors.text, marginTop: 2 },
     actions: { flexDirection: 'row', gap: 10, marginTop: 8 },

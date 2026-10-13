@@ -5,6 +5,8 @@ import { type ScrollView, StyleSheet, useWindowDimensions, View } from 'react-na
 import { LegacyBlocks, Rich, TermContext } from '@/components/learning/legacy-blocks';
 import { BackLink } from '@/components/learning/nav-bits';
 import { AidsPanel, FlashcardsPanel, GlossaryPanel, LessonToolTabs, StepsPanel, type ToolTab, type ToolTabInfo } from '@/components/learning/lesson-tools';
+import { AiFlashcardsPanel, AskAiPanel } from '@/components/learning/ai-study';
+import { legacyToText } from '@/data/ai-study';
 import { cardsFor, glossaryOf } from '@/data/flashcards';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
@@ -58,6 +60,8 @@ export default function LegacyLessonScreen() {
   // The lesson's study tools (data/flashcards.ts): its key words as a glossary and flashcards.
   const glossary = useMemo(() => (body ? glossaryOf(body.sections) : []), [body]);
   const cards = useMemo(() => (lessonId ? cardsFor(lessonId, glossary) : []), [lessonId, glossary]);
+  // What Ask AI and AI Flashcards read: this lesson's own text.
+  const aiLesson = useMemo(() => (body && meta ? { id: meta.id, title: meta.title, text: legacyToText(meta.title, body.sections, body.extras) } : null), [body, meta]);
 
   useEffect(() => {
     if (!lessonId) return;
@@ -172,11 +176,15 @@ export default function LegacyLessonScreen() {
     ...(extras?.mnemonics?.length ? [{ id: 'mnemonics' as const, label: 'Mnemonics', icon: 'sparkle' as const }] : []),
     ...(extras?.facts?.length ? [{ id: 'facts' as const, label: 'Key facts', icon: 'info' as const }] : []),
     ...(extras?.steps?.items?.length ? [{ id: 'steps' as const, label: plainText(extras.steps.title) || 'Steps', icon: 'chart' as const }] : []),
+    { id: 'ask' as const, label: 'Ask AI', icon: 'sparkle' as const },
+    { id: 'aicards' as const, label: 'AI Flashcards', icon: 'reinforce' as const },
     ...(questions > 0 && course ? [{ id: 'practice' as const, label: `Practice (${questions})`, icon: 'edit' as const }] : []),
   ];
   const panel =
     tab === 'cards' ? <FlashcardsPanel cards={cards} />
     : tab === 'glossary' ? <GlossaryPanel glossary={glossary} />
+    : tab === 'ask' && aiLesson ? <AskAiPanel lesson={aiLesson} />
+    : tab === 'aicards' && aiLesson ? <AiFlashcardsPanel lesson={aiLesson} />
     : tab === 'mnemonics' && extras?.mnemonics ? <AidsPanel title="Mnemonics" intro="Memory hooks for this lesson." groups={extras.mnemonics} />
     : tab === 'facts' && extras?.facts ? <AidsPanel title="Key facts" intro="The points to remember from this lesson." groups={extras.facts} />
     : tab === 'steps' && extras?.steps ? <StepsPanel steps={extras.steps} />

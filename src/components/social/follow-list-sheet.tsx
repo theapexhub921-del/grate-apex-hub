@@ -2,7 +2,7 @@ import { type Href, router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { PersonAvatar } from '@/components/social/profile-card';
+import { Avatar } from '@/components/ui/avatar';
 import { Icon } from '@/components/ui/icon';
 import { Interactive } from '@/components/ui/interactive';
 import { SegmentedControl } from '@/components/ui/segmented-control';
@@ -11,144 +11,106 @@ import { EmptyState, LoadingState } from '@/components/ui/state-views';
 import { Text } from '@/components/ui/text';
 import { VerifiedBadge } from '@/components/ui/verified-badge';
 import { Radius, type ThemeColors } from '@/constants/theme';
-import { getFollowList, type FollowUser } from '@/data/social';
+import { type FollowUser, getFollowList } from '@/data/social';
 import { useAuth } from '@/hooks/use-auth';
-import { useThemedStyles } from '@/hooks/use-theme';
-import { routes } from '@/lib/routes';
+import { useTheme, useThemedStyles } from '@/hooks/use-theme';
 
-export type FollowListSheetProps = {
-  visible: boolean;
-  onClose: () => void;
-  userId: string | null | undefined;
-  userName?: string | null;
-  initialTab?: 'followers' | 'following';
-  followersCount?: number;
-  followingCount?: number;
-};
+export type FollowTab = 'followers' | 'following';
 
+/**
+ * Followers / Following of any learner (yours or someone else's), as one sheet
+ * with two tabs. Tapping a row opens that learner's profile.
+ */
 export function FollowListSheet({
   visible,
   onClose,
-  userId,
-  userName,
-  initialTab = 'followers',
-  followersCount,
-  followingCount,
-}: FollowListSheetProps) {
+  uid,
+  tab,
+  onTabChange,
+  counts,
+  ownerName,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  uid: string;
+  tab: FollowTab;
+  onTabChange: (tab: FollowTab) => void;
+  counts?: { followers: number; following: number } | null;
+  /** Shown in the subtitle; leave out for your own list ("you"). */
+  ownerName?: string | null;
+}) {
   const styles = useThemedStyles(createStyles);
+  const colors = useTheme();
   const { user } = useAuth();
-  const [tab, setTab] = useState<'followers' | 'following'>(initialTab);
-  const [list, setList] = useState<FollowUser[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loaded, setLoaded] = useState<{ key: string; list: FollowUser[] } | null>(null);
+  const key = `${uid}:${tab}`;
 
   useEffect(() => {
-    if (visible) {
-      setTab(initialTab);
-    }
-  }, [visible, initialTab]);
-
-  useEffect(() => {
-    if (!visible || !userId) return;
+    if (!visible || !uid) return;
     let active = true;
-    setLoading(true);
-    getFollowList(userId, tab)
-      .then((users) => {
-        if (active) {
-          setList(users);
-          setLoading(false);
-        }
-      })
-      .catch(() => {
-        if (active) {
-          setList([]);
-          setLoading(false);
-        }
-      });
-    return () => {
-      active = false;
-    };
-  }, [visible, tab, userId]);
+    getFollowList(uid, tab)
+      .then((list) => { if (active) setLoaded({ key, list }); })
+      .catch(() => { if (active) setLoaded({ key, list: [] }); });
+    return () => { active = false; };
+  }, [visible, uid, tab, key]);
 
-  const isMe = userId === user?.uid;
-  const title = tab === 'followers' ? 'Followers' : 'Following';
-  const subtitle = isMe
-    ? tab === 'followers'
-      ? 'People who follow you on GRATEAPEX'
-      : 'People you follow'
-    : tab === 'followers'
-    ? `People who follow ${userName || 'this learner'}`
-    : `People ${userName || 'this learner'} follows`;
+  const loading = !loaded || loaded.key !== key;
+  const list = loaded && loaded.key === key ? loaded.list : [];
+  const mine = uid === user?.uid;
+  const who = mine ? 'you' : ownerName || 'them';
+  const subtitle = tab === 'followers' ? `People who follow ${who} on GRATEAPEX` : `People ${mine ? 'you follow' : `${who} follows`}`;
 
   return (
-    <Sheet visible={visible} onClose={onClose} title={title} subtitle={subtitle}>
+    <Sheet visible={visible} onClose={onClose} title={tab === 'followers' ? 'Followers' : 'Following'} subtitle={subtitle}>
       <SegmentedControl
         value={tab}
-        onChange={(nextTab) => setTab(nextTab)}
+        onChange={onTabChange}
         options={[
-          { value: 'followers', label: 'Followers', count: followersCount },
-          { value: 'following', label: 'Following', count: followingCount },
+          { value: 'followers', label: 'Followers', count: counts?.followers },
+          { value: 'following', label: 'Following', count: counts?.following },
         ]}
-        style={styles.sheetTabs}
+        style={styles.tabs}
       />
       {loading ? (
-        <View style={styles.sheetLoading}>
+        <View style={styles.loading}>
           <LoadingState label={`Loading ${tab}…`} />
         </View>
       ) : list.length === 0 ? (
-        <View style={styles.sheetEmpty}>
+        <View style={styles.empty}>
           <EmptyState
             icon="social"
             title={tab === 'followers' ? 'No followers yet' : 'Not following anyone yet'}
-            message={
-              isMe
-                ? tab === 'followers'
-                  ? 'When classmates follow your learning journey, they will appear here.'
-                  : 'Find classmates in Your circle or search in Friends to start following them.'
-                : tab === 'followers'
-                ? 'No one is following this learner yet.'
-                : 'This learner is not following anyone yet.'
-            }
+            message={mine ? (tab === 'followers' ? 'When classmates follow your learning journey, they will appear here.' : 'Find classmates in Your Circle or search in Friends to start following them.') : tab === 'followers' ? 'Nobody follows this learner yet.' : 'This learner is not following anyone yet.'}
           />
         </View>
       ) : (
-        <View style={styles.userList}>
+        <View style={styles.list}>
           {list.map((person) => {
-            const isSelf = person.userId === user?.uid;
-            const targetRoute = isSelf ? ('/profile' as Href) : routes.profile(person.userId);
-            const displayName = person.displayName || person.username || 'Learner';
-
+            const name = person.displayName || person.username || 'Learner';
             return (
               <Interactive
                 key={person.userId}
-                style={styles.userRow}
+                style={styles.row}
+                accessibilityRole="link"
+                accessibilityLabel={`Open ${name}'s profile`}
                 onPress={() => {
                   onClose();
-                  router.push(targetRoute);
+                  router.push((person.userId === user?.uid ? '/profile' : `/social/person?user=${person.userId}`) as Href);
                 }}
-                accessibilityRole="button"
-                accessibilityLabel={`View ${displayName}'s profile`}
               >
-                <PersonAvatar uid={person.userId} uri={person.avatarUrl} name={displayName} size={44} />
-                <View style={styles.userInfo}>
+                <Avatar uri={person.avatarUrl} name={name} size={44} />
+                <View style={styles.info}>
                   <View style={styles.nameLine}>
-                    <Text style={styles.userName} numberOfLines={1}>
-                      {displayName}
-                    </Text>
+                    <Text style={styles.name} numberOfLines={1}>{name}</Text>
                     <VerifiedBadge username={person.username} uid={person.userId} size={14} />
                   </View>
-                  <Text style={styles.userHandle} numberOfLines={1}>
-                    {person.username ? `@${person.username}` : '—'}
-                  </Text>
-                  {person.bio ? (
-                    <Text style={styles.userBio} numberOfLines={1}>
-                      {person.bio}
-                    </Text>
-                  ) : null}
+                  <Text style={styles.handle}>{person.username ? `@${person.username}` : '—'}</Text>
+                  {person.bio ? <Text style={styles.bio} numberOfLines={1}>{person.bio}</Text> : null}
                 </View>
                 {person.totalXp !== null ? (
                   <View style={styles.xpPill}>
-                    <Icon name="xp" size={12} color={styles.xpColor.color} filled />
-                    <Text style={styles.xpText}>{person.totalXp} XP</Text>
+                    <Icon name="xp" size={12} color={colors.accentText} filled />
+                    <Text style={styles.xp}>{person.totalXp} XP</Text>
                   </View>
                 ) : null}
               </Interactive>
@@ -162,35 +124,17 @@ export function FollowListSheet({
 
 function createStyles(colors: ThemeColors) {
   return StyleSheet.create({
-    sheetTabs: { marginBottom: 14 },
-    sheetLoading: { paddingVertical: 32, alignItems: 'center', justifyContent: 'center' },
-    sheetEmpty: { paddingVertical: 24 },
-    userList: { gap: 10, paddingVertical: 4 },
-    userRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 12,
-      padding: 10,
-      borderRadius: Radius.md,
-      backgroundColor: colors.surfaceMuted,
-    },
-    userInfo: { flex: 1, minWidth: 0, gap: 2 },
+    tabs: { marginBottom: 14 },
+    loading: { paddingVertical: 32, alignItems: 'center', justifyContent: 'center' },
+    empty: { paddingVertical: 24 },
+    list: { gap: 10, paddingVertical: 4 },
+    row: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 10, borderRadius: Radius.md, backgroundColor: colors.surfaceMuted },
+    info: { flex: 1, minWidth: 0, gap: 2 },
     nameLine: { flexDirection: 'row', alignItems: 'center', gap: 5, minWidth: 0 },
-    userName: { fontSize: 14, fontWeight: '800', color: colors.text },
-    userHandle: { fontSize: 12, color: colors.textSecondary },
-    userBio: { fontSize: 11.5, color: colors.textTertiary, marginTop: 2 },
-    xpPill: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 4,
-      paddingVertical: 4,
-      paddingHorizontal: 8,
-      borderRadius: Radius.pill,
-      backgroundColor: colors.surfaceElevated,
-      borderWidth: 1,
-      borderColor: colors.hairline,
-    },
-    xpColor: { color: colors.accentText },
-    xpText: { fontSize: 11.5, fontWeight: '800', color: colors.accentText },
+    name: { fontSize: 14, fontWeight: '800', color: colors.text, flexShrink: 1 },
+    handle: { fontSize: 12, color: colors.textSecondary },
+    bio: { fontSize: 11.5, color: colors.textTertiary, marginTop: 2 },
+    xpPill: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 4, paddingHorizontal: 8, borderRadius: Radius.pill, backgroundColor: colors.surfaceElevated, borderWidth: 1, borderColor: colors.hairline },
+    xp: { fontSize: 11.5, fontWeight: '800', color: colors.accentText },
   });
 }
