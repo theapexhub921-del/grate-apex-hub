@@ -3,14 +3,18 @@
 //   { mode: 'ask',        lesson: { title, text }, question, history?: [{ role, text }] }
 //   { mode: 'flashcards', lesson: { title, text }, count?, avoid?: [front, ...] }
 //
-// "Ask AI" and "AI Flashcards" on every lesson. Both call Google's Gemini 3.1
-// Flash-Lite model from here, so the Gemini key never reaches the app.
+// "Ask AI" and "AI Flashcards" on every lesson. Same provider chain as the
+// Study chat (api/chat.mjs), so the keys never reach the app:
+//   1. any OpenAI-compatible service (Groq by default): CHAT_API_KEY,
+//      optional CHAT_API_BASE and CHAT_MODEL
+//   2. Gemini: GEMINI_API_KEY (optional GEMINI_MODEL)
+// A provider that is missing or fails hands over to the next one.
 //  - the learner must be signed in (the ID token is verified against Google's
 //    keys for the grate-apex project, exactly like api/push.mjs);
 //  - the lesson text comes from the app, is size-limited, and is only ever used
 //    as study material for the learner who sent it;
 //  - each learner gets a small number of requests per few minutes.
-// The key lives in Vercel's settings: GEMINI_API_KEY (optional: GEMINI_MODEL).
+// Keys live in Vercel's settings; at least one of CHAT_API_KEY / GEMINI_API_KEY is needed.
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 
 const PROJECT = 'grate-apex';
@@ -61,29 +65,75 @@ const CARD_RULES = [
   'Reply with JSON only, in exactly this shape: {"cards":[{"front":"...","back":"..."}]}',
 ].join('\n');
 
-async function gemini(body) {
+class ProviderError extends Error {}
+
+// turns: [{ role: 'user' | 'model', text }], already alternating and starting with 'user'.
+async function openAiCompatible({ system, turns, maxTokens, json }) {
+  const key = process.env.CHAT_API_KEY;
+  if (!key) return null;
+  const base = (process.env.CHAT_API_BASE || 'https://api.groq.com/openai/v1').replace(/\/+$/, '');
+  const model = process.env.CHAT_MODEL || 'llama-3.3-70b-versatile';
+  const messages = [{ role: 'system', content: system }, ...turns.map((turn) => ({ role: turn.role === 'model' ? 'assistant' : 'user', content: turn.text }))];
+  const payload = { model, messages, max_tokens: Math.min(maxTokens, 4096), temperature: 0.5 };
+  if (json) payload.response_format = { type: 'json_object' };
+  const response = await fetch(`${base}/chat/completions`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(45_000),
+  });
+  if (!response.ok) {
+    const detail = await response.text().catch(() => '');
+    console.error('Lesson AI provider error', response.status, detail.slice(0, 500));
+    throw new ProviderError(response.status === 429 ? 'busy' : 'upstream');
+  }
+  const data = await response.json();
+  const output = String(data?.choices?.[0]?.message?.content ?? '').trim();
+  if (!output) throw new ProviderError('empty');
+  return output;
+}
+
+async function gemini({ system, turns, maxTokens, json }) {
   const key = process.env.GEMINI_API_KEY;
+  if (!key) return null;
+  const generationConfig = { maxOutputTokens: maxTokens };
+  if (json) generationConfig.responseMimeType = 'application/json';
   const response = await fetch(ENDPOINT(MODEL), {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
-    body: JSON.stringify(body),
+    body: JSON.stringify({
+      systemInstruction: { parts: [{ text: system }] },
+      contents: turns.map((turn) => ({ role: turn.role, parts: [{ text: turn.text }] })),
+      generationConfig,
+    }),
     signal: AbortSignal.timeout(45_000),
   });
   if (!response.ok) {
     const detail = await response.text().catch(() => '');
     console.error('Gemini error', response.status, detail.slice(0, 500));
-    const error = new Error(response.status === 429 ? 'busy' : 'upstream');
-    error.status = response.status;
-    throw error;
+    throw new ProviderError(response.status === 429 ? 'busy' : 'upstream');
   }
   const data = await response.json();
   const candidate = data?.candidates?.[0];
   const output = (candidate?.content?.parts ?? []).filter((part) => !part.thought && typeof part.text === 'string').map((part) => part.text).join('').trim();
-  if (!output) {
-    const error = new Error(data?.promptFeedback?.blockReason || candidate?.finishReason === 'SAFETY' ? 'blocked' : 'empty');
-    throw error;
-  }
+  if (!output) throw new ProviderError(data?.promptFeedback?.blockReason || candidate?.finishReason === 'SAFETY' ? 'blocked' : 'empty');
   return output;
+}
+
+const PROVIDERS = [openAiCompatible, gemini];
+
+// Tries each configured provider in turn; throws the last failure if none answers.
+async function generate(request) {
+  let last = 'upstream';
+  for (const run of PROVIDERS) {
+    try {
+      const output = await run(request);
+      if (output) return output;
+    } catch (problem) {
+      last = problem instanceof ProviderError ? problem.message : 'upstream';
+    }
+  }
+  throw new Error(last);
 }
 
 function parseCards(raw, count) {
@@ -112,7 +162,7 @@ function parseCards(raw, count) {
 export default async function handler(req, res) {
   res.setHeader('cache-control', 'no-store');
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only.' });
-  if (!process.env.GEMINI_API_KEY) return res.status(503).json({ error: 'AI study help is not set up yet.', code: 'not-configured' });
+  if (!process.env.CHAT_API_KEY && !process.env.GEMINI_API_KEY) return res.status(503).json({ error: 'AI study help is not set up yet.', code: 'not-configured' });
 
   const token = String(req.headers.authorization ?? '').replace(/^Bearer\s+/i, '');
   let uid;
@@ -140,18 +190,14 @@ export default async function handler(req, res) {
         .slice(-MAX_HISTORY)
         .map((turn) => ({ role: turn?.role === 'model' ? 'model' : 'user', text: text(turn?.text, 2000) }))
         .filter((turn) => turn.text);
-      // Gemini wants the conversation to start with, and alternate from, a user turn.
+      // The conversation must start with, and alternate from, a user turn.
       while (history.length && history[0].role !== 'user') history.shift();
-      const contents = [];
+      const turns = [];
       for (const turn of [...history, { role: 'user', text: question }]) {
-        if (contents.length && contents[contents.length - 1].role === turn.role) contents[contents.length - 1].parts[0].text += `\n${turn.text}`;
-        else contents.push({ role: turn.role, parts: [{ text: turn.text }] });
+        if (turns.length && turns[turns.length - 1].role === turn.role) turns[turns.length - 1].text += `\n${turn.text}`;
+        else turns.push({ role: turn.role, text: turn.text });
       }
-      const answer = await gemini({
-        systemInstruction: { parts: [{ text: `${ASK_RULES}\n\n${lessonBlock}` }] },
-        contents,
-        generationConfig: { maxOutputTokens: 4096 },
-      });
+      const answer = await generate({ system: `${ASK_RULES}\n\n${lessonBlock}`, turns, maxTokens: 4096 });
       return res.status(200).json({ answer });
     }
 
@@ -159,11 +205,7 @@ export default async function handler(req, res) {
       const count = Math.min(MAX_CARDS, Math.max(3, Math.round(Number(body?.count) || 10)));
       const avoid = (Array.isArray(body?.avoid) ? body.avoid : []).map((item) => text(item, 200)).filter(Boolean).slice(0, 60);
       const ask = [`Make ${count} flashcards from this lesson.`, avoid.length ? `Do not repeat these existing cards (fronts):\n- ${avoid.join('\n- ')}` : ''].filter(Boolean).join('\n');
-      const raw = await gemini({
-        systemInstruction: { parts: [{ text: `${CARD_RULES}\n\n${lessonBlock}` }] },
-        contents: [{ role: 'user', parts: [{ text: ask }] }],
-        generationConfig: { maxOutputTokens: 8192, responseMimeType: 'application/json' },
-      });
+      const raw = await generate({ system: `${CARD_RULES}\n\n${lessonBlock}`, turns: [{ role: 'user', text: ask }], maxTokens: 8192, json: true });
       const cards = parseCards(raw, count);
       if (!cards.length) return res.status(502).json({ error: 'The AI did not return usable flashcards. Please try again.', code: 'bad-output' });
       return res.status(200).json({ cards });

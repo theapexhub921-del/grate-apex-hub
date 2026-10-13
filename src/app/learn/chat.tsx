@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/ui/button';
+import { BackLink } from '@/components/learning/nav-bits';
 import { Icon } from '@/components/ui/icon';
 import { Card, Interactive } from '@/components/ui/interactive';
 import { PageHeader, Screen } from '@/components/ui/screen';
@@ -57,6 +58,7 @@ export default function StudyChatScreen() {
 
   return (
     <Screen width="content">
+      <BackLink fallback={'/learn' as never} />
       <PageHeader eyebrow="Learn" title="Study chat" subtitle="Ask anything: concepts, study plans, memory tricks, quizzes. AI can make mistakes, so check exam details against your notes." />
 
       {turns.length === 0 ? (

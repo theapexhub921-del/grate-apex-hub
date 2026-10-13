@@ -155,8 +155,8 @@ Learning remarks are currently in:
 
 Every lesson has an "Ask AI" tab (questions answered from the lesson's own text) and an "AI Flashcards" tab (question-and-answer cards the AI writes from the lesson, studied with the same spaced repetition as the normal flashcards). Both are on `src/app/learn/lesson.tsx` and `src/app/learn/hb-lesson.tsx`.
 
-* Model: Gemini 3.1 Flash-Lite (`gemini-3.1-flash-lite`). Change it with the `GEMINI_MODEL` setting if Google renames it.
-* The Gemini key never goes in the app. `api/ai.mjs` (a Vercel function, like `api/push.mjs`) checks the learner's sign-in token, limits requests per learner, and calls Gemini. Set `GEMINI_API_KEY` in Vercel → Settings → Environment Variables, then redeploy.
+* Providers, tried in order (same chain as Study chat): any OpenAI-compatible service, Groq by default (`CHAT_API_KEY`, optional `CHAT_API_BASE`, `CHAT_MODEL`), then Gemini 3.1 Flash-Lite (`gemini-3.1-flash-lite`, change with `GEMINI_MODEL`). If one is missing or fails, the next answers.
+* The Gemini key never goes in the app. `api/ai.mjs` (a Vercel function, like `api/push.mjs`) checks the learner's sign-in token, limits requests per learner, and calls the providers. Set `CHAT_API_KEY` and/or `GEMINI_API_KEY` in Vercel → Settings → Environment Variables, then redeploy.
 * `src/lib/ai-study-api.ts` calls it; `src/data/ai-study.ts` turns a lesson into plain text and handles saved cards (kept on the device, key `grateapex_ai_cards:<lesson id>`); `src/components/learning/ai-study.tsx` holds the two panels.
 * `expo start` does not run `api/`, so the AI shows a friendly "runs on the live app" message in a local preview. To try it locally use `vercel dev`, or set `EXPO_PUBLIC_API_BASE` to the live site.
 * `tests/ai-study.test.mjs` checks every lesson produces text for the AI.
