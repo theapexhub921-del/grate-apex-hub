@@ -18,7 +18,7 @@ import { ensureEventsLoaded, resetLearningEvents } from '@/data/learning/events'
 import { ensureLessonSessionsLoaded, resetLessonSessions } from '@/data/learning/lesson-sessions';
 import { ensurePowerupsLoaded, resetPowerups } from '@/data/learning/powerups';
 import { ensureLegacyScheduleLoaded, resetLegacyReviewSchedule } from '@/data/review';
-import { ensureQuestionHistoryLoaded, resetQuestionHistory } from '@/data/question-history';
+import { ensureQuestionHistoryLoaded, getQuestionHistory, resetQuestionHistory } from '@/data/question-history';
 import { ensureQuizHistoryLoaded, resetQuizHistory } from '@/data/quiz-history';
 import { dayKey } from '@/data/learning/time';
 import type { XpBreakdown } from '@/data/learning/xp-rules';
@@ -255,10 +255,11 @@ async function syncProgressWithSupabase(hasLocalProgress: boolean) {
   progress.streak = streak;
   progress.lastActivityDate = activityDate;
   syncSubjectProgress();
+  const repaired = await repairStreakFromHistory();
   await saveProgress();
   notify();
 
-  if (hasLocalProgress || remote.completedLessons.length > 0) {
+  if (hasLocalProgress || repaired || remote.completedLessons.length > 0) {
     await saveCloudProgress(cloudLessonRows(), cloudStats());
   }
   // XP records already carry stable source keys. Replaying them after an
@@ -267,6 +268,37 @@ async function syncProgressWithSupabase(hasLocalProgress: boolean) {
     .filter((entry) => entry.amount > 0 && entry.sourceType !== 'lesson')
     .map((entry) => saveCloudXpEvent(cloudSourceType(entry.sourceType), entry.key, entry.amount, cloudStats())));
   void flushPendingPenalty();
+}
+
+// From 2026-10-09 to 2026-10-13 every study day set the streak back to 1 (a
+// placeholder left by the move to Firebase). Rebuild it from the days the
+// learner really studied: lessons, XP awards and answered questions. It only
+// ever raises the streak, and only when the run of days reaches the last
+// activity day, so a streak that really lapsed stays lapsed.
+async function repairStreakFromHistory() {
+  try {
+    await ensureQuestionHistoryLoaded();
+  } catch {
+    // Lessons and XP awards alone are still enough for a repair.
+  }
+  const days = new Set<string>();
+  Object.values(progress.lessonCompletedAt).forEach((at) => days.add(dayKey(at)));
+  progress.xpLedger.forEach((entry) => days.add(dayKey(entry.at)));
+  getQuestionHistory().forEach((attempt) => days.add(dayKey(attempt.attemptedAt)));
+  const latest = [...days].sort().pop();
+  if (!latest || (progress.lastActivityDate && latest < progress.lastActivityDate)) return false;
+
+  let run = 0;
+  const [y, m, d] = latest.split('-').map(Number);
+  const cursor = new Date(y, (m ?? 1) - 1, d ?? 1);
+  while (days.has(dayKey(cursor))) {
+    run += 1;
+    cursor.setDate(cursor.getDate() - 1);
+  }
+  if (run <= progress.streak) return false;
+  progress.streak = run;
+  progress.lastActivityDate = latest;
+  return true;
 }
 
 /** Retry the local-first progress sync after a connection is restored. */

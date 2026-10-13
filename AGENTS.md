@@ -295,7 +295,7 @@ The full redesign rationale is in `docs/redesign-notes.md`.
 
 * The logo and its hover shine (`src/components/logo-mark.tsx`) are locked, and so is the ~3-second intro (`src/components/animated-icon*.tsx`).
 * The only intro additions are the background behind it and the "developed by OrigiNate" credit (`src/components/intro-credit.tsx`).
-* The OrigiNate signature (`src/components/signature.tsx`) stays bottom-right on every screen.
+* The OrigiNate signature at the bottom of screens was removed at the owner's request (2026-10-13); `src/components/signature.tsx` is no longer shown.
 
 ### Data honesty
 

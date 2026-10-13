@@ -18,7 +18,7 @@ import { ReportSheet, type ReportTarget } from '@/components/social/report-sheet
 import { StumpCard } from '@/components/social/stump-card';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Sheet } from '@/components/ui/sheet';
-import { addPostComment, deletePostComment, createCommunityPost, deleteCommunityPost, listCommunityFeed, listPostsBy, listPostComments, togglePostLike, type CommunityMedia, type CommunityPost } from '@/data/community';
+import { addPostComment, deletePostComment, createCommunityPost, deleteCommunityPost, listCommunityFeed, listPostsBy, listPostComments, recordPostView, togglePostLike, type CommunityMedia, type CommunityPost } from '@/data/community';
 import { personName, type SocialPerson, useSocial } from '@/data/social';
 import { stumpQuestion } from '@/data/stumps';
 import { useDisplayName } from '@/data/user';
@@ -162,7 +162,18 @@ export function CommunityPostsFeed({ authorId, showComposer = true }: { authorId
     }
   }
 
+  // Counts my view once (not for my own posts) and shows it straight away.
+  function markSeen(post: CommunityPost) {
+    void recordPostView(post.id, post.author_id).then((counted) => {
+      if (!counted) return;
+      const bump = (item: CommunityPost) => (item.id === post.id ? { ...item, views: (item.views ?? 0) + 1 } : item);
+      setPosts((all) => all.map(bump));
+      setSelectedPost((current) => (current ? bump(current) : current));
+    });
+  }
+
   async function openPost(post: CommunityPost) {
+    markSeen(post);
     setSelectedPost(post);
     setComments([]);
     setCommentDraft('');
@@ -250,7 +261,7 @@ export function CommunityPostsFeed({ authorId, showComposer = true }: { authorId
       {loading ? <Text style={styles.muted}>Loading posts…</Text> : null}
       {!loading && !posts.length && !error ? <Card style={styles.empty}><Icon name="social" size={22} color={colors.primaryText} /><Text style={styles.emptyTitle}>Your feed is ready for your circle</Text><Text style={styles.muted}>Posts from people across GrAte Apex Hub will appear here.</Text></Card> : null}
       {posts.filter((post) => !hiddenIds.includes(post.id)).map((post) => (
-        <PostCard key={post.id} post={post} socialPeople={social.people} ownId={user?.id ?? social.userId} ownName={displayName || 'You'} onOpen={() => void openPost(post)} onLike={() => void like(post)} onComment={() => void openPost(post)} onReshare={() => void repost(post)} onShare={() => void sharePost(post)} onReport={() => report('post', post.id, `post by ${post.author_name ? `@${post.author_name}` : 'a learner'}`)} onDelete={() => confirmDeletePost(post)} />
+        <PostCard key={post.id} post={post} socialPeople={social.people} ownId={user?.id ?? social.userId} ownName={displayName || 'You'} onOpen={() => void openPost(post)} onLike={() => void like(post)} onComment={() => void openPost(post)} onReshare={() => void repost(post)} onShare={() => void sharePost(post)} onReport={() => report('post', post.id, `post by ${post.author_name ? `@${post.author_name}` : 'a learner'}`)} onDelete={() => confirmDeletePost(post)} onSeen={() => markSeen(post)} />
       ))}
       <ReportSheet target={reportTarget} reporter={displayName || 'a learner'} onClose={() => setReportTarget(null)} onHide={hidePost} onDone={(message) => { setReportTarget(null); setNotice(message); }} />
       <Sheet visible={composeOpen} onClose={() => setComposeOpen(false)} title="Create a post" subtitle="Share something with the GrAte Apex Hub community.">
@@ -301,9 +312,35 @@ function getErrorMessage(caught: unknown, fallback: string) {
   return fallback;
 }
 
-function PostCard({ post, socialPeople, ownId, ownName, onOpen, onLike, onComment, onReshare, onShare, onReport, onDelete, verticalActions = false }: {
+// "Seen" = at least 60% of the post on screen for a second (web). Elsewhere a
+// view is counted when the post is opened.
+function useSeenOnScreen(onSeen?: () => void) {
+  const ref = useRef<View>(null);
+  const callback = useRef(onSeen);
+  useEffect(() => { callback.current = onSeen; }, [onSeen]);
+  useEffect(() => {
+    const node = ref.current as unknown as Element | null;
+    if (Platform.OS !== 'web' || !node || typeof IntersectionObserver === 'undefined') return;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry?.isIntersecting) {
+        timer ??= setTimeout(() => { callback.current?.(); observer.disconnect(); }, 1000);
+      } else if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+    }, { threshold: 0.6 });
+    observer.observe(node);
+    return () => { if (timer) clearTimeout(timer); observer.disconnect(); };
+  }, []);
+  return ref;
+}
+
+const viewsLabel = (views: number) => `${views.toLocaleString()} ${views === 1 ? 'view' : 'views'}`;
+
+function PostCard({ post, socialPeople, ownId, ownName, onOpen, onLike, onComment, onReshare, onShare, onReport, onDelete, onSeen, verticalActions = false }: {
   post: CommunityPost; socialPeople: readonly SocialPerson[]; ownId: string | null; ownName: string;
-  onOpen: () => void; verticalActions?: boolean;
+  onOpen: () => void; onSeen?: () => void; verticalActions?: boolean;
   onLike: () => void; onComment: () => void; onReshare: () => void; onShare: () => void; onReport: () => void; onDelete: () => void;
 }) {
   const styles = useThemedStyles(createStyles);
@@ -314,7 +351,10 @@ function PostCard({ post, socialPeople, ownId, ownName, onOpen, onLike, onCommen
   const resharedName = post.reshared_author_id === ownId ? ownName : resharedFriend ? personName(resharedFriend) : 'Username pending';
   // A Stump a friend post shows its question card (the plain text is for the original app).
   const stumped = post.stump ? stumpQuestion(post.stump.qid) : null;
+  const seenRef = useSeenOnScreen(onSeen);
+  const views = typeof post.views === 'number' ? ` · ${viewsLabel(post.views)}` : '';
   return (
+    <View ref={seenRef} collapsable={false}>
     <Card style={[styles.postCard, verticalActions && styles.postDetailCard]}>
       <View style={verticalActions ? styles.postDetailLayout : undefined}>
       <View style={verticalActions ? styles.postDetailContent : styles.postContent}>
@@ -329,7 +369,7 @@ function PostCard({ post, socialPeople, ownId, ownName, onOpen, onLike, onCommen
         </View>
       ) : null}
       {postMedia(post).length ? <MediaCarousel items={postMedia(post)} height={320} onPress={onOpen} /> : null}
-      {!verticalActions ? <Text style={styles.counts}>{post.reactions} likes · {post.comments} comments · {post.reshares} reshares</Text> : <Text style={styles.counts}>{post.reactions} likes</Text>}
+      {!verticalActions ? <Text style={styles.counts}>{post.reactions} likes · {post.comments} comments · {post.reshares} reshares{views}</Text> : <Text style={styles.counts}>{post.reactions} likes{views}</Text>}
       {!verticalActions ? <View style={styles.postActions}>
         <Interactive onPress={onLike} accessibilityRole="button" accessibilityLabel={post.my_reaction ? 'Unlike post' : 'Like post'} style={styles.action}><Icon name="heart" size={20} color={post.my_reaction ? colors.primaryText : colors.textSecondary} filled={Boolean(post.my_reaction)} /></Interactive>
         <Interactive onPress={onComment} accessibilityRole="button" accessibilityLabel={`Comment on post, ${post.comments} comments`} style={styles.action}><Icon name="comment" size={20} color={colors.textSecondary} /></Interactive>
@@ -347,6 +387,7 @@ function PostCard({ post, socialPeople, ownId, ownName, onOpen, onLike, onCommen
       </View> : null}
       </View>
     </Card>
+    </View>
   );
 }
 

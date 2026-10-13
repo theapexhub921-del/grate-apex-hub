@@ -73,6 +73,8 @@ export type CommunityPost = {
   reshares: number;
   my_reaction: 'like' | null;
   stump?: StumpRef | null; // a "Stump a friend" question (data/stumps.ts)
+  /** Learners who have seen the post (once each); null until the first view is counted. */
+  views?: number | null;
 };
 
 /** The quiz question a "Stump a friend" post shares, and the sharer's note. */
@@ -250,8 +252,53 @@ export async function listCommunityFeed(limitCount = 50): Promise<CommunityPost[
       reshares: 0, // not counted by the shared rules
       my_reaction: liked[index] ? 'like' : null,
       stump: readStump(d),
+      views: readViews(d),
     };
   });
+}
+
+const readViews = (d: Record<string, any>) => (typeof d.viewCount === 'number' ? d.viewCount : null);
+
+// Views: posts/{id}/views/{uid} = { at }, written in ONE batch with viewCount
+// moved up by one (docs/firestore-rules-post-views.txt), so each learner counts
+// once and nobody can change the number any other way. Your own posts don't count.
+const VIEWED_KEY = 'grateapex_viewed_posts';
+let viewed: { uid: string; ids: Set<string> } | null = null;
+const viewing = new Set<string>();
+
+async function viewedPosts(uid: string) {
+  if (viewed?.uid !== uid) {
+    let ids = new Set<string>();
+    try {
+      ids = new Set(JSON.parse((await AsyncStorage.getItem(`${VIEWED_KEY}:${uid}`)) ?? '[]') as string[]);
+    } catch {
+      // nothing saved yet
+    }
+    viewed = { uid, ids };
+  }
+  return viewed.ids;
+}
+
+/** Counts my view of a post once. Returns true when a new view was counted. */
+export async function recordPostView(postId: string, authorId: string): Promise<boolean> {
+  await auth.authStateReady();
+  const uid = auth.currentUser?.uid;
+  if (!uid || uid === authorId || viewing.has(`${uid}:${postId}`)) return false;
+  const seen = await viewedPosts(uid);
+  if (seen.has(postId)) return false;
+  viewing.add(`${uid}:${postId}`); // tried once per session, even if it fails
+  try {
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'posts', postId, 'views', uid), { at: serverTimestamp() });
+    batch.update(doc(db, 'posts', postId), { viewCount: increment(1) });
+    await batch.commit();
+  } catch {
+    // Already counted on another device, or the views rules are not live yet.
+    return false;
+  }
+  seen.add(postId);
+  void AsyncStorage.setItem(`${VIEWED_KEY}:${uid}`, JSON.stringify([...seen].slice(-2000))).catch(() => {});
+  return true;
 }
 
 /** A learner's own posts, newest first (no composite index needed: sorted here). */
@@ -262,7 +309,7 @@ export async function listPostsBy(uid: string, limitCount = 30): Promise<Communi
   // Older posts beyond the recent feed.
   const snap = await getDocs(query(collection(db, 'posts'), where('authorUid', '==', uid), limit(limitCount)));
   const ids = new Set(own.map((post) => post.id));
-  const extra = snap.docs.filter((item) => !ids.has(item.id)).map((item) => ({ id: item.id, author_id: uid, author_name: item.data().authorName ?? null, author_avatar: null, body: postText(item.data()), media_path: null, media_type: null, media_url: null, reshared_post_id: null, created_at: iso(item.data().createdAt), reactions: Number(item.data().likeCount) || 0, comments: Number(item.data().replyCount) || 0, reshares: 0, my_reaction: null, stump: readStump(item.data()) } as CommunityPost));
+  const extra = snap.docs.filter((item) => !ids.has(item.id)).map((item) => ({ id: item.id, author_id: uid, author_name: item.data().authorName ?? null, author_avatar: null, body: postText(item.data()), media_path: null, media_type: null, media_url: null, reshared_post_id: null, created_at: iso(item.data().createdAt), reactions: Number(item.data().likeCount) || 0, comments: Number(item.data().replyCount) || 0, reshares: 0, my_reaction: null, stump: readStump(item.data()), views: readViews(item.data()) } as CommunityPost));
   return [...own, ...extra].sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, limitCount);
 }
 
@@ -712,8 +759,10 @@ export async function getStreakFreezeBalance(): Promise<{ available: number }> {
   return { available: 0 };
 }
 
-export async function recordStreakActivityWithFreeze(todayKey: any): Promise<number> {
-  return 1;
+// There is no server streak on Firebase yet. 0 means "no server answer", so
+// progress.ts counts the streak itself from the learner's study days.
+export async function recordStreakActivityWithFreeze(_at: number): Promise<number> {
+  return 0;
 }
 
 // ─── Read receipts and presence (sent ✓ · delivered ✓✓ · read ✓✓ blue) ─────

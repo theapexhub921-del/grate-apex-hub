@@ -13,7 +13,6 @@ import { FloatingTabBar } from '@/components/floating-tab-bar';
 import { HomeGreetingWallpaper } from '@/components/social/home-greeting-wallpaper';
 import { NAV_ITEMS } from '@/components/nav-items';
 import { PageTitle } from '@/components/page-title';
-import { Signature } from '@/components/signature';
 import { webStyle } from '@/components/ui/web';
 import { cssTransition, MOTION } from '@/constants/motion';
 import { DESKTOP_BREAKPOINT } from '@/constants/theme';
@@ -130,8 +129,6 @@ export default function AppTabs() {
         </Tabs>
         </View>
       </View>
-
-      {!isWidgetRoute ? <Signature aboveTabBar={!useRail && !isAuthRoute} /> : null}
     </View>
   );
 }

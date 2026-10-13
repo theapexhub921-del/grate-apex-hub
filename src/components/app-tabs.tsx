@@ -11,7 +11,6 @@ import { LegacyFloatingBar } from '@/components/experience/legacy-navigation';
 import { FloatingTabBar } from '@/components/floating-tab-bar';
 import { HomeGreetingWallpaper } from '@/components/social/home-greeting-wallpaper';
 import { NAV_ITEMS } from '@/components/nav-items';
-import { Signature } from '@/components/signature';
 import { MOTION } from '@/constants/motion';
 import { useExperience } from '@/hooks/use-experience';
 
@@ -100,7 +99,6 @@ export default function AppTabs() {
         <Tabs.Screen name="learn/flashcards" options={{ href: null }} />
         <Tabs.Screen name="learn/tutor" options={{ href: null }} />
       </Tabs>
-      {!isWidgetRoute ? <Signature aboveTabBar={!isAuthRoute} /> : null}
     </View>
   );
 }

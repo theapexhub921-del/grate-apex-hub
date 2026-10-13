@@ -177,7 +177,10 @@ export function PostDetail({
         <ActionIcon icon="share" label="Share post" onPress={onShare} />
       </View>
       <View style={styles.counts}>
-        <Text style={styles.likes}>{post.reactions.toLocaleString()} {post.reactions === 1 ? 'like' : 'likes'}</Text>
+        <Text style={styles.likes}>
+          {post.reactions.toLocaleString()} {post.reactions === 1 ? 'like' : 'likes'}
+          {typeof post.views === 'number' ? ` · ${post.views.toLocaleString()} ${post.views === 1 ? 'view' : 'views'}` : ''}
+        </Text>
         <Text style={styles.meta}>{new Date(post.created_at).toLocaleDateString(undefined, { month: 'long', day: 'numeric' })}</Text>
       </View>
       {replyingTo ? (

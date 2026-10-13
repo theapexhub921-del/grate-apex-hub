@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Href } from 'expo-router';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { useSyncExternalStore } from 'react';
 
 import type { IconName } from '@/components/ui/icon';
@@ -10,12 +11,13 @@ import type { MemoryModel } from '@/data/learning/memory';
 import { dayKey, DAY_MS, endOfDay, startOfDay } from '@/data/learning/time';
 import { getStreakStatus } from '@/data/progression';
 import { getRankProgress } from '@/data/ranks';
+import { auth, db } from '@/lib/firebase';
 import { routes } from '@/lib/routes';
 
 // Notifications are DERIVED from real learning state (what is due, the
-// streak, milestones, new GRATEAPEX features) — nothing is invented and
-// nothing is sent anywhere. Only the "read" marks are stored, on this
-// device.
+// streak, milestones, new GRATEAPEX features) — nothing is invented. Only
+// the "read" marks are stored: on this device and on the account, so every
+// device signed in to the account agrees on what has been read.
 
 export type NotificationGroup = 'learning' | 'updates';
 
@@ -122,63 +124,119 @@ export function buildNotifications({ memory, events, streak, lastActivityDate, x
   return items.sort((a, b) => b.at - a.at);
 }
 
-// ── Read marks (this device) ──────────────────────────────────────────
+// ── Read marks (this device and the account) ──────────────────────────
+// Saved on the device and on the learner's private progress/{uid} document
+// (`notificationsRead`, owner-only in the live rules), so a notification read
+// on one device is read on every device signed in to the account. Other
+// devices pick up new marks when the app opens, comes back to the screen, or
+// at most every 2 minutes while it is open.
 
 const STORAGE_KEY = 'grateapex_notifications_read';
 const LIMIT = 400;
+const REMOTE_EVERY_MS = 2 * 60 * 1000;
 let read = new Set<string>();
-let loaded = false;
+let owner: string | null | undefined; // the account `read` belongs to (undefined = not loaded)
+let loading: Promise<void> | null = null;
+let remoteAt = 0;
 const listeners = new Set<() => void>();
 
 function notify() {
   listeners.forEach((listener) => listener());
 }
 
+function idsOf(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string') : [];
+}
+
+const keyFor = (uid: string | null) => (uid ? `${STORAGE_KEY}:${uid}` : STORAGE_KEY);
+
+/** Adds marks; returns true when something new was added. */
+function addMarks(ids: readonly string[]) {
+  const fresh = ids.filter((id) => !read.has(id));
+  if (!fresh.length) return false;
+  read = new Set([...read, ...fresh]);
+  notify();
+  return true;
+}
+
 async function load() {
-  if (loaded) return;
-  loaded = true;
-  try {
-    const saved = await AsyncStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      const ids = JSON.parse(saved);
-      if (Array.isArray(ids)) {
-        read = new Set(ids.filter((id): id is string => typeof id === 'string'));
-        notify();
-      }
+  await auth.authStateReady();
+  const uid = auth.currentUser?.uid ?? null;
+  if (owner !== uid) {
+    owner = uid;
+    read = new Set();
+    remoteAt = 0;
+    notify();
+    try {
+      // Marks saved before they were per account still count for this one.
+      const [mine, older] = await Promise.all([AsyncStorage.getItem(keyFor(uid)), uid ? AsyncStorage.getItem(STORAGE_KEY) : null]);
+      addMarks([...idsOf(JSON.parse(mine ?? '[]')), ...idsOf(JSON.parse(older ?? '[]'))]);
+    } catch (problem) {
+      console.warn('Could not load notification read marks:', problem);
     }
-  } catch (problem) {
-    console.warn('Could not load notification read marks:', problem);
+  }
+  if (!uid || Date.now() - remoteAt < REMOTE_EVERY_MS) return;
+  remoteAt = Date.now();
+  try {
+    const remote = idsOf((await getDoc(doc(db, 'progress', uid))).data()?.notificationsRead);
+    if (owner !== uid) return;
+    addMarks(remote);
+    // This device read things the account doesn't know about yet.
+    const known = new Set(remote);
+    if ([...read].some((id) => !known.has(id))) void save();
+  } catch {
+    // Offline: the device marks still apply and are uploaded next time.
   }
 }
 
+function refresh() {
+  if (!loading) loading = load().finally(() => { loading = null; });
+  return loading;
+}
+
 async function save() {
+  const uid = owner ?? null;
+  const ids = Array.from(read).slice(-LIMIT);
   try {
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(Array.from(read).slice(-LIMIT)));
+    await AsyncStorage.setItem(keyFor(uid), JSON.stringify(ids));
   } catch (problem) {
     console.warn('Could not save notification read marks:', problem);
+  }
+  if (!uid) return;
+  try {
+    await setDoc(doc(db, 'progress', uid), { notificationsRead: ids }, { merge: true });
+  } catch {
+    // Offline: uploaded on the next load.
   }
 }
 
 export function markNotificationsRead(ids: string[]) {
-  let changed = false;
-  for (const id of ids) {
-    if (!read.has(id)) {
-      read.add(id);
-      changed = true;
-    }
-  }
-  if (!changed) return;
-  read = new Set(read);
-  notify();
+  if (!addMarks(ids)) return;
   void save();
+}
+
+// Coming back to the app picks up marks made on other devices.
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && listeners.size) {
+      remoteAt = 0;
+      void refresh();
+    }
+  });
 }
 
 export function useReadNotifications(): ReadonlySet<string> {
   return useSyncExternalStore(
     (listener) => {
       listeners.add(listener);
-      void load();
-      return () => listeners.delete(listener);
+      void refresh();
+      const timer = setInterval(() => void refresh(), REMOTE_EVERY_MS);
+      const unsubscribe = auth.onAuthStateChanged(() => void refresh());
+      return () => {
+        listeners.delete(listener);
+        clearInterval(timer);
+        unsubscribe();
+      };
     },
     () => read,
     () => read
