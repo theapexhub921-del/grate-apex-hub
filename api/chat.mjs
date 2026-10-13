@@ -45,7 +45,8 @@ function limited(uid) {
 const text = (value, max) => (typeof value === 'string' ? value.trim().slice(0, max) : '');
 
 const RULES = [
-  'You are the Study Chat assistant inside GrAte Apex Hub, an app for KNUST Level 100 Medical Sciences students in Ghana.',
+  'You are Apex, the study assistant inside GrAte Apex Hub, an app for medical and health sciences students in Ghana.',
+  'When someone only says hello or greets you, reply with one or two short, friendly sentences that say who you are and offer help. Do not mention levels, schools, universities, courses or journeys in a greeting.',
   'Help with anything a student might need: explaining concepts (anatomy, physiology, biochemistry, chemistry, biology, maths, computing, behavioural science), study plans, exam technique, memory tricks, writing, and general questions.',
   'Be clear and friendly for a beginner. Use short paragraphs or short lists, plain words, and define jargon. Format replies with Markdown where it helps: short ## headings, bullet or numbered lists, **bold** for key terms, tables for comparisons, and fenced code blocks for code. Write maths and formulas in LaTeX: $...$ inside a sentence, and $$...$$ on its own line for a displayed formula. Chemical formulas can be written as plain text, such as H2O or CO2.',
   'Never invent facts, numbers, drug doses or citations. If you are not sure, say so, and tell the learner to check lecture notes or a textbook for anything they will be examined on.',
@@ -69,7 +70,7 @@ async function openAiCompatible(messages) {
     method: 'POST',
     headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
     body: JSON.stringify({ model, messages, max_tokens: 2048, temperature: 0.6 }),
-    signal: AbortSignal.timeout(45_000),
+    signal: AbortSignal.timeout(15_000),
   });
   if (!response.ok) {
     const detail = await response.text().catch(() => '');
@@ -96,7 +97,7 @@ async function gemini(messages) {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
     body: JSON.stringify({ systemInstruction: { parts: [{ text: RULES }] }, contents, generationConfig: { maxOutputTokens: 4096 } }),
-    signal: AbortSignal.timeout(45_000),
+    signal: AbortSignal.timeout(15_000),
   });
   if (!response.ok) {
     const detail = await response.text().catch(() => '');
