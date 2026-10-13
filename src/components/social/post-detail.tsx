@@ -7,6 +7,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { canSwipe, SwipeToReply } from '@/components/chat/swipe-to-reply';
 import { MediaCarousel, postMedia } from '@/components/social/media-carousel';
 import { MentionInput } from '@/components/social/mention-input';
+import { VoiceClipRecorder, type VoiceClip } from '@/components/social/voice-clip';
+import { VoiceNotePlayer } from '@/components/social/voice-note';
 import { PersonAvatar } from '@/components/social/profile-card';
 import { StumpCard } from '@/components/social/stump-card';
 import { Icon, type IconName } from '@/components/ui/icon';
@@ -17,7 +19,7 @@ import { VerifiedBadge } from '@/components/ui/verified-badge';
 import { webStyle } from '@/components/ui/web';
 import { VideoPlayer } from '@/components/ui/video-player';
 import { isDesktopWidth, Radius, Type, type ThemeColors } from '@/constants/theme';
-import { type CommunityPost } from '@/data/community';
+import { type CommunityPost, displayBody } from '@/data/community';
 import { personName, type SocialPerson } from '@/data/social';
 import { stumpQuestion } from '@/data/stumps';
 import { useTheme, useThemedStyles } from '@/hooks/use-theme';
@@ -29,6 +31,8 @@ export type PostComment = {
   parent_id?: string | null;
   /** The username this reply answers, if any. */
   reply_to?: string | null;
+  /** A voice note in the reply, if it has one. */
+  audio?: { url: string; seconds: number } | null;
 };
 
 const now = () => Date.now();
@@ -55,11 +59,12 @@ function short(iso: string) {
  * bottom. Swipe a comment right (touch screens) or tap Reply to answer it.
  */
 export function PostDetail({
-  post, comments, people, ownId, ownName, draft, onDraft, replyingTo, onReply, onCancelReply, onSend, busy,
+  post, comments, people, ownId, ownName, draft, onDraft, replyingTo, onReply, onCancelReply, onSend, busy, voice, onVoice,
   onClose, onLike, onReshare, onShare, onReport, onReportComment, onDeleteComment, onDelete,
 }: {
   post: CommunityPost | null; comments: readonly PostComment[]; people: readonly SocialPerson[]; ownId: string | null; ownName: string;
   draft: string; onDraft: (value: string) => void; replyingTo: string | null; onReply: (comment: PostComment) => void; onCancelReply: () => void; onSend: () => void; busy: boolean;
+  voice: VoiceClip | null; onVoice: (clip: VoiceClip | null) => void;
   onClose: () => void; onLike: () => void; onReshare: () => void; onShare: () => void; onReport: () => void; onReportComment: (comment: PostComment) => void; onDeleteComment: (comment: PostComment) => void; onDelete: () => void;
 }) {
   const styles = useThemedStyles(createStyles);
@@ -79,7 +84,8 @@ export function PostDetail({
   const name = friend ? personName(friend) : post.author_id === ownId ? ownName : post.author_name ? `@${post.author_name}` : 'Learner';
   const handle = post.author_name ? post.author_name : name;
   const stumped = post.stump ? stumpQuestion(post.stump.qid) : null;
-  const items = postMedia(post);
+  const items = postMedia(post).filter((item) => item.type !== 'audio');
+  const voiceClips = postMedia(post).filter((item) => item.type === 'audio');
   const hasMedia = items.length > 0;
   const split = desktop && hasMedia;
   const reel = items.length === 1 && items[0].type === 'video' && !showComments;
@@ -120,11 +126,11 @@ export function PostDetail({
     <>
       {post.stump && stumped ? (
         <StumpCard postId={post.id} question={stumped} stump={post.stump} authorId={post.author_id} authorName={name} ownId={ownId} people={people} />
-      ) : post.body ? (
+      ) : displayBody(post) ? (
         <View style={styles.row}>
           <PersonAvatar uid={post.author_id} uri={friend?.avatarUrl ?? null} name={name} size={32} />
           <View style={styles.rowText}>
-            <Text style={styles.text}><Text style={styles.bold} onPress={() => openProfile(post.author_id)}>{handle}</Text> {post.body}</Text>
+            <Text style={styles.text}><Text style={styles.bold} onPress={() => openProfile(post.author_id)}>{handle}</Text> {displayBody(post)}</Text>
             <Text style={styles.meta}>{short(post.created_at)}</Text>
           </View>
         </View>
@@ -166,6 +172,7 @@ export function PostDetail({
               <Text style={styles.bold} onPress={() => openProfile(comment.author_id)}>{who}</Text>{' '}
               <VerifiedBadge username={comment.author_name} uid={comment.author_id} size={12} /> {withMentions(comment.body)}
             </Text>
+            {comment.audio ? <VoiceNotePlayer url={comment.audio.url} seconds={comment.audio.seconds} color={colors.primaryText} trackColor={colors.border} /> : null}
             <View style={styles.metaRow}>
               <Text style={styles.meta}>{short(comment.created_at)}</Text>
               {canReply ? <Text style={styles.metaAction} onPress={() => { onReply(comment); focusInput(); }} accessibilityRole="button">Reply</Text> : null}
@@ -223,8 +230,9 @@ export function PostDetail({
         <View style={styles.flex}>
           <MentionInput ref={input} compact people={people} value={draft} onChangeText={onDraft} maxLength={1000} placeholder="Add a comment…" placeholderTextColor={colors.textTertiary} accessibilityLabel="Write a comment" style={styles.input} onSubmitEditing={onSend} />
         </View>
-        <Interactive onPress={onSend} disabled={!draft.trim() || busy} accessibilityRole="button" accessibilityLabel="Post comment">
-          <Text style={[styles.post, (!draft.trim() || busy) && styles.postOff]}>{busy ? 'Posting…' : 'Post'}</Text>
+        <VoiceClipRecorder clip={voice} onClip={onVoice} compact />
+        <Interactive onPress={onSend} disabled={(!draft.trim() && !voice) || busy} accessibilityRole="button" accessibilityLabel="Post comment">
+          <Text style={[styles.post, ((!draft.trim() && !voice) || busy) && styles.postOff]}>{busy ? 'Posting…' : 'Post'}</Text>
         </Interactive>
       </View>
     </View>
@@ -236,6 +244,9 @@ export function PostDetail({
       {!split && media ? <View style={styles.mediaPhone}>{media}</View> : null}
       <ScrollView style={styles.commentsArea} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         {caption}
+        {voiceClips.map((item) => (
+          <VoiceNotePlayer key={item.url} url={item.url} seconds={item.seconds ?? 0} color={colors.primaryText} trackColor={colors.border} />
+        ))}
         {commentList}
       </ScrollView>
       {bottom}

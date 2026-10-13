@@ -18,7 +18,7 @@ import { ReportSheet, type ReportTarget } from '@/components/social/report-sheet
 import { StumpCard } from '@/components/social/stump-card';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Sheet } from '@/components/ui/sheet';
-import { addPostComment, deletePostComment, createCommunityPost, deleteCommunityPost, listCommunityFeed, listPostsBy, listPostComments, recordPostView, togglePostLike, type CommunityMedia, type CommunityPost } from '@/data/community';
+import { addPostComment, deletePostComment, createCommunityPost, createVoicePost, deleteCommunityPost, displayBody, listCommunityFeed, listPostsBy, listPostComments, recordPostView, togglePostLike, type CommunityMedia, type CommunityPost } from '@/data/community';
 import { personName, type SocialPerson, useSocial } from '@/data/social';
 import { stumpQuestion } from '@/data/stumps';
 import { useDisplayName } from '@/data/user';
@@ -27,6 +27,8 @@ import { Radius, Type, type ThemeColors } from '@/constants/theme';
 import { MentionInput } from '@/components/social/mention-input';
 import { PostDetail, type PostComment } from '@/components/social/post-detail';
 import { MediaCarousel, postMedia } from '@/components/social/media-carousel';
+import { discardVoiceClip, VoiceClipRecorder, type VoiceClip } from '@/components/social/voice-clip';
+import { VoiceNotePlayer } from '@/components/social/voice-note';
 import { useTheme, useThemedStyles } from '@/hooks/use-theme';
 
 
@@ -51,6 +53,9 @@ export function CommunityPostsFeed({ authorId, showComposer = true }: { authorId
   const [comments, setComments] = useState<PostComment[]>([]);
   const [commentDraft, setCommentDraft] = useState('');
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
+  // A voice note recorded for a new post, and one recorded for a reply.
+  const [voice, setVoice] = useState<VoiceClip | null>(null);
+  const [replyVoice, setReplyVoice] = useState<VoiceClip | null>(null);
   // The top-level comment a reply is filed under (set together with replyingTo).
   const [replyParent, setReplyParent] = useState<string | null>(null);
   const [notice, setNotice] = useState('');
@@ -103,11 +108,13 @@ export function CommunityPostsFeed({ authorId, showComposer = true }: { authorId
   }
 
   async function publish(resharedPostId?: string) {
-    if ((!draft.trim() && !media.length && !resharedPostId) || busy) return;
+    if ((!draft.trim() && !media.length && !voice && !resharedPostId) || busy) return;
     setBusy(true);
     setError(null);
     try {
-      await createCommunityPost(draft, resharedPostId ? undefined : media, resharedPostId);
+      if (voice) await createVoicePost(draft, voice);
+      else await createCommunityPost(draft, resharedPostId ? undefined : media, resharedPostId);
+      if (voice) { discardVoiceClip(voice); setVoice(null); }
       setDraft('');
       setMedia([]);
       setComposeOpen(false);
@@ -181,15 +188,17 @@ export function CommunityPostsFeed({ authorId, showComposer = true }: { authorId
     setCommentDraft('');
     setReplyingTo(null);
     setReplyParent(null);
+    setReplyVoice(null);
     try { setComments(await listPostComments(post.id) as PostComment[]); }
     catch (caught) { setError(getErrorMessage(caught, 'Could not load comments.')); }
   }
 
   async function sendComment() {
-    if (!selectedPost || !commentDraft.trim()) return;
+    if (!selectedPost || (!commentDraft.trim() && !replyVoice)) return;
     setBusy(true);
     try {
-      await addPostComment(selectedPost.id, commentDraft, replyParent ? { parentId: replyParent, replyTo: replyingTo } : undefined);
+      await addPostComment(selectedPost.id, commentDraft, replyParent ? { parentId: replyParent, replyTo: replyingTo } : undefined, replyVoice ? { blob: replyVoice.blob, seconds: replyVoice.seconds } : undefined);
+      if (replyVoice) { discardVoiceClip(replyVoice); setReplyVoice(null); }
       setCommentDraft('');
       setReplyingTo(null);
       setReplyParent(null);
@@ -273,10 +282,11 @@ export function CommunityPostsFeed({ authorId, showComposer = true }: { authorId
         <View style={styles.composeSheet}>
         <Text style={styles.muted}>Share how you’re feeling, what’s happening in your life, or anything you’d like your friends to know.</Text>
         <MentionInput people={social.people} value={draft} onChangeText={setDraft} multiline maxLength={5000} placeholder="What’s on your mind today?" placeholderTextColor={colors.textTertiary} accessibilityLabel="Write a post" style={styles.postInput} />
+          {media.length ? null : <VoiceClipRecorder clip={voice} onClip={setVoice} />}
           {media.map((item, at) => <View key={`${item.uri}-${at}`} style={styles.mediaSelected}><Icon name={item.type === 'video' ? 'play' : 'image'} size={16} color={colors.primaryText} /><Text style={[styles.muted, styles.flex]} numberOfLines={1}>{item.filename}</Text><Button label="Remove" size="sm" variant="ghost" onPress={() => setMedia((list) => list.filter((_, index) => index !== at))} /></View>)}
           <View style={styles.actions}>
             <Button label={media.length ? `Add more (${media.length}/3)` : 'Choose photos or video'} variant="secondary" size="sm" onPress={() => void chooseMedia()} />
-            <Button label="Publish" size="sm" onPress={() => void publish()} loading={busy} disabled={(!draft.trim() && !media.length) || busy} />
+            <Button label="Publish" size="sm" onPress={() => void publish()} loading={busy} disabled={(!draft.trim() && !media.length && !voice) || busy} />
           </View>
         </View>
       </Sheet>
@@ -293,6 +303,8 @@ export function CommunityPostsFeed({ authorId, showComposer = true }: { authorId
         onReply={replyTo}
         onCancelReply={() => { const handle = replyingTo; setReplyingTo(null); setReplyParent(null); if (handle) setCommentDraft((text) => text.replace(`@${handle} `, '')); }}
         onSend={() => void sendComment()}
+        voice={replyVoice}
+        onVoice={setReplyVoice}
         busy={busy}
         onClose={() => setSelectedPost(null)}
         onLike={() => { if (selectedPost) void like(selectedPost); }}
@@ -364,7 +376,7 @@ function PostCard({ post, socialPeople, ownId, ownName, onOpen, onLike, onCommen
       <View style={verticalActions ? styles.postDetailLayout : undefined}>
       <View style={verticalActions ? styles.postDetailContent : styles.postContent}>
       <View style={styles.postHead}><View style={styles.postAuthor}><PersonAvatar uid={post.author_id} uri={friend?.avatarUrl ?? null} name={name} size={42} ring="subtle" /><Interactive onPress={() => router.push(post.author_id && post.author_id !== ownId ? routes.profile(post.author_id) : ('/profile' as never))} accessibilityRole="link" accessibilityLabel={`View ${name}'s profile`} style={styles.flex}><View style={styles.nameRow}><Text style={styles.author}>{name}</Text><VerifiedBadge username={post.author_name} uid={post.author_id} /></View><Text style={styles.muted}>{new Date(post.created_at).toLocaleString()}</Text></Interactive></View>{post.reshared_post_id ? <Pill label="Reposted" /> : null}{post.author_id === ownId ? <Button label="Delete" size="sm" variant="ghost" icon={<Icon name="trash" size={16} color={colors.error} />} onPress={onDelete} accessibilityLabel="Delete post" /> : null}</View>
-      {post.stump && stumped ? <StumpCard postId={post.id} question={stumped} stump={post.stump} authorId={post.author_id} authorName={name} ownId={ownId} people={socialPeople} /> : post.body ? <Interactive onPress={onOpen} accessibilityRole="button" accessibilityLabel="Open post" style={styles.postBodyOpen}><Text style={styles.body}>{post.body}</Text></Interactive> : null}
+      {post.stump && stumped ? <StumpCard postId={post.id} question={stumped} stump={post.stump} authorId={post.author_id} authorName={name} ownId={ownId} people={socialPeople} /> : displayBody(post) ? <Interactive onPress={onOpen} accessibilityRole="button" accessibilityLabel="Open post" style={styles.postBodyOpen}><Text style={styles.body}>{displayBody(post)}</Text></Interactive> : null}
       {post.reshared_post_id ? (
         <View style={styles.reshareBox}>
           <Text style={styles.muted}>Original post by {resharedName}</Text>
@@ -373,7 +385,10 @@ function PostCard({ post, socialPeople, ownId, ownName, onOpen, onLike, onCommen
           {post.reshared_media_url && post.reshared_media_type === 'video' ? <VideoPlayer url={post.reshared_media_url} height={260} label="Reshared video" /> : null}
         </View>
       ) : null}
-      {postMedia(post).length ? <MediaCarousel items={postMedia(post)} height={560} minHeight={260} adaptive fit="contain" onPress={onOpen} /> : null}
+      {postMedia(post).some((item) => item.type !== 'audio') ? <MediaCarousel items={postMedia(post).filter((item) => item.type !== 'audio')} height={560} minHeight={260} adaptive fit="contain" onPress={onOpen} /> : null}
+      {postMedia(post).filter((item) => item.type === 'audio').map((item) => (
+        <VoiceNotePlayer key={item.url} url={item.url} seconds={item.seconds ?? 0} color={colors.primaryText} trackColor={colors.border} />
+      ))}
       {!verticalActions ? <Text style={styles.counts}>{post.reactions} likes · {post.comments} comments · {post.reshares} reshares{views}</Text> : <Text style={styles.counts}>{post.reactions} likes{views}</Text>}
       {!verticalActions ? <View style={styles.postActions}>
         <Interactive onPress={onLike} accessibilityRole="button" accessibilityLabel={post.my_reaction ? 'Unlike post' : 'Like post'} style={styles.action}><Icon name="heart" size={20} color={post.my_reaction ? colors.primaryText : colors.textSecondary} filled={Boolean(post.my_reaction)} /></Interactive>

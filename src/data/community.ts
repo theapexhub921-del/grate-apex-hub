@@ -18,7 +18,7 @@ import {
 } from 'firebase/firestore';
 
 import { auth, db } from '@/lib/firebase';
-import { cleanMedia, optimized, safeUrl, uploadMedia } from '@/lib/media';
+import { cleanMedia, optimized, safeUrl, uploadMedia, uploadVoiceNote } from '@/lib/media';
 
 export type CommunityMedia = {
   uri: string;
@@ -29,7 +29,7 @@ export type CommunityMedia = {
 };
 
 /** One photo or video of a post. */
-export type PostMedia = { type: 'image' | 'video'; url: string };
+export type PostMedia = { type: 'image' | 'video' | 'audio'; url: string; seconds?: number };
 
 /** A post's photos and videos, in order (the shared rules allow up to 3). */
 function mediaList(raw: unknown): PostMedia[] {
@@ -37,7 +37,26 @@ function mediaList(raw: unknown): PostMedia[] {
   return raw
     .filter((item) => item && typeof item === 'object' && safeUrl(item.url))
     .slice(0, 3)
-    .map((item) => (item.t === 'video' ? { type: 'video' as const, url: String(item.url) } : { type: 'image' as const, url: optimized(String(item.url)) }));
+    .map((item) => {
+      if (item.t === 'audio') return { type: 'audio' as const, url: String(item.url), seconds: Number(item.d) || 0 };
+      if (item.t === 'video') return { type: 'video' as const, url: String(item.url) };
+      return { type: 'image' as const, url: optimized(String(item.url)) };
+    });
+}
+
+/** The placeholder text of a voice post (posts need some text; the audio is the post). */
+export const VOICE_POST_TEXT = 'Voice post';
+
+/** A post's or reply's voice note, if it has one. */
+function voiceOf(raw: unknown): { url: string; seconds: number } | null {
+  if (!Array.isArray(raw)) return null;
+  const item = raw.find((entry: any) => entry && typeof entry === 'object' && entry.t === 'audio' && safeUrl(entry.url));
+  return item ? { url: String(item.url), seconds: Number(item.d) || 0 } : null;
+}
+
+/** The text to show for a post: a voice post shows only its audio. */
+export function displayBody(post: { body: string; media_list?: PostMedia[] }): string {
+  return post.body === VOICE_POST_TEXT && post.media_list?.some((item) => item.type === 'audio') ? '' : post.body;
 }
 
 export type CommunityStory = {
@@ -349,6 +368,37 @@ export async function createCommunityPost(body: string, media?: CommunityMedia |
   };
 }
 
+/** A post whose only content is a voice note (up to two minutes). */
+export async function createVoicePost(body: string, clip: { blob: Blob; seconds: number }): Promise<CommunityPost> {
+  const text = body.trim() || VOICE_POST_TEXT;
+  if (text.length < 3) throw new Error('Posts need at least 3 characters.');
+  if (text.length > 2000) throw new Error('Posts can be up to 2,000 characters.');
+  const me = await myUsername();
+  const url = await uploadVoiceNote(clip.blob);
+  const media = [{ t: 'audio', url, d: Math.max(1, Math.round(clip.seconds)) }];
+  const firstLine = text.split('\n')[0].trim();
+  const title = (firstLine.length >= 3 ? firstLine : text).slice(0, 120);
+  const ref = doc(collection(db, 'posts'));
+  await setDoc(ref, {
+    board: 'general',
+    title,
+    body: text,
+    authorUid: me.uid,
+    authorName: me.username,
+    replyCount: 0,
+    likeCount: 0,
+    createdAt: serverTimestamp(),
+    lastActivityAt: serverTimestamp(),
+    media,
+  });
+  return {
+    id: ref.id, author_id: me.uid, author_name: me.username, body: text, media_path: null,
+    media_type: null, media_url: null, media_list: mediaList(media),
+    reshared_post_id: null, created_at: new Date().toISOString(), reactions: 0, comments: 0, reshares: 0, my_reaction: null,
+    stump: null,
+  };
+}
+
 /** Only the author can delete their post (rules). */
 export async function deleteCommunityPost(postId: string) {
   await deleteDoc(doc(db, 'posts', postId));
@@ -371,14 +421,15 @@ export async function togglePostLike(postId: string): Promise<boolean> {
  * A comment, or a reply. A reply names the top-level comment it sits under (parentId)
  * and the person it answers (replyTo). Replies to replies sit under the same top-level comment.
  */
-export async function addPostComment(postId: string, body: string, reply?: { parentId: string; replyTo: string | null }) {
+export async function addPostComment(postId: string, body: string, reply?: { parentId: string; replyTo: string | null }, voice?: { blob: Blob; seconds: number }) {
   const text = body.trim();
-  if (text.length < 1) throw new Error('Write a comment first.');
+  if (text.length < 1 && !voice) throw new Error('Write a comment first.');
   if (text.length > 1000) throw new Error('Comments can be up to 1,000 characters.');
   const me = await myUsername();
+  const voiceMedia = voice ? [{ t: 'audio', url: await uploadVoiceNote(voice.blob), d: Math.max(1, Math.round(voice.seconds)) }] : null;
   const batch = writeBatch(db);
   const link = reply ? { parentId: reply.parentId.slice(0, 60), replyTo: reply.replyTo ? reply.replyTo.slice(0, 30) : null } : {};
-  batch.set(doc(collection(db, 'posts', postId, 'replies')), { body: text, authorUid: me.uid, authorName: me.username, createdAt: serverTimestamp(), ...link });
+  batch.set(doc(collection(db, 'posts', postId, 'replies')), { body: text, authorUid: me.uid, authorName: me.username, createdAt: serverTimestamp(), ...link, ...(voiceMedia ? { media: voiceMedia } : {}) });
   batch.update(doc(db, 'posts', postId), { replyCount: increment(1), lastActivityAt: serverTimestamp() });
   await batch.commit();
 }
@@ -435,6 +486,7 @@ export async function listPostComments(postId: string) {
         created_at: iso(d.createdAt),
         parent_id: typeof d.parentId === 'string' ? d.parentId : null,
         reply_to: typeof d.replyTo === 'string' ? d.replyTo : null,
+        audio: voiceOf(d.media),
       };
     });
 }
