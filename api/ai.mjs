@@ -47,7 +47,7 @@ function limited(uid) {
 const text = (value, max) => (typeof value === 'string' ? value.trim().slice(0, max) : '');
 
 const ASK_RULES = [
-  'You are the Ask AI study helper inside GrAte Apex Hub, an app for KNUST Level 100 Medical Sciences students.',
+  'You are the Ask AI study helper inside GrAte Apex Hub, an app for KNUST Medical Sciences students.',
   'The LESSON below is the learner\'s own course material. Answer from it first, and say so when you do.',
   'If the question needs general biomedical knowledge that the lesson does not contain, you may use it, but say clearly that it goes beyond the lesson and that the learner should check it against their lecture notes or textbook.',
   'If the question is not about the lesson or about biomedical study, politely steer back to the lesson.',
@@ -65,7 +65,7 @@ const CARD_RULES = [
   'Reply with JSON only, in exactly this shape: {"cards":[{"front":"...","back":"..."}]}',
 ].join('\n');
 
-class ProviderError extends Error {}
+class ProviderError extends Error { }
 
 // turns: [{ role: 'user' | 'model', text }], already alternating and starting with 'user'.
 async function openAiCompatible({ system, turns, maxTokens, json }) {

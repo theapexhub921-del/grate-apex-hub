@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/ui/button';
+import { MarkdownMessage } from '@/components/chat/markdown-message';
 import { BackLink } from '@/components/learning/nav-bits';
 import { Icon } from '@/components/ui/icon';
 import { Card, Interactive } from '@/components/ui/interactive';
@@ -163,15 +164,15 @@ export default function StudyChatScreen() {
           {turns.map((turn, i) => (
             <View key={i} style={[styles.row, turn.role === 'user' && styles.rowUser]}>
               <Card tone={turn.role === 'user' ? 'primary' : 'surface'} style={styles.bubble}>
-                <Text style={styles.who}>{turn.role === 'user' ? 'You' : 'Study chat'}</Text>
-                <Text selectable style={styles.message}>{turn.text}</Text>
+                <Text style={styles.who}>{turn.role === 'user' ? 'You' : 'Apex'}</Text>
+                {turn.role === 'model' ? <MarkdownMessage text={turn.text} /> : <Text selectable style={styles.message}>{turn.text}</Text>}
               </Card>
             </View>
           ))}
           {busy ? (
             <View style={styles.row}>
               <Card style={styles.bubble}>
-                <Text style={styles.who}>Study chat</Text>
+                <Text style={styles.who}>Apex</Text>
                 <Text style={styles.hint}>Thinking…</Text>
               </Card>
             </View>
@@ -188,7 +189,7 @@ export default function StudyChatScreen() {
           onChangeText={setDraft}
           placeholder="Ask anything"
           placeholderTextColor={colors.textTertiary}
-          accessibilityLabel="Message Study chat"
+          accessibilityLabel="Message Apex"
           multiline
           maxLength={4000}
           style={styles.input}
