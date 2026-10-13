@@ -5,7 +5,7 @@ import { type ScrollView, StyleSheet, useWindowDimensions, View } from 'react-na
 import { LegacyBlocks, Rich, TermContext } from '@/components/learning/legacy-blocks';
 import { BackLink } from '@/components/learning/nav-bits';
 import { AidsPanel, FlashcardsPanel, GlossaryPanel, LessonToolTabs, StepsPanel, type ToolTab, type ToolTabInfo } from '@/components/learning/lesson-tools';
-import { AiFlashcardsPanel, AskAiPanel } from '@/components/learning/ai-study';
+import { AiFlashcardsPanel, AiQuestionsPanel, AskAiPanel } from '@/components/learning/ai-study';
 import { legacyToText } from '@/data/ai-study';
 import { cardsFor, glossaryOf } from '@/data/flashcards';
 import { Button } from '@/components/ui/button';
@@ -178,6 +178,7 @@ export default function LegacyLessonScreen() {
     ...(extras?.steps?.items?.length ? [{ id: 'steps' as const, label: plainText(extras.steps.title) || 'Steps', icon: 'chart' as const }] : []),
     { id: 'ask' as const, label: 'Ask AI', icon: 'sparkle' as const },
     { id: 'aicards' as const, label: 'AI Flashcards', icon: 'reinforce' as const },
+    { id: 'questions' as const, label: 'AI Questions', icon: 'edit' as const },
     ...(questions > 0 && course ? [{ id: 'practice' as const, label: `Practice (${questions})`, icon: 'edit' as const }] : []),
   ];
   const panel =
@@ -185,6 +186,7 @@ export default function LegacyLessonScreen() {
     : tab === 'glossary' ? <GlossaryPanel glossary={glossary} />
     : tab === 'ask' && aiLesson ? <AskAiPanel lesson={aiLesson} />
     : tab === 'aicards' && aiLesson ? <AiFlashcardsPanel lesson={aiLesson} />
+    : tab === 'questions' && aiLesson ? <AiQuestionsPanel lesson={aiLesson} />
     : tab === 'mnemonics' && extras?.mnemonics ? <AidsPanel title="Mnemonics" intro="Memory hooks for this lesson." groups={extras.mnemonics} />
     : tab === 'facts' && extras?.facts ? <AidsPanel title="Key facts" intro="The points to remember from this lesson." groups={extras.facts} />
     : tab === 'steps' && extras?.steps ? <StepsPanel steps={extras.steps} />

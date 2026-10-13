@@ -13,9 +13,9 @@ import { Radius, Type, type ThemeColors } from '@/constants/theme';
 import { AI_CARDS_KEY, aiCards, mergeCards, parseSavedCards } from '@/data/ai-study';
 import type { Flashcard } from '@/data/flashcards';
 import { useTheme, useThemedStyles } from '@/hooks/use-theme';
-import { AiError, askLessonAi, type ChatTurn, makeLessonCards } from '@/lib/ai-study-api';
+import { AiError, askLessonAi, type ChatTurn, type LessonQuestion, makeLessonCards, makeLessonQuestions } from '@/lib/ai-study-api';
 
-// "Ask AI" and "AI Flashcards" — two tabs on every lesson. Both send the lesson's
+// "Ask AI", "AI Flashcards" and "AI Questions" — tabs on every lesson. Both send the lesson's
 // own text to Gemini 3.1 Flash-Lite through /api/ai, which keeps the key private.
 
 export type AiLesson = { id: string; title: string; text: string };
@@ -233,6 +233,124 @@ export function AiFlashcardsPanel({ lesson }: { lesson: AiLesson }) {
   );
 }
 
+// ── AI Questions ────────────────────────────────────────────────────
+
+const QUESTION_COUNTS = [5, 10];
+
+export function AiQuestionsPanel({ lesson }: { lesson: AiLesson }) {
+  const styles = useThemedStyles(createStyles);
+  const colors = useTheme();
+  const [questions, setQuestions] = useState<LessonQuestion[] | null>(null);
+  const [picks, setPicks] = useState<Record<number, number>>({});
+  const [count, setCount] = useState(5);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const busyRef = useRef(false);
+  const alive = useRef(true);
+  useEffect(() => {
+    alive.current = true;
+    return () => { alive.current = false; };
+  }, []);
+
+  // Questions are made fresh each time and never saved: they are practice, not course content.
+  async function generate() {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setBusy(true);
+    setError(null);
+    try {
+      const made = await makeLessonQuestions(lesson, count, (questions ?? []).map((item) => item.question));
+      if (alive.current) {
+        setQuestions(made);
+        setPicks({});
+      }
+    } catch (problem) {
+      if (alive.current) setError(problemText(problem));
+    } finally {
+      busyRef.current = false;
+      if (alive.current) setBusy(false);
+    }
+  }
+
+  const answered = Object.keys(picks).length;
+  const correct = questions ? questions.reduce((total, item, i) => total + (picks[i] === item.answer ? 1 : 0), 0) : 0;
+
+  const picker = (
+    <View style={styles.pickerRow}>
+      <Text style={styles.pickerLabel}>Questions to make</Text>
+      <SegmentedControl label="Questions to make" options={QUESTION_COUNTS.map((value) => ({ value: String(value), label: String(value) }))} value={String(count)} onChange={(value) => setCount(Number(value))} style={styles.picker} />
+    </View>
+  );
+
+  if (!questions) {
+    return (
+      <View style={styles.panel}>
+        <Text style={styles.panelTitle}>AI questions</Text>
+        <Text style={styles.panelText}>The AI reads “{lesson.title}” and writes multiple-choice questions to test yourself. Pick an answer to see if you were right and why. AI can make mistakes, so check anything that looks wrong against your notes.</Text>
+        {picker}
+        {error ? <InlineNotice tone="error" message={error} /> : null}
+        <Button label={busy ? 'Writing your questions…' : 'Generate questions'} icon={<Icon name="sparkle" size={16} color={colors.onPrimary} />} onPress={() => void generate()} loading={busy} disabled={busy} />
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.panel}>
+      <Text style={styles.panelTitle}>AI questions</Text>
+      {answered > 0 ? <Text style={styles.panelText}>{correct} of {answered} answered correctly so far.</Text> : null}
+      {questions.map((item, index) => {
+        const chosen = picks[index];
+        const done = chosen !== undefined;
+        return (
+          <Card key={index} style={styles.questionCard}>
+            <Text style={styles.who}>Question {index + 1}</Text>
+            <Text style={styles.questionText}>{item.question}</Text>
+            <View style={styles.optionList}>
+              {item.options.map((option, optionIndex) => {
+                const isAnswer = optionIndex === item.answer;
+                const isWrongPick = done && chosen === optionIndex && !isAnswer;
+                return (
+                  <Interactive
+                    key={optionIndex}
+                    disabled={done}
+                    accessibilityRole="button"
+                    onPress={() => setPicks((current) => ({ ...current, [index]: optionIndex }))}
+                    style={({ hovered }) => [
+                      styles.option,
+                      done && isAnswer && styles.optionRight,
+                      isWrongPick && styles.optionWrong,
+                      !done && hovered && styles.optionHover,
+                    ]}
+                  >
+                    <Text style={styles.optionLetter}>{String.fromCharCode(65 + optionIndex)}</Text>
+                    <Text style={styles.optionText}>{option}</Text>
+                  </Interactive>
+                );
+              })}
+            </View>
+            {done ? (
+              <Text style={[styles.feedback, chosen === item.answer ? styles.feedbackRight : styles.feedbackWrong]}>
+                {chosen === item.answer ? 'Correct. ' : 'Not quite. '}
+                {item.explanation}
+              </Text>
+            ) : null}
+          </Card>
+        );
+      })}
+
+      <Card tone="muted" style={styles.more}>
+        <Text style={styles.moreTitle}>New set</Text>
+        {picker}
+        {error ? <InlineNotice tone="error" message={error} /> : null}
+        <View style={styles.moreActions}>
+          <Button label={busy ? 'Writing…' : 'Make new questions'} variant="secondary" icon={<Icon name="sparkle" size={16} color={colors.text} />} onPress={() => void generate()} loading={busy} disabled={busy} />
+          <Button label="Clear questions" variant="ghost" onPress={() => { setQuestions(null); setPicks({}); setError(null); }} disabled={busy} />
+        </View>
+      </Card>
+    </View>
+  );
+}
+
 function createStyles(colors: ThemeColors) {
   return StyleSheet.create({
     panel: { gap: 12 },
@@ -256,5 +374,17 @@ function createStyles(colors: ThemeColors) {
     more: { gap: 12, padding: 16, marginTop: 6 },
     moreTitle: { ...Type.headline, color: colors.text },
     moreActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+    questionCard: { gap: 10, padding: 16 },
+    questionText: { fontSize: 15.5, lineHeight: 23, fontWeight: '700', color: colors.text },
+    optionList: { gap: 8 },
+    option: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 11, paddingHorizontal: 12, borderRadius: Radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
+    optionHover: { borderColor: colors.primaryBorder },
+    optionRight: { borderColor: colors.success, backgroundColor: colors.surfaceSunken },
+    optionWrong: { borderColor: colors.error, backgroundColor: colors.surfaceSunken },
+    optionLetter: { width: 24, fontSize: 13, fontWeight: '800', color: colors.primaryText },
+    optionText: { flex: 1, fontSize: 14.5, lineHeight: 21, color: colors.text },
+    feedback: { fontSize: 14, lineHeight: 21, fontWeight: '600' },
+    feedbackRight: { color: colors.success },
+    feedbackWrong: { color: colors.error },
   });
 }

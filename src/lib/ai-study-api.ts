@@ -35,3 +35,10 @@ export async function makeLessonCards(lesson: { title: string; text: string }, c
   const data = await call<{ cards: { front: string; back: string }[] }>({ mode: 'flashcards', lesson, count, avoid });
   return data.cards;
 }
+
+export type LessonQuestion = { question: string; options: string[]; answer: number; explanation: string };
+
+export async function makeLessonQuestions(lesson: { title: string; text: string }, count: number, avoid: readonly string[]): Promise<LessonQuestion[]> {
+  const data = await call<{ questions: LessonQuestion[] }>({ mode: 'questions', lesson, count, avoid });
+  return data.questions;
+}

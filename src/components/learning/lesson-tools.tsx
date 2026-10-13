@@ -16,7 +16,7 @@ import { useTheme, useThemedStyles } from '@/hooks/use-theme';
 // flashcards with spaced repetition, the glossary, mnemonics, key facts and the
 // lesson's step-by-step process. (The review calendar lives in Study.)
 
-export type ToolTab = 'read' | 'cards' | 'glossary' | 'mnemonics' | 'facts' | 'steps' | 'practice' | 'ask' | 'aicards';
+export type ToolTab = 'read' | 'cards' | 'glossary' | 'mnemonics' | 'facts' | 'steps' | 'practice' | 'ask' | 'aicards' | 'questions';
 export type ToolTabInfo = { id: ToolTab; label: string; icon: IconName };
 
 export function LessonToolTabs({ tabs, active, onChange }: { tabs: readonly ToolTabInfo[]; active: ToolTab; onChange: (tab: ToolTab) => void }) {

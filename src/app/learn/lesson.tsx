@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { Text } from '@/components/ui/text';
 
-import { AiFlashcardsPanel, AskAiPanel } from '@/components/learning/ai-study';
+import { AiFlashcardsPanel, AiQuestionsPanel, AskAiPanel } from '@/components/learning/ai-study';
 import { InteractiveLayer } from '@/components/learning/interactive-layer';
 import { ClassAccessCard } from '@/components/learning/class-access-card';
 import { MemoryStateBadge } from '@/components/learning/memory-ui';
@@ -30,7 +30,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { param, routes } from '@/lib/routes';
 
 type View3 = 'learn' | 'read';
-type AiView = 'ask' | 'aicards';
+type AiView = 'ask' | 'aicards' | 'questions';
 
 // /learn/lesson?lesson=<lesson id>[&layer=learn|read][&restart=1]
 export default function LessonRoute() {
@@ -359,7 +359,7 @@ function LessonPlayer({
 
   const main = ai ? (
     <View style={styles.main}>
-      {ai === 'ask' ? <AskAiPanel lesson={aiLesson} /> : <AiFlashcardsPanel lesson={aiLesson} />}
+      {ai === 'ask' ? <AskAiPanel lesson={aiLesson} /> : ai === 'questions' ? <AiQuestionsPanel lesson={aiLesson} /> : <AiFlashcardsPanel lesson={aiLesson} />}
     </View>
   ) : lessonMain;
 
@@ -425,7 +425,7 @@ function LessonPlayer({
           >
             <Text style={styles.tabText}>3 · Quiz</Text>
           </Interactive>
-          {(['ask', 'aicards'] as AiView[]).map((layer) => (
+          {(['ask', 'aicards', 'questions'] as AiView[]).map((layer) => (
             <Interactive
               key={layer}
               accessibilityRole="tab"
@@ -433,7 +433,7 @@ function LessonPlayer({
               onPress={() => openAi(layer)}
               style={({ hovered }) => [styles.tab, ai === layer && styles.tabActive, hovered && styles.tabHover]}
             >
-              <Text style={[styles.tabText, ai === layer && styles.tabTextActive]}>{layer === 'ask' ? 'Ask AI' : 'AI Flashcards'}</Text>
+              <Text style={[styles.tabText, ai === layer && styles.tabTextActive]}>{layer === 'ask' ? 'Ask AI' : layer === 'questions' ? 'AI Questions' : 'AI Flashcards'}</Text>
             </Interactive>
           ))}
         </View>
