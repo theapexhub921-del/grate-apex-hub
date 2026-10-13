@@ -1,19 +1,28 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/ui/button';
 import { BackLink } from '@/components/learning/nav-bits';
 import { Icon } from '@/components/ui/icon';
 import { Card, Interactive } from '@/components/ui/interactive';
-import { PageHeader, Screen } from '@/components/ui/screen';
+import { PageHeader, Screen, SectionHeader } from '@/components/ui/screen';
 import { InlineNotice } from '@/components/ui/state-views';
 import { Text, TextInput } from '@/components/ui/text';
 import { Radius, Type, type ThemeColors } from '@/constants/theme';
 import { useTheme, useThemedStyles } from '@/hooks/use-theme';
 import { askStudyChat } from '@/lib/ai-chat-api';
 import { AiError, type ChatTurn } from '@/lib/ai-study-api';
+import {
+  deleteTutorChat,
+  getTutorChat,
+  listTutorChats,
+  newTutorChatId,
+  saveTutorChat,
+  type TutorChatSummary,
+} from '@/data/tutor-chats';
 
 // Study chat: ask the AI anything, not tied to a lesson.
+// Each conversation is saved to the learner's account (see data/tutor-chats.ts).
 
 const SUGGESTIONS = [
   'Explain glycolysis like I am new to it',
@@ -22,13 +31,23 @@ const SUGGESTIONS = [
   'Quiz me on basic medical chemistry',
 ];
 
+function formatDate(iso: string | null) {
+  if (!iso) return 'Just now';
+  return new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
 export default function StudyChatScreen() {
   const styles = useThemedStyles(createStyles);
   const colors = useTheme();
   const [turns, setTurns] = useState<ChatTurn[]>([]);
+  const [chatId, setChatId] = useState<string | null>(null);
+  const [createdAt, setCreatedAt] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [saveFailed, setSaveFailed] = useState(false);
+  const [past, setPast] = useState<TutorChatSummary[]>([]);
+  const [pendingDelete, setPendingDelete] = useState<string | null>(null);
   const busyRef = useRef(false);
   const alive = useRef(true);
   useEffect(() => {
@@ -36,23 +55,92 @@ export default function StudyChatScreen() {
     return () => { alive.current = false; };
   }, []);
 
+  const refreshPast = useCallback(async () => {
+    try {
+      const list = await listTutorChats();
+      if (alive.current) setPast(list);
+    } catch {
+      if (alive.current) setPast([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshPast();
+  }, [refreshPast]);
+
   async function send(raw: string) {
     const message = raw.trim();
     if (!message || busyRef.current) return;
     busyRef.current = true;
     const history = turns;
+    const id = chatId ?? newTutorChatId();
+    const started = createdAt ?? new Date().toISOString();
+    setChatId(id);
+    setCreatedAt(started);
     setTurns([...history, { role: 'user', text: message }]);
     setDraft('');
     setError(null);
     setBusy(true);
     try {
       const answer = await askStudyChat(message, history);
-      if (alive.current) setTurns((current) => [...current, { role: 'model', text: answer }]);
+      const finished: ChatTurn[] = [...history, { role: 'user', text: message }, { role: 'model', text: answer }];
+      if (alive.current) setTurns(finished);
+      try {
+        await saveTutorChat({ id, turns: finished, createdAt: started });
+        if (alive.current) setSaveFailed(false);
+        void refreshPast();
+      } catch {
+        if (alive.current) setSaveFailed(true);
+      }
     } catch (problem) {
       if (alive.current) setError(problem instanceof AiError ? problem.message : 'The AI could not answer right now. Please try again.');
     } finally {
       busyRef.current = false;
       if (alive.current) setBusy(false);
+    }
+  }
+
+  function newChat() {
+    setChatId(null);
+    setCreatedAt(null);
+    setTurns([]);
+    setError(null);
+    setSaveFailed(false);
+    setPendingDelete(null);
+  }
+
+  async function openChat(id: string) {
+    setError(null);
+    setPendingDelete(null);
+    try {
+      const chat = await getTutorChat(id);
+      if (!alive.current) return;
+      if (!chat) {
+        setError('That chat could not be found. It may have been deleted.');
+        void refreshPast();
+        return;
+      }
+      setChatId(chat.id);
+      setCreatedAt(chat.createdAt);
+      setTurns(chat.turns);
+      setSaveFailed(false);
+    } catch {
+      if (alive.current) setError('That chat could not be opened right now. Please try again.');
+    }
+  }
+
+  async function removeChat(id: string) {
+    if (pendingDelete !== id) {
+      setPendingDelete(id);
+      return;
+    }
+    setPendingDelete(null);
+    try {
+      await deleteTutorChat(id);
+      if (id === chatId) newChat();
+      void refreshPast();
+    } catch {
+      if (alive.current) setError('That chat could not be deleted right now. Please try again.');
     }
   }
 
@@ -92,6 +180,7 @@ export default function StudyChatScreen() {
       )}
 
       {error ? <InlineNotice tone="error" message={error} /> : null}
+      {saveFailed ? <InlineNotice tone="error" message="This chat could not be saved to your account. Check your connection; it will stay on this screen until you leave it." /> : null}
 
       <View style={styles.composer}>
         <TextInput
@@ -106,7 +195,33 @@ export default function StudyChatScreen() {
         />
         <Button label="Send" icon={<Icon name="send" size={16} color={colors.onPrimary} />} onPress={() => void send(draft)} loading={busy} disabled={busy || !draft.trim()} />
       </View>
-      {turns.length > 0 ? <Button label="New chat" variant="ghost" size="sm" onPress={() => { setTurns([]); setError(null); }} disabled={busy} /> : null}
+      {turns.length > 0 ? <Button label="New chat" variant="ghost" size="sm" onPress={newChat} disabled={busy} /> : null}
+
+      <SectionHeader title="Past chats" subtitle="Saved to your account. Only you can see them." style={styles.section} />
+      {past.length === 0 ? (
+        <Card tone="muted" style={styles.emptyPast}>
+          <Text style={styles.hint}>Your saved chats will appear here.</Text>
+        </Card>
+      ) : (
+        <View style={styles.pastList}>
+          {past.map((chat) => (
+            <Card key={chat.id} tone={chat.id === chatId ? 'primary' : 'surface'} style={styles.pastRow}>
+              <Text style={styles.pastTitle}>{chat.title}</Text>
+              <Text style={styles.hint}>{formatDate(chat.updatedAt)} · {chat.turnCount} messages</Text>
+              <View style={styles.pastActions}>
+                <Button label="Open" variant="secondary" size="sm" onPress={() => void openChat(chat.id)} disabled={busy} />
+                <Button
+                  label={pendingDelete === chat.id ? 'Tap again to delete' : 'Delete'}
+                  variant="ghost"
+                  size="sm"
+                  onPress={() => void removeChat(chat.id)}
+                  disabled={busy}
+                />
+              </View>
+            </Card>
+          ))}
+        </View>
+      )}
     </Screen>
   );
 }
@@ -126,5 +241,11 @@ function createStyles(colors: ThemeColors) {
     hint: { fontSize: 14, lineHeight: 21, color: colors.textSecondary },
     composer: { gap: 10 },
     input: { minHeight: 74, borderWidth: 1, borderColor: colors.borderStrong, borderRadius: Radius.md, backgroundColor: colors.surfaceSunken, padding: 12, color: colors.text, fontSize: 14.5, textAlignVertical: 'top' },
+    section: { marginTop: 30 },
+    emptyPast: { padding: 16 },
+    pastList: { gap: 9 },
+    pastRow: { gap: 6, padding: 14 },
+    pastTitle: { fontSize: 15, fontWeight: '700', color: colors.text },
+    pastActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
   });
 }

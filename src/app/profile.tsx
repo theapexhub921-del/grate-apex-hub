@@ -74,6 +74,7 @@ export default function ProfileScreen() {
   const [myCounts, setMyCounts] = useState<{ posts: number; followers: number; following: number } | null>(null);
   const [followSheetOpen, setFollowSheetOpen] = useState(false);
   const [followTab, setFollowTab] = useState<'followers' | 'following'>('followers');
+  const [expandedFriends, setExpandedFriends] = useState(false);
 
   const openFollowList = (tab: 'followers' | 'following') => {
     setFollowTab(tab);
@@ -175,7 +176,7 @@ export default function ProfileScreen() {
         style={styles.noMargin}
         right={<Text style={styles.cardMeta}>{friends.length} friends</Text>}
       />
-      {friends.length ? friends.slice(0, 3).map((friend) => (
+      {friends.length ? (expandedFriends ? friends : friends.slice(0, 3)).map((friend) => (
         <View key={friend.userId} style={styles.friendRow}>
           <PersonAvatar uid={friend.userId} uri={friend.avatarUrl} name={personName(friend)} size={40} status={friend.isOnline ? 'online' : null} />
           <PersonLink uid={friend.userId} label={personName(friend)} style={styles.friendText}>
@@ -189,12 +190,28 @@ export default function ProfileScreen() {
           {social.status === 'loading' ? 'Loading your friends...' : 'Your friend list is empty. Find classmates to build your circle.'}
         </Text>
       )}
-      <Button
-        label={friends.length ? 'Show all friends' : 'Find classmates'}
-        variant="secondary"
-        size="sm"
-        onPress={() => router.push('/social/friends' as Href)}
-      />
+      <View style={styles.circleButtonsRow}>
+        {friends.length > 0 ? (
+          <Button
+            label={friends.length > 3 ? (expandedFriends ? 'See fewer friends' : 'See more friends') : 'See more friends'}
+            variant="ghost"
+            size="sm"
+            onPress={() => {
+              if (friends.length > 3) {
+                setExpandedFriends((prev) => !prev);
+              } else {
+                router.push('/social/friends' as Href);
+              }
+            }}
+          />
+        ) : null}
+        <Button
+          label={friends.length ? 'Manage more friends' : 'Find classmates'}
+          variant="secondary"
+          size="sm"
+          onPress={() => router.push('/social/friends' as Href)}
+        />
+      </View>
     </Card>
   );
   const recommendationsCard = (
@@ -463,6 +480,7 @@ function createStyles(colors: ThemeColors) {
     socialCard: { gap: 12, marginTop: 12 },
     noMargin: { marginBottom: 0 },
     friendRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 3 },
+    circleButtonsRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginTop: 4 },
     friendText: { flex: 1, minWidth: 0, gap: 2 },
     nameLine: { flexDirection: 'row', alignItems: 'center', gap: 5, minWidth: 0 },
     friendName: { fontSize: 13.5, fontWeight: '800', color: colors.text },

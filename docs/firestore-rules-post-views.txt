@@ -1,0 +1,38 @@
+// GrAte Apex Hub — Firestore rules to ADD for post view counts (2026-10-13)
+//
+// This block only ADDS permission to count views. It does not change or remove
+// anything in the rules that are live now, and it is separate from
+// firestore-rules-to-paste.txt (it doesn't matter whether that one is pasted yet).
+//
+// Where to paste (Firebase console → project grate-apex → Firestore Database → Rules):
+//   1. Scroll to the very bottom of the rules. The last two lines are each just  }
+//   2. Click at the start of the SECOND-TO-LAST line (the first of those two  }  lines).
+//   3. Paste everything below the dashed line, then press Publish.
+//
+// What it does: each signed-in learner who sees a post counts once. Their
+// posts/{id}/views/{uid} record and viewCount + 1 are written together, so the
+// number can't be changed any other way. Only the post's author can see who viewed it.
+//
+// Until this is published, the app simply shows no view count.
+//
+// The full rules file with this block already in place is firestore.rules in the repository.
+// ---------------------------------------------------------------------------
+
+    match /posts/{postId} {
+      allow update: if request.auth != null
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewCount'])
+        && request.resource.data.viewCount == resource.data.get('viewCount', 0) + 1
+        && existsAfter(/databases/$(database)/documents/posts/$(postId)/views/$(request.auth.uid))
+        && !exists(/databases/$(database)/documents/posts/$(postId)/views/$(request.auth.uid));
+
+      match /views/{viewer} {
+        allow read: if request.auth.uid == viewer
+          || request.auth.uid == get(/databases/$(database)/documents/posts/$(postId)).data.authorUid;
+        allow create: if request.auth.uid == viewer
+          && request.resource.data.keys().hasOnly(['at'])
+          && request.resource.data.at == request.time
+          && getAfter(/databases/$(database)/documents/posts/$(postId)).data.get('viewCount', 0)
+             == get(/databases/$(database)/documents/posts/$(postId)).data.get('viewCount', 0) + 1;
+        allow update, delete: if false;
+      }
+    }

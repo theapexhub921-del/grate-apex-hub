@@ -310,6 +310,28 @@ service cloud.firestore {
       }
     }
 
+    // Post views (added 2026-10-13, docs/firestore-rules-post-views.txt). Each signed-in learner
+    // counts once: their views/{uid} record and viewCount + 1 are written in ONE batch, so the
+    // number can't be changed any other way. Only the post's author can see who viewed it.
+    match /posts/{postId} {
+      allow update: if request.auth != null
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewCount'])
+        && request.resource.data.viewCount == resource.data.get('viewCount', 0) + 1
+        && existsAfter(/databases/$(database)/documents/posts/$(postId)/views/$(request.auth.uid))
+        && !exists(/databases/$(database)/documents/posts/$(postId)/views/$(request.auth.uid));
+
+      match /views/{viewer} {
+        allow read: if request.auth.uid == viewer
+          || request.auth.uid == get(/databases/$(database)/documents/posts/$(postId)).data.authorUid;
+        allow create: if request.auth.uid == viewer
+          && request.resource.data.keys().hasOnly(['at'])
+          && request.resource.data.at == request.time
+          && getAfter(/databases/$(database)/documents/posts/$(postId)).data.get('viewCount', 0)
+             == get(/databases/$(database)/documents/posts/$(postId)).data.get('viewCount', 0) + 1;
+        allow update, delete: if false;
+      }
+    }
+
     // Question of the Day class tally ("62% of students got this right"). It can only go up by one answer at a time,
     // and only together with the student's own answer document for that day.
     match /qotd/{qid} {
@@ -378,6 +400,20 @@ service cloud.firestore {
         && request.resource.data.keys().hasOnly(['items', 'updatedAt'])
         && request.resource.data.items is list
         && request.resource.data.items.size() <= 200
+        && request.resource.data.updatedAt == request.time;
+    }
+
+    // Study chat history (new app): one document per saved chat, private to the
+    // owner. The id is made on the device; the title is at most 120 characters and
+    // a chat keeps at most 100 messages. Nobody else can read or change a chat.
+    match /users/{uid}/tutorChats/{chatId} {
+      allow read, delete: if request.auth != null && request.auth.uid == uid;
+      allow create, update: if request.auth != null && request.auth.uid == uid
+        && chatId.matches('^[a-z0-9_-]{1,80}$')
+        && request.resource.data.keys().hasOnly(['title', 'turns', 'createdAt', 'updatedAt'])
+        && request.resource.data.title is string && request.resource.data.title.size() <= 120
+        && request.resource.data.turns is list && request.resource.data.turns.size() <= 100
+        && request.resource.data.createdAt is string
         && request.resource.data.updatedAt == request.time;
     }
 
