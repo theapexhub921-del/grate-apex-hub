@@ -5,6 +5,29 @@ import { PageMotifs } from '@/components/atmosphere/page-motifs';
 
 import classes from './atmosphere.module.css';
 
+// The background DNA: two strands that cross every half turn, with base-pair
+// rungs drawn only where the strands are apart (never at a crossing), so it
+// reads as a double helix rather than a ladder.
+const DNA = (() => {
+  const mid = 56;
+  const amplitude = 40;
+  const turn = 96; // one full twist
+  const length = 192; // two twists
+  const x = (y: number, side: 1 | -1) => mid + side * amplitude * Math.sin((2 * Math.PI * y) / turn);
+  const strand = (side: 1 | -1) =>
+    Array.from({ length: 49 }, (_, i) => {
+      const y = (i * length) / 48;
+      return `${i ? 'L' : 'M'}${x(y, side).toFixed(1)} ${(y + 4).toFixed(1)}`;
+    }).join('');
+  const rungs: string[] = [];
+  for (let y = 8; y < length; y += 12) {
+    const a = x(y, 1);
+    const b = x(y, -1);
+    if (Math.abs(a - b) > 24) rungs.push(`M${a.toFixed(1)} ${y + 4}H${b.toFixed(1)}`);
+  }
+  return { strands: strand(1) + strand(-1), rungs: rungs.join('') };
+})();
+
 // Web atmosphere: pure CSS layers (no WebGL, no canvas), so it costs
 // almost nothing and never blocks input. Decorative only — hidden from
 // assistive technology.
@@ -57,18 +80,23 @@ export function Atmosphere({ mood }: { mood: AtmosphereMood }) {
               <path d="m58 46 39 23M48 50l-23 49m30-50 14-39m-8 4 12-5" />
               <circle cx="70" cy="8" r="3" /><circle cx="118" cy="92" r="3" />
             </g>
+            {/* DNA: a double helix whose rungs always join the two strands. */}
             <g transform="translate(1160 130) rotate(10)">
-              <path d="M35 10c42 28 42 68 0 96s-42 68 0 96m42-192c-42 28-42 68 0 96s42 68 0 96M37 27h38M24 56h64M24 84h64M24 112h64M24 140h64M37 169h38" />
+              <path d={DNA.strands} />
+              <path d={DNA.rungs} strokeWidth={2} />
             </g>
             <g transform="translate(260 728) rotate(-8)">
               <path d="M14 18h82l-8 21-9 89a15 15 0 0 1-15 13H46a15 15 0 0 1-15-13l-9-89z" />
               <path d="M30 83c16 9 33-9 56 1m-61-46h58M6 18h98" />
               <circle cx="48" cy="97" r="3" /><circle cx="69" cy="111" r="3" />
             </g>
-            <g transform="translate(1012 687) rotate(9)">
-              <path d="M27 18v50a34 34 0 0 0 68 0V40a19 19 0 0 0-38 0v30a9 9 0 0 0 18 0V48" />
-              <path d="M27 18a12 12 0 1 0-24 0v8a12 12 0 0 0 24 0m68-8a12 12 0 1 1 24 0v8a12 12 0 0 1-24 0" />
-              <circle cx="61" cy="123" r="5" />
+            {/* Stethoscope: earpieces, the Y-shaped headset, one tube and the chest piece. */}
+            <g transform="translate(1000 672) rotate(9)">
+              <path d="M22 14c0 30 10 52 34 64M90 14c0 30-10 52-34 64" />
+              <path d="M22 14l-6-8M90 14l6-8" />
+              <circle cx="14" cy="4" r="3.5" /><circle cx="98" cy="4" r="3.5" />
+              <path d="M56 78v24c0 26 22 40 44 34 18-5 24-20 24-36" />
+              <circle cx="124" cy="84" r="16" /><circle cx="124" cy="84" r="7" />
             </g>
             <g transform="translate(752 340) rotate(8)">
               <path d="M12 22h94v66H12zM59 22v66M24 39h24m-24 14h24m24-14h18m-18 14h18M20 98h78" />
