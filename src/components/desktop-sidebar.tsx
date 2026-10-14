@@ -198,7 +198,9 @@ export function DesktopSidebar({ docked }: { docked: boolean }) {
           </View>
         </View>
 
-        <View style={[styles.footer, collapsed && styles.footerCollapsed]}>
+        {collapsed ? (
+          // Collapsed: render just the avatar, no footer wrapper, so it aligns
+          // vertically with the nav icons above it (no flex-row offset).
           <Pressable
             onPress={() => go('/profile')}
             accessibilityRole="link"
@@ -206,20 +208,34 @@ export function DesktopSidebar({ docked }: { docked: boolean }) {
             tabIndex={shown ? 0 : -1}
             onHoverIn={() => setHovered('identity')}
             onHoverOut={() => setHovered(null)}
-            style={[styles.identity, collapsed && styles.identitySlim, hovered === 'identity' && !collapsed && styles.navItemHovered]}
+            style={[styles.navItem, styles.navItemCenter, hovered === 'identity' && styles.navItemHovered]}
           >
             <Avatar uri={avatarUrl} name={displayName} size={34} ring="gold" />
-            <View style={[styles.identityText, collapsed && styles.hiddenBlock]}>
-              <Text style={styles.footerName} numberOfLines={1}>
-                {displayName ? `Doc. ${displayName}` : 'Doc.'}
-              </Text>
-              <Text style={styles.footerRank} numberOfLines={1}>
-                {rank ? rank.rank.name : 'Fresher'}
-              </Text>
-            </View>
           </Pressable>
-          {collapsed ? null : <IconButton icon="settings" label="Settings" onPress={() => go('/settings')} size={36} />}
-        </View>
+        ) : (
+          <View style={styles.footer}>
+            <Pressable
+              onPress={() => go('/profile')}
+              accessibilityRole="link"
+              accessibilityLabel="Your profile"
+              tabIndex={shown ? 0 : -1}
+              onHoverIn={() => setHovered('identity')}
+              onHoverOut={() => setHovered(null)}
+              style={[styles.identity, hovered === 'identity' && styles.navItemHovered]}
+            >
+              <Avatar uri={avatarUrl} name={displayName} size={34} ring="gold" />
+              <View style={styles.identityText}>
+                <Text style={styles.footerName} numberOfLines={1}>
+                  {displayName ? `Doc. ${displayName}` : 'Doc.'}
+                </Text>
+                <Text style={styles.footerRank} numberOfLines={1}>
+                  {rank ? rank.rank.name : 'Fresher'}
+                </Text>
+              </View>
+            </Pressable>
+            <IconButton icon="settings" label="Settings" onPress={() => go('/settings')} size={36} />
+          </View>
+        )}
       </View>
     </>
   );
@@ -367,10 +383,11 @@ function createStyles(colors: ThemeColors) {
       borderTopWidth: 1,
       borderTopColor: colors.divider,
     },
-    footerCollapsed: {
-      borderTopWidth: 0,
-      borderTopColor: 'transparent',
+    // In collapsed mode, the avatar sits directly in the rail column (no row wrapper),
+    // using the same navItem base so it lines up perfectly with the icons above.
+    navItemCenter: {
       justifyContent: 'center',
+      minHeight: 44,
     },
     identity: {
       flex: 1,
