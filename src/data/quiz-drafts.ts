@@ -12,6 +12,7 @@ export type QuizDraft = {
   lessonId: string | null;
   title: string;
   query: string; // the quiz link's parameters, so the quiz can be reopened
+  path?: string; // which screen the quiz opens on (default /learn/quiz)
   seed: string;
   mode: 'instant' | 'submit';
   itemIds: string[]; // the questions, in order
@@ -21,6 +22,7 @@ export type QuizDraft = {
   skipped: string[];
   recorded: string[];
   timedOut: string[];
+  elapsed?: number; // seconds already spent, so the timer carries on
   savedAt: number;
 };
 
@@ -46,8 +48,9 @@ function parse(raw: unknown): QuizDraft | null {
   }
 }
 
-export async function saveQuizDraft(draft: QuizDraft): Promise<void> {
+export async function saveQuizDraft(input: Omit<QuizDraft, 'savedAt'>): Promise<void> {
   const owner = uid();
+  const draft: QuizDraft = { ...input, savedAt: Date.now() };
   const data = JSON.stringify(draft);
   if (data.length > MAX_DATA) throw new Error('This quiz is too long to save.');
   await setDoc(draftRef(owner, draft.key), {
@@ -64,16 +67,21 @@ export async function getQuizDraft(key: string): Promise<QuizDraft | null> {
 }
 
 // A quiz belongs to a lesson if it was saved for that lesson, or its link names that lesson.
-function belongsTo(draft: QuizDraft, lessonId: string): boolean {
-  return draft.lessonId === lessonId || draft.query.split('&').includes(`lesson=${encodeURIComponent(lessonId)}`);
+// A topic quiz is matched by the topic in its link.
+type DraftScope = { lessonId?: string; topicId?: string; all?: boolean };
+
+function belongsTo(draft: QuizDraft, scope: DraftScope): boolean {
+  if (scope.all) return true;
+  const parts = draft.query.split('&');
+  if (scope.lessonId) {
+    return draft.lessonId === scope.lessonId || parts.includes(`lesson=${encodeURIComponent(scope.lessonId)}`);
+  }
+  if (scope.topicId) return parts.includes(`topic=${encodeURIComponent(scope.topicId)}`);
+  return false;
 }
 
-/**
- * Keeps up to date the list of unfinished quizzes for one lesson: it calls onChange now, and again
- * whenever one is saved or cleared. Returns a function that stops listening.
- */
-export function watchQuizDraftsForLesson(
-  lessonId: string,
+function watchDrafts(
+  scope: DraftScope,
   onChange: (drafts: QuizDraft[]) => void,
   onError: (message: string) => void
 ): () => void {
@@ -90,7 +98,8 @@ export function watchQuizDraftsForLesson(
       (snap) => {
         const drafts = snap.docs
           .map((item) => parse(item.data().data))
-          .filter((item): item is QuizDraft => item !== null && belongsTo(item, lessonId));
+          .filter((item): item is QuizDraft => item !== null && belongsTo(item, scope))
+          .sort((a, b) => b.savedAt - a.savedAt);
         onChange(drafts);
       },
       (problem) => onError(problem.message)
@@ -102,6 +111,35 @@ export function watchQuizDraftsForLesson(
   };
 }
 
+/**
+ * Keeps up to date the list of unfinished quizzes for one lesson: it calls onChange now, and again
+ * whenever one is saved or cleared. Returns a function that stops listening.
+ */
+export function watchQuizDraftsForLesson(
+  lessonId: string,
+  onChange: (drafts: QuizDraft[]) => void,
+  onError: (message: string) => void
+): () => void {
+  return watchDrafts({ lessonId }, onChange, onError);
+}
+
+/** The same, for the cumulative quiz of one topic. */
+export function watchQuizDraftsForTopic(
+  topicId: string,
+  onChange: (drafts: QuizDraft[]) => void,
+  onError: (message: string) => void
+): () => void {
+  return watchDrafts({ topicId }, onChange, onError);
+}
+
 export async function deleteQuizDraft(key: string): Promise<void> {
   await deleteDoc(draftRef(uid(), key));
+}
+
+/** Every unfinished quiz of the learner (used to show "Resume" on lesson cards). */
+export function watchAllQuizDrafts(
+  onChange: (drafts: QuizDraft[]) => void,
+  onError: (message: string) => void
+): () => void {
+  return watchDrafts({ all: true }, onChange, onError);
 }

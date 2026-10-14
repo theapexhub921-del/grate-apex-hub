@@ -1,3 +1,4 @@
+import { findLessonPractice, findPractice, resumeHref, resumeLabel, useQuizDrafts } from '@/hooks/use-quiz-drafts';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -27,6 +28,7 @@ import { param, routes } from '@/lib/routes';
 // reading time and practice questions, plus the course's question sets and an
 // Apex Challenge.
 export default function LegacyCourseScreen() {
+  const drafts = useQuizDrafts();
   const styles = useThemedStyles(createStyles);
   const colors = useTheme();
   const params = useLocalSearchParams<{ course?: string | string[] }>();
@@ -172,9 +174,9 @@ export default function LegacyCourseScreen() {
                           </Interactive>
                         ) : null}
                         {questions > 0 ? (
-                          <Interactive onPress={() => router.push(routes.legacyPractice({ course: course.id, lesson: lesson.id }))} accessibilityRole="button" style={styles.practice}>
+                          <Interactive onPress={() => { const saved = findLessonPractice(drafts, course.id, lesson.id); router.push(saved ? resumeHref(saved) : routes.legacyPractice({ course: course.id, lesson: lesson.id })); }} accessibilityRole="button" style={styles.practice}>
                             <Icon name="edit" size={14} color={colors.accentText} />
-                            <Text style={styles.practiceText}>Practice · {questions} questions</Text>
+                            <Text style={styles.practiceText}>{findLessonPractice(drafts, course.id, lesson.id) ? `Resume practice · ${resumeLabel(findLessonPractice(drafts, course.id, lesson.id)!)}` : `Practice · ${questions} questions`}</Text>
                           </Interactive>
                         ) : null}
                       </View>
@@ -192,9 +194,9 @@ export default function LegacyCourseScreen() {
           <SectionHeader title="Question sets" subtitle={course.subject ? 'Practise each topic’s questions in mixed types.' : 'The course’s quizzes and past questions, as in the original app.'} style={styles.section} />
           <View style={styles.sets}>
             {sets.map((set) => (
-              <Interactive key={set.id} onPress={() => router.push(routes.legacyPractice({ course: course.id, set: set.id }))} accessibilityRole="button" style={({ hovered }) => [styles.set, hovered && styles.setHover]}>
+              <Interactive key={set.id} onPress={() => { const saved = findPractice(drafts, course.id, set.id); router.push(saved ? resumeHref(saved) : routes.legacyPractice({ course: course.id, set: set.id })); }} accessibilityRole="button" style={({ hovered }) => [styles.set, hovered && styles.setHover]}>
                 <Text style={styles.setName}>{set.name}</Text>
-                <Text style={styles.metaSoft}>{set.count} questions</Text>
+                <Text style={styles.metaSoft}>{findPractice(drafts, course.id, set.id) ? `Resume · ${resumeLabel(findPractice(drafts, course.id, set.id)!)}` : `${set.count} questions`}</Text>
               </Interactive>
             ))}
           </View>

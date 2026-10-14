@@ -3,6 +3,7 @@ import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Text } from '@/components/ui/text';
 
 import { ApexCoinButton } from '@/components/apex-coin-button';
+import { ContinueWhereYouLeftOff } from '@/components/learning/quiz-in-progress-card';
 import { LogoMark } from '@/components/logo-mark';
 import { SocialActivityFeed } from '@/components/social/supabase-social-feed';
 import { CommunityPostsFeed } from '@/components/social/community-posts-feed';
@@ -32,6 +33,8 @@ export default function HomeScreen() {
           <IconButton icon="settings" label="Settings" onPress={() => router.push('/settings')} />
         </View>
       </View>
+
+      <ContinueWhereYouLeftOff />
 
       {/* Feed is people's posts: stories and community posts only. Rank is in
           You, "Your week" in Study, personal goals in Study and You. */}

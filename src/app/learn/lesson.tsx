@@ -6,6 +6,7 @@ import { Text } from '@/components/ui/text';
 import { AiFlashcardsPanel, AiQuestionsPanel, AskAiPanel } from '@/components/learning/ai-study';
 import { InteractiveLayer } from '@/components/learning/interactive-layer';
 import { ClassAccessCard } from '@/components/learning/class-access-card';
+import { QuizInProgressCard } from '@/components/learning/quiz-in-progress-card';
 import { MemoryStateBadge } from '@/components/learning/memory-ui';
 import { Breadcrumbs, BackLink } from '@/components/learning/nav-bits';
 import { ReadingLayer } from '@/components/learning/reading-layer';
@@ -190,6 +191,7 @@ function LessonPlayer({
 
   const outline = (
     <View style={styles.side}>
+      <QuizInProgressCard lessonId={lesson?.id} />
       <Card style={styles.sideCard}>
         <Text style={styles.kicker}>THIS LESSON</Text>
         {(['learn', 'read'] as View3[]).map((layer, i) => {

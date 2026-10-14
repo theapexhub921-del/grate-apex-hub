@@ -25,6 +25,7 @@ import {
   topicProgress,
 } from '@/data/learning/progress-model';
 import { describeAgo, describeDue } from '@/data/learning/time';
+import { QuizInProgressCard } from '@/components/learning/quiz-in-progress-card';
 import { useLearning } from '@/data/learning/use-learning';
 import { getSubjectInfo } from '@/data/subjects';
 import { useThemedStyles } from '@/hooks/use-theme';
@@ -68,6 +69,7 @@ export function TopicScreen({ topicId }: { topicId: string | undefined }) {
 
   const side = (
     <View style={styles.side}>
+      <QuizInProgressCard topicId={topic.id} />
       <Card style={styles.progressCard}>
         <Text style={styles.cardKicker}>TOPIC PROGRESS</Text>
         <View style={styles.statRow}>

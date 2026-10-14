@@ -1,6 +1,6 @@
 // Course practice modes, from the original app (in this app's look):
 //   practice   the whole course, mixed question types (20)
-//   lesson     a lesson's own questions (15)
+//   lesson     a lesson's own questions (all of them)
 //   set        one of the course's quizzes (30), or a whole paper as an exam
 //   apex       the Apex Challenge (30 questions, 10 seconds each)
 //   review     spaced review: due questions or last time's mistakes (20)
@@ -87,7 +87,7 @@ export function modeSettings(mode: PracticeMode): ModeSettings {
     case 'set': return mode.exam
       ? { count: Infinity, feedback: 'submit', variants: false, fixed: false, xp: 'practice', key: `paper-${mode.setId}` }
       : { count: 30, feedback: 'instant', variants: true, fixed: false, xp: 'practice', key: mode.setId };
-    case 'lesson': return { count: 15, feedback: 'instant', variants: true, fixed: false, xp: 'practice', key: mode.lessonId };
+    case 'lesson': return { count: Infinity, feedback: 'instant', variants: true, fixed: false, xp: 'practice', key: mode.lessonId };
     default: return { count: 20, feedback: 'instant', variants: true, fixed: false, xp: 'practice', key: 'all' };
   }
 }

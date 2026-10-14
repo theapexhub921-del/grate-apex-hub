@@ -9,6 +9,8 @@ import { SectionHeader } from '@/components/ui/screen';
 import { type Tile, TileGrid } from '@/components/ui/tile-grid';
 import { SegmentedControl } from '@/components/ui/segmented-control';
 import { Sheet } from '@/components/ui/sheet';
+import { SavedQuizList } from '@/components/learning/quiz-in-progress-card';
+import { findPractice, resumeHref, resumeLabel, useQuizDrafts } from '@/hooks/use-quiz-drafts';
 import { Text } from '@/components/ui/text';
 import { Type, type ThemeColors } from '@/constants/theme';
 import type { LegacyCourse, LegacyLessonMeta } from '@/data/legacy-study';
@@ -26,6 +28,17 @@ type CourseSet = { id: string; name: string; count: number };
 export function CoursePracticeModes({ course, lessons, sets }: { course: LegacyCourse; lessons: readonly LegacyLessonMeta[]; sets: readonly CourseSet[] }) {
   const styles = useThemedStyles(createStyles);
   const [sheet, setSheet] = useState<'predicted' | 'past' | 'custom' | null>(null);
+  const drafts = useQuizDrafts();
+  // Opens a paper or mock exam: where you left off if it is unfinished, otherwise a fresh start.
+  const open = (practiceKey: string, fresh: () => ReturnType<typeof routes.legacyPractice>) => {
+    setSheet(null);
+    const saved = findPractice(drafts, course.id, practiceKey);
+    router.push(saved ? resumeHref(saved) : fresh());
+  };
+  const detailFor = (practiceKey: string, text: string) => {
+    const saved = findPractice(drafts, course.id, practiceKey);
+    return saved ? `Resume · ${resumeLabel(saved)}` : text;
+  };
   const [prepost, setPrepost] = useState<PrePost>({});
   useFocusEffect(useCallback(() => {
     let live = true;
@@ -42,7 +55,7 @@ export function CoursePracticeModes({ course, lessons, sets }: { course: LegacyC
   const tiles: Tile[] = [
     { id: 'predicted', icon: 'achievement', title: 'Predicted Tests', detail: predicted.length ? `${predicted.length} predicted papers, plus ${MOCK_TESTS} mock exams of ${MOCK_SIZE} questions. Answers are shown at the end, like the real paper.` : `Sit one of ${MOCK_TESTS} full mock exams of ${MOCK_SIZE} questions. Answers are shown at the end, like the real paper.`, onPress: () => setSheet('predicted') },
     { id: 'custom', icon: 'grid', title: 'Custom Quiz Builder', detail: 'Pick your lessons, number of questions, timing and when you see the answers.', onPress: () => setSheet('custom') },
-    { id: 'drill', icon: 'timer', title: 'Timed Drill', detail: `Rapid fire with a countdown on every question (${DRILL.questions} questions, ${DRILL.seconds} seconds each). Beat the clock.`, onPress: () => router.push(routes.legacyPractice({ course: course.id, drill: true })) },
+    { id: 'drill', icon: 'timer', title: 'Timed Drill', detail: detailFor('drill', `Rapid fire with a countdown on every question (${DRILL.questions} questions, ${DRILL.seconds} seconds each). Beat the clock.`), onPress: () => open('drill', () => routes.legacyPractice({ course: course.id, drill: true })) },
     { id: 'past', icon: 'book', title: 'Past questions', detail: `${past.length} paper${past.length === 1 ? '' : 's'}, ${pastQuestions.toLocaleString()} questions from real past papers.`, onPress: () => setSheet('past'), hidden: past.length === 0 },
     {
       id: 'prepost', icon: 'chart', title: 'Pre-test and post-test',
@@ -61,10 +74,10 @@ export function CoursePracticeModes({ course, lessons, sets }: { course: LegacyC
       <Sheet visible={sheet === 'predicted'} onClose={() => setSheet(null)} title="Predicted Tests" subtitle="Answers are shown at the end, like the real paper.">
         <View style={styles.list}>
           {predicted.map((set) => (
-            <ListRow key={set.id} title={set.name} detail={`${set.count} questions · the original predicted paper`} onPress={() => { setSheet(null); router.push(routes.legacyPractice({ course: course.id, set: set.id, exam: true })); }} />
+            <ListRow key={set.id} title={set.name} detail={detailFor(`paper-${set.id}`, `${set.count} questions · the original predicted paper`)} onPress={() => open(`paper-${set.id}`, () => routes.legacyPractice({ course: course.id, set: set.id, exam: true }))} />
           ))}
           {Array.from({ length: MOCK_TESTS }, (_, index) => (
-            <ListRow key={index} title={`Mock exam ${index + 1}`} detail={`${MOCK_SIZE} questions from across the course · the same paper each time`} onPress={() => { setSheet(null); router.push(routes.legacyPractice({ course: course.id, mock: index + 1 })); }} />
+            <ListRow key={index} title={`Mock exam ${index + 1}`} detail={detailFor(`mock${index + 1}`, `${MOCK_SIZE} questions from across the course · the same paper each time`)} onPress={() => open(`mock${index + 1}`, () => routes.legacyPractice({ course: course.id, mock: index + 1 }))} />
           ))}
         </View>
       </Sheet>
@@ -72,7 +85,7 @@ export function CoursePracticeModes({ course, lessons, sets }: { course: LegacyC
       <Sheet visible={sheet === 'past'} onClose={() => setSheet(null)} title="Past questions" subtitle="Real past papers, answers at the end.">
         <View style={styles.list}>
           {past.map((set) => (
-            <ListRow key={set.id} title={set.name} detail={`${set.count} questions`} onPress={() => { setSheet(null); router.push(routes.legacyPractice({ course: course.id, set: set.id, exam: true })); }} />
+            <ListRow key={set.id} title={set.name} detail={detailFor(`paper-${set.id}`, `${set.count} questions`)} onPress={() => open(`paper-${set.id}`, () => routes.legacyPractice({ course: course.id, set: set.id, exam: true }))} />
           ))}
         </View>
       </Sheet>
@@ -120,6 +133,7 @@ function CustomBuilder({ visible, onClose, course, lessons, sets }: { visible: b
       subtitle="Choose lessons or question sets (none = the whole course)."
       footer={<View style={styles.footer}><Button label="Clear" variant="ghost" onPress={() => { setPicked([]); setPickedSets([]); }} /><Button label="Start the quiz" trailing="→" onPress={start} /></View>}
     >
+      <SavedQuizList match={(draft) => draft.key === `hb:${course.id}:custom`} />
       <View style={styles.builder}>
         <Text style={styles.label}>Number of questions</Text>
         <SegmentedControl label="Number of questions" options={CUSTOM_COUNTS.map((value) => ({ value: String(value), label: String(value) }))} value={count} onChange={setCount} />

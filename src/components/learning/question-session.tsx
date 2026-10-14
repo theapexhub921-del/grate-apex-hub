@@ -3,6 +3,7 @@ import { ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native'
 import { Text } from '@/components/ui/text';
 
 import { QuestionCard } from '@/components/question-card';
+import { QuestionNote } from '@/components/learning/question-note';
 import { toggleStar, useStarredIds } from '@/data/starred-questions';
 import { Button } from '@/components/ui/button';
 import { Card, Interactive } from '@/components/ui/interactive';
@@ -21,6 +22,17 @@ import { useThemedStyles } from '@/hooks/use-theme';
 
 export type SessionItem = { question: Question; reason?: SelectionReason };
 export type FeedbackMode = 'instant' | 'submit';
+
+// The state of a session, saved so an unfinished quiz can be resumed (see src/data/quiz-drafts.ts).
+export type SessionProgress = {
+  index: number;
+  answers: Record<string, Answer>;
+  checked: string[];
+  skipped: string[];
+  recorded: string[];
+  timedOut: string[];
+  elapsed: number;
+};
 
 export type SessionResult = {
   answers: Record<string, Answer>;
@@ -54,6 +66,9 @@ export function QuestionSession({
   showReasons = false,
   reviewNote = 'This concept comes back for review tomorrow.',
   submitLabel = 'Finish',
+  initial,
+  onProgress,
+  onSaveExit,
 }: {
   items: SessionItem[];
   mode: FeedbackMode;
@@ -67,6 +82,12 @@ export function QuestionSession({
   showReasons?: boolean;
   reviewNote?: string | null;
   submitLabel?: string;
+  /** Where to carry on from, when resuming a saved quiz. */
+  initial?: SessionProgress;
+  /** Called after every change, so the quiz can be saved as the learner goes. */
+  onProgress?: (progress: SessionProgress) => void;
+  /** Shows a "Save & exit" button: saves the quiz now, then leaves. */
+  onSaveExit?: (progress: SessionProgress) => Promise<void> | void;
 }) {
   const styles = useThemedStyles(createStyles);
   const { width } = useWindowDimensions();
@@ -74,17 +95,18 @@ export function QuestionSession({
   const scrollRef = useRef<ScrollView>(null);
   // Starred questions are shared with the Starred page.
   const starredIds = useStarredIds();
-  const [index, setIndex] = useState(0);
-  const [answers, setAnswers] = useState<Record<string, Answer>>({});
-  const [checked, setChecked] = useState<Set<string>>(() => new Set());
-  const [skipped, setSkipped] = useState<Set<string>>(() => new Set());
-  const [recorded, setRecorded] = useState<Set<string>>(() => new Set());
-  const [timedOut, setTimedOut] = useState<Set<string>>(() => new Set());
+  const [index, setIndex] = useState(() => Math.max(0, Math.min(items.length, initial?.index ?? 0)));
+  const [answers, setAnswers] = useState<Record<string, Answer>>(() => initial?.answers ?? {});
+  const [checked, setChecked] = useState<Set<string>>(() => new Set(initial?.checked ?? []));
+  const [skipped, setSkipped] = useState<Set<string>>(() => new Set(initial?.skipped ?? []));
+  const [recorded, setRecorded] = useState<Set<string>>(() => new Set(initial?.recorded ?? []));
+  const [timedOut, setTimedOut] = useState<Set<string>>(() => new Set(initial?.timedOut ?? []));
   const [confirming, setConfirming] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [leaving, setLeaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [startedAt] = useState(() => Date.now());
-  const [elapsed, setElapsed] = useState(0);
+  const [startedAt] = useState(() => Date.now() - (initial?.elapsed ?? 0) * 1000);
+  const [elapsed, setElapsed] = useState(initial?.elapsed ?? 0);
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const advanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const remainingByQuestion = useRef(new Map<string, number>());
@@ -133,6 +155,28 @@ export function QuestionSession({
     },
     []
   );
+
+  // Report the state for saving. Not on the first render, so opening a quiz never saves an empty draft.
+  const progressRef = useRef(onProgress);
+  useEffect(() => {
+    progressRef.current = onProgress;
+  });
+  const firstReport = useRef(true);
+  useEffect(() => {
+    if (firstReport.current) {
+      firstReport.current = false;
+      return;
+    }
+    progressRef.current?.({
+      index,
+      answers,
+      checked: [...checked],
+      skipped: [...skipped],
+      recorded: [...recorded],
+      timedOut: [...timedOut],
+      elapsed: secondsSince(startedAt),
+    });
+  }, [index, answers, checked, skipped, recorded, timedOut, startedAt]);
 
   const answeredCount = items.filter((item) => isAnswerComplete(item.question, answers[item.question.id])).length;
   const unanswered = total - answeredCount;
@@ -222,6 +266,27 @@ export function QuestionSession({
     }
   }
 
+  async function saveAndExit() {
+    if (!onSaveExit || leaving || submitting) return;
+    clearTimer();
+    setLeaving(true);
+    try {
+      await onSaveExit({
+        index,
+        answers,
+        checked: [...checked],
+        skipped: [...skipped],
+        recorded: [...recorded],
+        timedOut: [...timedOut],
+        elapsed: secondsSince(startedAt),
+      });
+    } catch (problem) {
+      console.warn('Could not save and exit:', problem);
+      setError('Your quiz could not be saved. Check your connection and try again.');
+      setLeaving(false);
+    }
+  }
+
   function resumeAnswering() {
     const firstOpen = items.findIndex((item) => !isAnswerComplete(item.question, answers[item.question.id]));
     setConfirming(false);
@@ -232,6 +297,8 @@ export function QuestionSession({
     {
       Enter: () => {
         if (confirming || submitting) return;
+        // Enter inside the note box is a new line, not "next".
+        if (typeof document !== 'undefined' && document.activeElement?.tagName === 'TEXTAREA') return;
         if (!question) return requestFinish();
         if (mode === 'instant') {
           if (!isChecked && complete) void check();
@@ -293,7 +360,8 @@ export function QuestionSession({
         />
       ) : null}
       {isWeb && desktop ? <Text style={styles.keys}>Keys: 1–4 / A–D choose · Enter check/next · ← → move</Text> : null}
-      <Button label={submitLabel} variant="secondary" onPress={requestFinish} disabled={submitting} loading={submitting} fullWidth />
+      <Button label={submitLabel} variant="secondary" onPress={requestFinish} disabled={submitting || leaving} loading={submitting} fullWidth />
+      {onSaveExit ? <Button label="Save & exit" variant="ghost" onPress={() => void saveAndExit()} disabled={submitting} loading={leaving} fullWidth /> : null}
     </Card>
   );
 
@@ -342,6 +410,7 @@ export function QuestionSession({
             reviewNote={reviewNote}
             showMeta
           />
+          <QuestionNote key={`note:${question.id}`} questionId={question.id} />
           <View style={styles.actions}>
             <Button label="Back" variant="ghost" onPress={() => go(index - 1)} disabled={index === 0} />
             <Button label="Skip" variant="secondary" onPress={skip} disabled={isRecorded || timedOut.has(question.id)} />
@@ -363,7 +432,10 @@ export function QuestionSession({
             )}
           </View>
           {!desktop ? (
-            <Button label={submitLabel} variant="ghost" onPress={requestFinish} disabled={submitting} style={styles.finishLink} />
+            <Button label={submitLabel} variant="ghost" onPress={requestFinish} disabled={submitting || leaving} style={styles.finishLink} />
+          ) : null}
+          {!desktop && onSaveExit ? (
+            <Button label="Save & exit" variant="ghost" onPress={() => void saveAndExit()} disabled={submitting} loading={leaving} style={styles.finishLink} />
           ) : null}
         </>
       ) : (
