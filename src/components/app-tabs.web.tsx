@@ -65,7 +65,7 @@ export default function AppTabs() {
 
       {useRail && !originals ? <DesktopSidebar docked={docked} /> : null}
 
-      <View style={[styles.content, originals && styles.row, { paddingLeft: docked ? sidebarWidth : useRail && !originals ? COLLAPSED_WIDTH : 0 }]}>
+      <View style={[styles.content, originals && styles.row, { paddingLeft: docked ? COLLAPSED_WIDTH : 0 }]}>
         {/* The original app's sidebar takes its own space beside the page. */}
         {useRail && originals ? <LegacySidebar onNavigate={(route) => router.navigate(NAV_PATHS[route] as Href)} /> : null}
         {useRail && originals && !originalAutoHide ? <SidebarResizeHandle fallback={250} /> : null}

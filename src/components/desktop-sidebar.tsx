@@ -33,7 +33,7 @@ import { useTheme, useThemedStyles } from '@/hooks/use-theme';
  */
 
 // How close to the left edge the pointer must get before the rail appears.
-const REVEAL_ZONE_PX = 28;
+const REVEAL_ZONE_PX = 36;
 // Grace period before hiding again, so it cannot flicker.
 const HIDE_DELAY_MS = 600;
 const FLOAT_INSET = 10;
@@ -61,10 +61,11 @@ export function DesktopSidebar({ docked }: { docked: boolean }) {
   const [revealed, setRevealed] = useState(false);
   const [hovered, setHovered] = useState<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Auto-hide (Instagram-style): a slim icon rail that widens with labels while
-  // the pointer is over it, and narrows again when it leaves.
-  const collapsed = !docked && !revealed;
-  const shown = true;
+
+  // In "Always show" (docked), the slim rail is always visible and widens on hover.
+  // In "Auto-hide" (!docked), the rail stays completely hidden until the pointer approaches the left edge.
+  const shown = docked || revealed;
+  const collapsed = docked && !revealed;
 
   const clearTimer = () => {
     if (timer.current) clearTimeout(timer.current);
@@ -81,13 +82,18 @@ export function DesktopSidebar({ docked }: { docked: boolean }) {
     timer.current = setTimeout(() => setRevealed(false), HIDE_DELAY_MS);
   }, []);
 
-  // Pointer near the left edge reveals; leaving the rail hides it again.
+  // Pointer approaching the left edge reveals the sidebar in auto-hide mode;
+  // leaving the rail hides it again.
   useEffect(() => {
     if (docked || Platform.OS !== 'web' || typeof document === 'undefined') return;
     const onMove = (event: MouseEvent) => {
-      if (event.clientX <= REVEAL_ZONE_PX) reveal();
-      else if (revealed && event.clientX <= railWidth + FLOAT_INSET * 2) clearTimer();
-      else if (revealed && !timer.current) scheduleHide();
+      if (event.clientX <= REVEAL_ZONE_PX) {
+        reveal();
+      } else if (revealed && event.clientX <= railWidth + FLOAT_INSET * 2) {
+        clearTimer();
+      } else if (revealed && !timer.current) {
+        scheduleHide();
+      }
     };
     document.addEventListener('mousemove', onMove);
     return () => {
@@ -99,26 +105,49 @@ export function DesktopSidebar({ docked }: { docked: boolean }) {
   // Navigating from the floating rail tucks it away again.
   const go = (path: string) => {
     router.navigate(path as never);
-    if (!docked) scheduleHide();
+    if (!docked) {
+      clearTimer();
+      setRevealed(false);
+    }
   };
 
   return (
     <>
-      {docked ? <SidebarResizeHandle /> : null}
+      {!docked && !shown ? (
+        <View
+          style={styles.revealTrigger}
+          // @ts-expect-error web pointer enter
+          onMouseEnter={reveal}
+          aria-hidden="true"
+        />
+      ) : null}
 
       <View
         style={[
           styles.rail,
           { width: collapsed ? COLLAPSED_WIDTH : railWidth },
-          styles.railDocked,
-          !docked && !collapsed && elevation(colors, 3),
+          docked ? styles.railDocked : styles.railFloating,
+          docked && (collapsed ? styles.railDockedCollapsed : styles.railDockedExpanded),
+          !docked && !shown && styles.railHidden,
+          !docked && shown && elevation(colors, 3),
           collapsed && styles.railCollapsed,
           { pointerEvents: shown ? 'auto' : 'none' },
         ]}
         // Keyboard users: tabbing into the rail reveals it.
         onFocus={!docked ? reveal : undefined}
         onBlur={!docked ? scheduleHide : undefined}
-        {...(!docked ? ({ onMouseEnter: reveal, onMouseLeave: () => { clearTimer(); timer.current = setTimeout(() => setRevealed(false), 180); } } as object) : {})}
+        {...(!docked
+          ? ({
+              onMouseEnter: reveal,
+              onMouseLeave: scheduleHide,
+            } as object)
+          : ({
+              onMouseEnter: reveal,
+              onMouseLeave: () => {
+                clearTimer();
+                timer.current = setTimeout(() => setRevealed(false), 200);
+              },
+            } as object))}
         role="navigation"
         aria-hidden={!shown}
       >
@@ -169,7 +198,7 @@ export function DesktopSidebar({ docked }: { docked: boolean }) {
           </View>
         </View>
 
-        <View style={styles.footer}>
+        <View style={[styles.footer, collapsed && styles.footerCollapsed]}>
           <Pressable
             onPress={() => go('/profile')}
             accessibilityRole="link"
@@ -198,6 +227,14 @@ export function DesktopSidebar({ docked }: { docked: boolean }) {
 
 function createStyles(colors: ThemeColors) {
   return StyleSheet.create({
+    revealTrigger: {
+      position: 'absolute',
+      left: 0,
+      top: 0,
+      bottom: 0,
+      width: REVEAL_ZONE_PX,
+      zIndex: 29,
+    },
     handleZone: {
       position: 'absolute',
       left: 0,
@@ -227,19 +264,33 @@ function createStyles(colors: ThemeColors) {
       paddingTop: 20,
       paddingBottom: 14,
       paddingHorizontal: 12,
-      backgroundColor: colors.navSurface,
       ...webStyle({
-        backdropFilter: 'blur(20px) saturate(150%)',
-        WebkitBackdropFilter: 'blur(20px) saturate(150%)',
-        ...cssTransition('transform, opacity', MOTION.standard),
+        ...cssTransition('transform, opacity, width, background-color, box-shadow', MOTION.standard),
       }),
     },
     railDocked: {
       top: 0,
       bottom: 0,
       left: 0,
-      borderRightWidth: 1,
-      borderRightColor: colors.navBorder,
+      borderRightWidth: 0,
+      borderRightColor: 'transparent',
+    },
+    railDockedCollapsed: {
+      backgroundColor: 'transparent',
+      ...webStyle({
+        backdropFilter: 'none',
+        WebkitBackdropFilter: 'none',
+      }),
+    },
+    railDockedExpanded: {
+      backgroundColor: colors.navSurface,
+      borderTopRightRadius: 20,
+      borderBottomRightRadius: 20,
+      ...elevation(colors, 3),
+      ...webStyle({
+        backdropFilter: 'blur(20px) saturate(150%)',
+        WebkitBackdropFilter: 'blur(20px) saturate(150%)',
+      }),
     },
     railFloating: {
       top: FLOAT_INSET,
@@ -249,6 +300,10 @@ function createStyles(colors: ThemeColors) {
       borderWidth: 1,
       borderColor: colors.navBorder,
       backgroundColor: colors.surfaceElevated,
+      ...webStyle({
+        backdropFilter: 'blur(20px) saturate(150%)',
+        WebkitBackdropFilter: 'blur(20px) saturate(150%)',
+      }),
     },
     railHidden: {
       opacity: 0,
@@ -311,6 +366,11 @@ function createStyles(colors: ThemeColors) {
       paddingTop: 12,
       borderTopWidth: 1,
       borderTopColor: colors.divider,
+    },
+    footerCollapsed: {
+      borderTopWidth: 0,
+      borderTopColor: 'transparent',
+      justifyContent: 'center',
     },
     identity: {
       flex: 1,
