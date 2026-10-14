@@ -1,3 +1,4 @@
+import { BackLink } from '@/components/learning/nav-bits';
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { Linking, StyleSheet, useWindowDimensions, View } from 'react-native';
@@ -132,6 +133,7 @@ export default function ExploreScreen() {
 
   return (
     <Screen width="wide">
+      <BackLink fallback={'/' as never} />
       <PageHeader eyebrow="The GrAte Apex Hub guide" title="Explore" subtitle="A friendly guide to studying, connecting and growing with GrAte Apex Hub." />
 
       {/* Discovery first (owner request): concepts, connections and research; the

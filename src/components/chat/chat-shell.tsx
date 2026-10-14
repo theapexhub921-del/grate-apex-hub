@@ -4,6 +4,7 @@ import { Platform, StyleSheet, useWindowDimensions, View } from 'react-native';
 
 import { ChatList } from '@/components/chat/chat-list';
 import { ChatThread } from '@/components/chat/chat-thread';
+import { useBackNavigation } from '@/hooks/use-back-navigation';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
@@ -36,7 +37,10 @@ export function ChatShell({ friendId, groupId, name }: { friendId?: string | nul
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const visible = useVisibleViewport();
+  const { goBack } = useBackNavigation();
   const wide = width >= 900;
+  // An open chat needs a way back to the chats list (the chevron beside the profile picture).
+  const onBack = () => goBack('/social/messages' as Href);
   const open = (id: string, label: string) => {
     const href = `/social/message?friend=${encodeURIComponent(id)}&name=${encodeURIComponent(label)}` as Href;
     if (wide && (friendId || groupId)) router.replace(href);
@@ -47,7 +51,7 @@ export function ChatShell({ friendId, groupId, name }: { friendId?: string | nul
     if (wide && (friendId || groupId)) router.replace(href);
     else router.push(href);
   };
-  const thread = groupId ? <ChatThread key={`g:${groupId}`} groupId={groupId} name={name} /> : friendId ? <ChatThread key={`f:${friendId}`} friendId={friendId} name={name} /> : null;
+  const thread = groupId ? <ChatThread key={`g:${groupId}`} groupId={groupId} name={name} onBack={onBack} /> : friendId ? <ChatThread key={`f:${friendId}`} friendId={friendId} name={name} onBack={onBack} /> : null;
 
   if (!wide) {
     // The chats list leaves room for the bottom bar; an open chat has the whole screen.

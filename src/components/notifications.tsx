@@ -62,7 +62,7 @@ export function useNotifications() {
 export function preferenceFor(item: AppNotification) {
   if (item.id.startsWith('acct:')) return ((item as { kind?: string }).kind === 'follow' ? 'friendRequests' : 'socialEngagement') as 'friendRequests' | 'socialEngagement';
   if (item.id.startsWith('msg:')) return 'messages' as const;
-  if (item.id.startsWith('league:')) return 'socialEngagement' as const;
+  if (item.id.startsWith('league:')) return 'league' as const;
   if (item.id.startsWith('inapp:')) return 'socialEngagement' as const;
   if (item.id.startsWith('social:')) return 'friendRequests' as const;
   if (item.group === 'updates') return 'announcements' as const;
@@ -83,8 +83,14 @@ export function DeviceNotificationBridge() {
   const [toast, setToast] = useState<AppNotification | null>(null);
 
   // With alerts on, this browser also registers for push, so messages arrive even when the app is closed.
+  // It is repeated whenever the app comes back to the screen: phones rotate push
+  // addresses and clear them, and a stale one means silent notifications.
   useEffect(() => {
-    if (enabled) void registerWebPush();
+    if (!enabled) return;
+    void registerWebPush();
+    const onVisible = () => { if (document.visibilityState === 'visible') void registerWebPush(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
   }, [enabled]);
 
   useEffect(() => {

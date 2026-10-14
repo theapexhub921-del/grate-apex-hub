@@ -1,3 +1,4 @@
+import { findLessonPractice, findPractice, resumeHref, resumeLabel, useQuizDrafts } from '@/hooks/use-quiz-drafts';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -27,6 +28,7 @@ import { param, routes } from '@/lib/routes';
 // reading time and practice questions, plus the course's question sets and an
 // Apex Challenge.
 export default function LegacyCourseScreen() {
+  const drafts = useQuizDrafts();
   const styles = useThemedStyles(createStyles);
   const colors = useTheme();
   const params = useLocalSearchParams<{ course?: string | string[] }>();
@@ -147,7 +149,8 @@ export default function LegacyCourseScreen() {
               </View>
               <View style={styles.pathCard}>
                 {started && !isDone ? <Text style={styles.kicker}>IN PROGRESS</Text> : null}
-                <PressableCard onPress={() => router.push(routes.legacyLesson(lesson.id))} accessibilityLabel={`${lesson.title}. ${isDone ? 'Completed' : started ? 'In progress' : 'Not started'}`} style={styles.lessonCard}>
+                <Card style={styles.lessonCard}>
+                  <Interactive onPress={() => router.push(routes.legacyLesson(lesson.id))} accessibilityRole="button" accessibilityLabel={`${lesson.title}. ${isDone ? 'Completed' : started ? 'In progress' : 'Not started'}`} style={styles.lessonBody}>
                   <View style={styles.lessonTop}>
                     <View style={styles.lessonIcon}><Text style={styles.lessonEmoji}>{lesson.icon || course.icon}</Text></View>
                     <View style={styles.flex}>
@@ -160,24 +163,25 @@ export default function LegacyCourseScreen() {
                     <ProgressBar value={lesson.sections.length ? read / lesson.sections.length : 0} height={5} style={styles.flex} label={`${lesson.title} sections read`} />
                     <Text style={styles.meta}>{read}/{lesson.sections.length} sections</Text>
                   </View>
-                  <View style={styles.lessonFoot}>
-                    <Text style={styles.metaSoft}>{lesson.sections.length} sections · ~{lesson.minutes} min</Text>
-                    <View style={styles.chips}>
-                      {lesson.subject ? (
-                        <Interactive onPress={() => router.push(routes.lesson(lesson.id, { layer: 'learn' }))} accessibilityRole="button" accessibilityLabel={`Learn by answering: ${lesson.title}`} style={styles.answerChip}>
-                          <Icon name="challenge" size={14} color={colors.primaryText} />
-                          <Text style={styles.answerText}>Learn by answering</Text>
-                        </Interactive>
-                      ) : null}
-                      {questions > 0 ? (
-                        <Interactive onPress={() => router.push(routes.legacyPractice({ course: course.id, lesson: lesson.id }))} accessibilityRole="button" style={styles.practice}>
-                          <Icon name="edit" size={14} color={colors.accentText} />
-                          <Text style={styles.practiceText}>Practice · {questions} questions</Text>
-                        </Interactive>
-                      ) : null}
+                  </Interactive>
+                    <View style={styles.lessonFoot}>
+                      <Text style={styles.metaSoft}>{lesson.sections.length} sections · ~{lesson.minutes} min</Text>
+                      <View style={styles.chips}>
+                        {lesson.subject ? (
+                          <Interactive onPress={() => router.push(routes.lesson(lesson.id, { layer: 'learn' }))} accessibilityRole="button" accessibilityLabel={`Learn by answering: ${lesson.title}`} style={styles.answerChip}>
+                            <Icon name="challenge" size={14} color={colors.primaryText} />
+                            <Text style={styles.answerText}>Learn by answering</Text>
+                          </Interactive>
+                        ) : null}
+                        {questions > 0 ? (
+                          <Interactive onPress={() => { const saved = findLessonPractice(drafts, course.id, lesson.id); router.push(saved ? resumeHref(saved) : routes.legacyPractice({ course: course.id, lesson: lesson.id })); }} accessibilityRole="button" style={styles.practice}>
+                            <Icon name="edit" size={14} color={colors.accentText} />
+                            <Text style={styles.practiceText}>{findLessonPractice(drafts, course.id, lesson.id) ? `Resume practice · ${resumeLabel(findLessonPractice(drafts, course.id, lesson.id)!)}` : `Practice · ${questions} questions`}</Text>
+                          </Interactive>
+                        ) : null}
+                      </View>
                     </View>
-                  </View>
-                </PressableCard>
+                </Card>
               </View>
             </View>
             </View>
@@ -190,9 +194,9 @@ export default function LegacyCourseScreen() {
           <SectionHeader title="Question sets" subtitle={course.subject ? 'Practise each topic’s questions in mixed types.' : 'The course’s quizzes and past questions, as in the original app.'} style={styles.section} />
           <View style={styles.sets}>
             {sets.map((set) => (
-              <Interactive key={set.id} onPress={() => router.push(routes.legacyPractice({ course: course.id, set: set.id }))} accessibilityRole="button" style={({ hovered }) => [styles.set, hovered && styles.setHover]}>
+              <Interactive key={set.id} onPress={() => { const saved = findPractice(drafts, course.id, set.id); router.push(saved ? resumeHref(saved) : routes.legacyPractice({ course: course.id, set: set.id })); }} accessibilityRole="button" style={({ hovered }) => [styles.set, hovered && styles.setHover]}>
                 <Text style={styles.setName}>{set.name}</Text>
-                <Text style={styles.metaSoft}>{set.count} questions</Text>
+                <Text style={styles.metaSoft}>{findPractice(drafts, course.id, set.id) ? `Resume · ${resumeLabel(findPractice(drafts, course.id, set.id)!)}` : `${set.count} questions`}</Text>
               </Interactive>
             ))}
           </View>
@@ -238,6 +242,7 @@ function createStyles(colors: ThemeColors) {
     pathCard: { flex: 1, minWidth: 0, paddingBottom: 14, gap: 6 },
     kicker: { ...Type.overline, color: colors.primaryText, marginTop: 4 },
     lessonCard: { gap: 10 },
+    lessonBody: { gap: 10 },
     lessonTop: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
     lessonIcon: { width: 48, height: 48, borderRadius: 14, backgroundColor: colors.surfaceMuted, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
     lessonEmoji: { fontSize: 24 },

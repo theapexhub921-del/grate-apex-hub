@@ -1,3 +1,4 @@
+import { BackLink } from '@/components/learning/nav-bits';
 import { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Text } from '@/components/ui/text';
@@ -31,6 +32,7 @@ export default function AchievementsScreen() {
 
   return (
     <Screen width="content" contentStyle={styles.page}>
+      <BackLink fallback={'/profile' as never} />
       <PageHeader
         eyebrow="You"
         title="Achievements"

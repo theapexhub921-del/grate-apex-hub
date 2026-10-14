@@ -13,13 +13,24 @@ import { useTheme, useThemedStyles } from '@/hooks/use-theme';
  * A post's photos and videos (up to 3), like Instagram: swipe between them on
  * a phone, use the arrows on a computer; dots show which one you're on.
  */
-export function MediaCarousel({ items, height, fit = 'cover', rounded = true, onPress }: { items: readonly PostMedia[]; height: number; fit?: 'cover' | 'contain'; rounded?: boolean; onPress?: () => void }) {
+export function MediaCarousel({ items, height, fit = 'cover', rounded = true, onPress, adaptive = false, minHeight = 240 }: {
+  items: readonly PostMedia[]; height: number; fit?: 'cover' | 'contain'; rounded?: boolean; onPress?: () => void;
+  /** Use the first photo's own shape (never cropped), between minHeight and height. Used in the feed. */
+  adaptive?: boolean; minHeight?: number;
+}) {
   const styles = useThemedStyles(createStyles);
   const colors = useTheme();
   const scroller = useRef<ScrollView>(null);
   const [width, setWidth] = useState(0);
   const [index, setIndex] = useState(0);
+  const [ratio, setRatio] = useState<number | null>(null);
   if (!items.length) return null;
+
+  // Adaptive: the frame takes the first photo's proportions, so a tall photo stays tall
+  // and a wide one stays wide. Until it loads, the frame is square so it doesn't jump.
+  const frame = !adaptive || !width
+    ? height
+    : Math.round(Math.min(height, Math.max(minHeight, ratio ? width / ratio : width)));
 
   const go = (next: number) => {
     const target = Math.max(0, Math.min(items.length - 1, next));
@@ -33,17 +44,26 @@ export function MediaCarousel({ items, height, fit = 'cover', rounded = true, on
   };
   const slide = (item: PostMedia, at: number) =>
     item.type === 'video' ? (
-      <VideoPlayer url={item.url} height={height} label={`Video ${at + 1} of ${items.length}`} />
+      <VideoPlayer url={item.url} height={frame} label={`Video ${at + 1} of ${items.length}`} />
     ) : (
-      <Image source={{ uri: item.url }} contentFit={fit} style={[styles.image, { height }]} accessibilityLabel={`Photo ${at + 1} of ${items.length}`} />
+      <Image
+        source={{ uri: item.url }}
+        contentFit={fit}
+        style={[styles.image, { height: frame }]}
+        onLoad={(event) => {
+          const size = event.source;
+          if (at === 0 && adaptive && size?.width && size?.height) setRatio(size.width / size.height);
+        }}
+        accessibilityLabel={`Photo ${at + 1} of ${items.length}`}
+      />
     );
 
   return (
     <View style={styles.wrap} onLayout={(event) => setWidth(event.nativeEvent.layout.width)}>
-      <View style={[styles.frame, rounded && styles.rounded, { height }]}>
+      <View style={[styles.frame, rounded && styles.rounded, { height: frame }]}>
         <ScrollView ref={scroller} horizontal pagingEnabled showsHorizontalScrollIndicator={false} onScroll={onScroll} scrollEventThrottle={32} scrollEnabled={items.length > 1}>
           {items.map((item, at) => (
-            <View key={`${item.url}-${at}`} style={{ width: width || 1, height }}>
+            <View key={`${item.url}-${at}`} style={{ width: width || 1, height: frame }}>
               {onPress && item.type === 'image' ? <Interactive onPress={onPress} accessibilityRole="button" accessibilityLabel="Open post">{slide(item, at)}</Interactive> : slide(item, at)}
             </View>
           ))}

@@ -1,11 +1,13 @@
+import { findLessonPractice, resumeHref, resumeLabel, useQuizDrafts } from '@/hooks/use-quiz-drafts';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { type ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 
+import { QuizInProgressCard } from '@/components/learning/quiz-in-progress-card';
 import { LegacyBlocks, Rich, TermContext } from '@/components/learning/legacy-blocks';
 import { BackLink } from '@/components/learning/nav-bits';
 import { AidsPanel, FlashcardsPanel, GlossaryPanel, LessonToolTabs, StepsPanel, type ToolTab, type ToolTabInfo } from '@/components/learning/lesson-tools';
-import { AiFlashcardsPanel, AskAiPanel } from '@/components/learning/ai-study';
+import { AiFlashcardsPanel, AiQuestionsPanel, AskAiPanel } from '@/components/learning/ai-study';
 import { legacyToText } from '@/data/ai-study';
 import { cardsFor, glossaryOf } from '@/data/flashcards';
 import { Button } from '@/components/ui/button';
@@ -41,6 +43,7 @@ import { param, routes } from '@/lib/routes';
 // lesson's study aids (mnemonics, facts, steps) at the end. Finishing every
 // section completes the lesson here (XP once), then its practice questions.
 export default function LegacyLessonScreen() {
+  const drafts = useQuizDrafts();
   const styles = useThemedStyles(createStyles);
   const colors = useTheme();
   const params = useLocalSearchParams<{ lesson?: string | string[]; section?: string | string[]; tab?: string | string[] }>();
@@ -125,7 +128,11 @@ export default function LegacyLessonScreen() {
     scroll.current?.scrollTo({ y: 0, animated: true });
   }
 
+  const savedPractice = course ? findLessonPractice(drafts, course.id, meta.id) : undefined;
+
   const outline = (
+    <>
+    <QuizInProgressCard lessonId={meta.id} />
     <Card style={styles.outline}>
       <Text style={styles.outlineTitle}>Sections</Text>
       <ProgressBar value={total ? Math.min(readCount, total) / total : 0} height={5} label="Sections read" />
@@ -139,6 +146,7 @@ export default function LegacyLessonScreen() {
         );
       })}
     </Card>
+    </>
   );
 
   const reader = finished ? (
@@ -147,7 +155,7 @@ export default function LegacyLessonScreen() {
       <Text style={styles.finishedTitle}>Lesson completed</Text>
       <Text style={styles.finishedText}>{finished.xp > 0 ? `+${finished.xp} XP · ${meta.title}` : `${meta.title} — already completed earlier.`}</Text>
       <View style={styles.finishedActions}>
-        {questions > 0 && course ? <Button label={`Practice · ${questions} questions`} onPress={() => router.push(routes.legacyPractice({ course: course.id, lesson: meta.id }))} /> : null}
+        {questions > 0 && course ? <Button label={savedPractice ? `Resume practice · ${resumeLabel(savedPractice)}` : `Practice · ${questions} questions`} onPress={() => router.push(savedPractice ? resumeHref(savedPractice) : routes.legacyPractice({ course: course.id, lesson: meta.id }))} /> : null}
         {meta.subject ? <Button label="Learn by answering" variant="secondary" onPress={() => router.push(routes.lesson(meta.id, { layer: 'learn' }))} /> : null}
         <Button label="Back to the course" variant="secondary" onPress={() => router.push(course ? routes.legacyCourse(course.id) : routes.learn())} />
       </View>
@@ -178,6 +186,7 @@ export default function LegacyLessonScreen() {
     ...(extras?.steps?.items?.length ? [{ id: 'steps' as const, label: plainText(extras.steps.title) || 'Steps', icon: 'chart' as const }] : []),
     { id: 'ask' as const, label: 'Ask AI', icon: 'sparkle' as const },
     { id: 'aicards' as const, label: 'AI Flashcards', icon: 'reinforce' as const },
+    { id: 'questions' as const, label: 'AI Questions', icon: 'edit' as const },
     ...(questions > 0 && course ? [{ id: 'practice' as const, label: `Practice (${questions})`, icon: 'edit' as const }] : []),
   ];
   const panel =
@@ -185,6 +194,7 @@ export default function LegacyLessonScreen() {
     : tab === 'glossary' ? <GlossaryPanel glossary={glossary} />
     : tab === 'ask' && aiLesson ? <AskAiPanel lesson={aiLesson} />
     : tab === 'aicards' && aiLesson ? <AiFlashcardsPanel lesson={aiLesson} />
+    : tab === 'questions' && aiLesson ? <AiQuestionsPanel lesson={aiLesson} />
     : tab === 'mnemonics' && extras?.mnemonics ? <AidsPanel title="Mnemonics" intro="Memory hooks for this lesson." groups={extras.mnemonics} />
     : tab === 'facts' && extras?.facts ? <AidsPanel title="Key facts" intro="The points to remember from this lesson." groups={extras.facts} />
     : tab === 'steps' && extras?.steps ? <StepsPanel steps={extras.steps} />
@@ -217,7 +227,7 @@ export default function LegacyLessonScreen() {
       ) : null}
       <LessonToolTabs tabs={tabs} active={tab} onChange={(next) => {
         if (next === 'practice') {
-          if (course) router.push(routes.legacyPractice({ course: course.id, lesson: meta.id }));
+          if (course) router.push(savedPractice ? resumeHref(savedPractice) : routes.legacyPractice({ course: course.id, lesson: meta.id }));
           return;
         }
         setTab(next);

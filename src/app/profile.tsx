@@ -1,3 +1,4 @@
+import { BackLink } from '@/components/learning/nav-bits';
 import { type Href, router } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
@@ -288,6 +289,7 @@ export default function ProfileScreen() {
 
   return (
     <Screen width="content">
+      <BackLink fallback={'/' as never} />
       <PageHeader title="You" subtitle="Your identity, connections and achievements." right={<IconButton icon="settings" label="Settings" onPress={() => router.push('/settings' as Href)} />} />
       {identity}
       <View style={styles.gap} />

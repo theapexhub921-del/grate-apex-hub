@@ -1,0 +1,22 @@
+// GrAte Apex Hub — Firestore rule to ADD: Study chat history
+//
+// Where to paste (Firebase console → project grate-apex → Firestore Database → Rules):
+//   1. Scroll to the very bottom. The last two lines are each just  }
+//   2. Click at the start of the SECOND-TO-LAST line (the first of those two  }  lines).
+//   3. Paste everything below the dashed line, then press Publish.
+// ---------------------------------------------------------------------------
+
+    // Study chat history (new app): one document per saved chat, private to the
+    // owner. The id is made on the device; the title is at most 120 characters and
+    // a chat keeps at most 100 messages. Nobody else can read or change a chat.
+    match /users/{uid}/tutorChats/{chatId} {
+      allow read, delete: if request.auth != null && request.auth.uid == uid;
+      allow create, update: if request.auth != null && request.auth.uid == uid
+        && chatId.matches('^[a-z0-9_-]{1,80}$')
+        && request.resource.data.keys().hasOnly(['title', 'turns', 'createdAt', 'updatedAt'])
+        && request.resource.data.title is string && request.resource.data.title.size() <= 120
+        && request.resource.data.turns is list && request.resource.data.turns.size() <= 100
+        && request.resource.data.createdAt is string
+        && request.resource.data.updatedAt == request.time;
+    }
+

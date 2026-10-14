@@ -6,7 +6,7 @@ import { Text } from '@/components/ui/text';
 import { TopicGlyph } from '@/components/learning/glyphs';
 import { ClassAccessCard } from '@/components/learning/class-access-card';
 import { MemoryDistribution, MemoryStateBadge } from '@/components/learning/memory-ui';
-import { Breadcrumbs, StatTile } from '@/components/learning/nav-bits';
+import { Breadcrumbs, StatTile, BackLink } from '@/components/learning/nav-bits';
 import { NextActionHero } from '@/components/learning/next-action-card';
 import { Button } from '@/components/ui/button';
 import { Card, Interactive } from '@/components/ui/interactive';
@@ -25,6 +25,7 @@ import {
   topicProgress,
 } from '@/data/learning/progress-model';
 import { describeAgo, describeDue } from '@/data/learning/time';
+import { QuizInProgressCard } from '@/components/learning/quiz-in-progress-card';
 import { useLearning } from '@/data/learning/use-learning';
 import { getSubjectInfo } from '@/data/subjects';
 import { useThemedStyles } from '@/hooks/use-theme';
@@ -68,6 +69,7 @@ export function TopicScreen({ topicId }: { topicId: string | undefined }) {
 
   const side = (
     <View style={styles.side}>
+      <QuizInProgressCard topicId={topic.id} />
       <Card style={styles.progressCard}>
         <Text style={styles.cardKicker}>TOPIC PROGRESS</Text>
         <View style={styles.statRow}>
@@ -157,6 +159,7 @@ export function TopicScreen({ topicId }: { topicId: string | undefined }) {
 
   return (
     <Screen width="wide">
+      <BackLink fallback={'/learn' as never} />
       <Breadcrumbs
         items={[
           { label: 'Study', href: routes.learn() },

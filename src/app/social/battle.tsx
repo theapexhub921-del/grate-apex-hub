@@ -15,6 +15,7 @@ import { Text } from '@/components/ui/text';
 import { setPendingXpReward } from '@/components/xp-toast';
 import { Type, type ThemeColors } from '@/constants/theme';
 import { type Battle, BATTLE_SECONDS, BATTLE_WIN_XP, battleStatus, getBattle, submitBattleResult } from '@/data/battles';
+import { announceBattleResult } from '@/lib/web-push';
 import { getTopicQuestions } from '@/data/curriculum';
 import { bankQuestions, buildPractice, loadLegacyBank } from '@/data/legacy-study';
 import { awardXp } from '@/data/progress';
@@ -105,6 +106,7 @@ export default function BattleScreen() {
     const correct = questions!.filter((question) => isAnswerCorrect(question, result.answers[question.id])).length;
     const side = { score: correct, total: questions!.length, seconds: Math.round(result.timeSeconds) };
     await submitBattleResult(battle!, side);
+    void announceBattleResult(battle!.id, battle!.challengerId === uid ? battle!.opponentId : battle!.challengerId); // tell the other player (best effort)
     const updated = await getBattle(battle!.id);
     if (updated) {
       setBattle(updated);

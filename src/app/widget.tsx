@@ -1,3 +1,4 @@
+import { BackLink } from '@/components/learning/nav-bits';
 import { router } from 'expo-router';
 import { Platform, StyleSheet, View } from 'react-native';
 import { Text } from '@/components/ui/text';
@@ -27,6 +28,7 @@ export default function StudyWidgetScreen() {
 
   return (
     <Screen width="content" contentStyle={styles.page}>
+      <BackLink fallback={'/' as never} />
       <View style={styles.brandRow}>
         <LogoMark height={26} />
         <View style={styles.brandCopy}>

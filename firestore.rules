@@ -180,6 +180,29 @@ service cloud.firestore {
       allow read, write: if request.auth.uid == uid;
     }
 
+    // Quizzes started but not finished (resume): one document per quiz, private to the owner.
+    // The quiz's details are one JSON string in `data` (see src/data/quiz-drafts.ts).
+    match /progress/{uid}/quizDrafts/{draftId} {
+      allow read, delete: if request.auth != null && request.auth.uid == uid;
+      allow create, update: if request.auth != null && request.auth.uid == uid
+        && draftId.size() <= 600
+        && request.resource.data.keys().hasOnly(['lessonId', 'title', 'data', 'savedAt'])
+        && request.resource.data.title is string && request.resource.data.title.size() <= 200
+        && request.resource.data.data is string && request.resource.data.data.size() <= 300000
+        && request.resource.data.savedAt == request.time;
+    }
+
+    // Personal notes on questions: one document per question, private to the owner.
+    match /progress/{uid}/notes/{noteId} {
+      allow read, delete: if request.auth != null && request.auth.uid == uid;
+      allow create, update: if request.auth != null && request.auth.uid == uid
+        && noteId.size() <= 600
+        && request.resource.data.keys().hasOnly(['questionId', 'text', 'updatedAt'])
+        && request.resource.data.questionId is string && request.resource.data.questionId.size() <= 200
+        && request.resource.data.text is string && request.resource.data.text.size() >= 1 && request.resource.data.text.size() <= 1000
+        && request.resource.data.updatedAt == request.time;
+    }
+
     // Quiz attempts (new app): one document per attempt, private to the owner.
     // The id is the attempt's UUID, made once on the device, so sending an attempt
     // again can never add a second copy; attempts are never edited. They carry no
@@ -401,6 +424,31 @@ service cloud.firestore {
         && request.resource.data.items is list
         && request.resource.data.items.size() <= 200
         && request.resource.data.updatedAt == request.time;
+    }
+
+    // Study chat history (new app): one document per saved chat, private to the
+    // owner. The id is made on the device; the title is at most 120 characters and
+    // a chat keeps at most 100 messages. Nobody else can read or change a chat.
+    match /users/{uid}/tutorChats/{chatId} {
+      allow read, delete: if request.auth != null && request.auth.uid == uid;
+      allow create, update: if request.auth != null && request.auth.uid == uid
+        && chatId.matches('^[a-z0-9_-]{1,80}$')
+        && request.resource.data.keys().hasOnly(['title', 'turns', 'createdAt', 'updatedAt'])
+        && request.resource.data.title is string && request.resource.data.title.size() <= 120
+        && request.resource.data.turns is list && request.resource.data.turns.size() <= 100
+        && request.resource.data.createdAt is string
+        && request.resource.data.updatedAt == request.time;
+    }
+
+    // Starred questions (new app): one document per question a learner starred. Owner only.
+    match /progress/{uid}/starred/{sid} {
+      allow read, delete: if request.auth != null && request.auth.uid == uid;
+      allow create: if request.auth != null && request.auth.uid == uid
+        && sid.size() <= 300
+        && request.resource.data.keys().hasOnly(['questionId', 'starredAt'])
+        && request.resource.data.questionId is string && request.resource.data.questionId.size() <= 200
+        && request.resource.data.starredAt == request.time;
+      allow update: if false;
     }
 
     // Apex Coin gifts between friends (new app). Coins only — XP can never be

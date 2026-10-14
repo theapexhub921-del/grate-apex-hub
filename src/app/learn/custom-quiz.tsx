@@ -4,6 +4,7 @@ import { StyleSheet, View } from 'react-native';
 import { Text } from '@/components/ui/text';
 
 import { BackLink } from '@/components/learning/nav-bits';
+import { SavedQuizList } from '@/components/learning/quiz-in-progress-card';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
 import { Card, Interactive } from '@/components/ui/interactive';
@@ -82,6 +83,7 @@ export default function CustomQuizBuilderScreen() {
         title="Custom quiz"
         subtitle="Build a quiz from the lecture questions in the lessons you choose."
       />
+      <SavedQuizList match={(draft) => draft.key.startsWith('custom:')} />
 
       <View style={styles.sectionHeader}>
         <View style={styles.sectionCopy}>

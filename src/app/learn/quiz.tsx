@@ -1,10 +1,10 @@
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Text } from '@/components/ui/text';
 
-import { Breadcrumbs } from '@/components/learning/nav-bits';
-import { type FeedbackMode, QuestionSession, type SessionItem, type SessionResult } from '@/components/learning/question-session';
+import { Breadcrumbs, BackLink } from '@/components/learning/nav-bits';
+import { type FeedbackMode, QuestionSession, type SessionItem, type SessionProgress, type SessionResult } from '@/components/learning/question-session';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
 import { Card, Interactive } from '@/components/ui/interactive';
@@ -21,6 +21,7 @@ import { currentMemoryModel } from '@/data/learning/state';
 import { nowMs } from '@/data/learning/time';
 import { XP_RULES } from '@/data/learning/xp-rules';
 import { useProgress } from '@/data/progress';
+import { deleteQuizDraft, getQuizDraft, type QuizDraft, saveQuizDraft } from '@/data/quiz-drafts';
 import { ensureQuestionHistoryLoaded } from '@/data/question-history';
 import { type AttemptKind, type CustomQuizSettings, ensureQuizHistoryLoaded, getQuizHistory } from '@/data/quiz-history';
 import { useTheme, useThemedStyles } from '@/hooks/use-theme';
@@ -71,8 +72,16 @@ export default function QuizRoute() {
     return <Redirect href={routes.apex(param(params.course))} />;
   }
 
+  // The quiz link without the one-off parts, so a saved quiz can be reopened later.
+  const query = Object.entries(params)
+    .filter(([name]) => name !== 'continue' && name !== 'attempt')
+    .map(([name, value]) => `${encodeURIComponent(name)}=${encodeURIComponent(param(value) ?? '')}`)
+    .join('&');
+
   return (
     <QuizScreen
+      query={query}
+      continueSaved={param(params.continue) === '1'}
       key={`${lessonId ?? ''}:${topicId ?? ''}:${practice ?? ''}:${masteryCheck}:${custom}:${attemptToken}`}
       lessonId={lessonId}
       topicId={topicId}
@@ -179,7 +188,20 @@ function buildPlan(input: {
   return null;
 }
 
+// Which saved quiz this is: its kind and what it covers (the same quiz always gets the same key).
+function draftKey(plan: QuizPlan, practiceIds?: string[]): string {
+  if (plan.kind === 'practice') {
+    const ids = plan.customQuiz ? plan.customQuiz.lessonIds : (practiceIds ?? []);
+    let hash = 5381;
+    for (const char of ids.join(',')) hash = ((hash << 5) + hash + char.charCodeAt(0)) | 0;
+    return `${plan.customQuiz ? 'custom' : 'practice'}:${(hash >>> 0).toString(36)}`;
+  }
+  return `${plan.kind}:${plan.lessonId ?? plan.topicId ?? ''}`;
+}
+
 function QuizScreen({
+  query,
+  continueSaved,
   lessonId,
   topicId,
   practiceIds,
@@ -190,6 +212,8 @@ function QuizScreen({
   initialFeedback,
   perQuestionSeconds,
 }: {
+  query: string;
+  continueSaved: boolean;
   lessonId?: string;
   topicId?: string;
   practiceIds?: string[];
@@ -209,6 +233,111 @@ function QuizScreen({
   const [seed, setSeed] = useState('');
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState<QuizDraft | null>(null);
+  const [initial, setInitial] = useState<SessionProgress | undefined>(undefined);
+  const [loadingSaved, setLoadingSaved] = useState(true);
+  const key = plan ? draftKey(plan, practiceIds) : '';
+  // The latest state, so it can be saved when the learner leaves, and a flag to stop saving once the quiz is submitted.
+  const latest = useRef<SessionProgress | null>(null);
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const finished = useRef(false);
+  const live = useRef({ items, seed, mode, key, query, lessonId: plan?.lessonId ?? null, title: plan?.title ?? '' });
+  useEffect(() => {
+    live.current = { items, seed, mode, key, query, lessonId: plan?.lessonId ?? null, title: plan?.title ?? '' };
+  });
+
+  function writeDraft(state: SessionProgress, strict = false): Promise<void> {
+    const current = live.current;
+    if (!current.items || !current.key) return Promise.resolve();
+    const draft: Omit<QuizDraft, 'savedAt'> = {
+      key: current.key,
+      lessonId: current.lessonId,
+      title: current.title,
+      query: current.query,
+      seed: current.seed,
+      mode: current.mode,
+      itemIds: current.items.map((item) => item.question.id),
+      index: state.index,
+      answers: state.answers,
+      checked: state.checked,
+      skipped: state.skipped,
+      recorded: state.recorded,
+      timedOut: state.timedOut,
+      elapsed: state.elapsed,
+    };
+    const saving = saveQuizDraft(draft);
+    return strict ? saving : saving.catch((problem) => console.warn('Could not save quiz progress:', problem));
+  }
+
+  function onProgress(state: SessionProgress) {
+    latest.current = state;
+    if (finished.current) return;
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => void writeDraft(state), 800);
+  }
+
+  // "Save & exit": save right now (only if there is something to keep), then go back.
+  async function saveAndExit(state: SessionProgress) {
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    const started = state.index > 0 || Object.keys(state.answers).length > 0 || state.skipped.length > 0;
+    if (started) await writeDraft(state, true);
+    finished.current = true;
+    router.replace(plan?.backHref ?? routes.learn());
+  }
+
+  function restore(draft: QuizDraft) {
+    // Questions that no longer exist are dropped; the rest keep their order.
+    const questions = getQuestionsByIds(draft.itemIds);
+    if (questions.length === 0) {
+      setSaved(null);
+      void deleteQuizDraft(draft.key).catch(() => undefined);
+      return;
+    }
+    const ids = new Set(questions.map((question) => question.id));
+    const kept = (list: string[]) => list.filter((id) => ids.has(id));
+    const answers = Object.fromEntries(Object.entries(draft.answers).filter(([id]) => ids.has(id))) as SessionProgress['answers'];
+    const before = draft.itemIds.slice(0, draft.index).filter((id) => ids.has(id)).length;
+    setSeed(draft.seed);
+    setMode(draft.mode);
+    setInitial({
+      index: before,
+      answers,
+      checked: kept(draft.checked),
+      skipped: kept(draft.skipped),
+      recorded: kept(draft.recorded),
+      timedOut: kept(draft.timedOut),
+      elapsed: draft.elapsed ?? 0,
+    });
+    setItems(questions.map((question) => ({ question })));
+  }
+
+  // Is there an unfinished copy of this quiz? Opened with "Resume" (continue=1), it is restored straight away.
+  useEffect(() => {
+    if (!key) return;
+    let cancelled = false;
+    getQuizDraft(key)
+      .then((draft) => {
+        if (cancelled) return;
+        setSaved(draft);
+        if (draft && continueSaved) restore(draft);
+      })
+      .catch(() => undefined)
+      .finally(() => !cancelled && setLoadingSaved(false));
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+
+  // Leaving the quiz part-way keeps the latest answers.
+  useEffect(
+    () => () => {
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+      if (!finished.current && latest.current) void writeDraft(latest.current);
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
+  );
 
   if (!plan) {
     return (
@@ -254,6 +383,9 @@ function QuizScreen({
         setStarting(false);
         return;
       }
+      if (saved) void deleteQuizDraft(saved.key).catch(() => undefined);
+      setSaved(null);
+      latest.current = null;
       setSeed(nextSeed);
       setItems(selected);
       logSessionStart('quiz', {
@@ -270,6 +402,20 @@ function QuizScreen({
   }
 
   async function submit(result: SessionResult) {
+    if (!plan || !items) return;
+    // Hold the autosave while submitting; it is switched back on if submitting fails.
+    finished.current = true;
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    try {
+      await submitAttempt(result);
+    } catch (problem) {
+      finished.current = false;
+      throw problem;
+    }
+    void deleteQuizDraft(key).catch(() => undefined);
+  }
+
+  async function submitAttempt(result: SessionResult) {
     if (!plan || !items) return;
     const outcome = await submitQuiz({
       kind: plan.kind,
@@ -296,6 +442,14 @@ function QuizScreen({
     router.replace(routes.results(outcome.attempt.id));
   }
 
+  if (continueSaved && loadingSaved && !items) {
+    return (
+      <Screen width="learning">
+        <Text style={styles.subtitle}>Loading your saved quiz…</Text>
+      </Screen>
+    );
+  }
+
   if (items) {
     return (
       <QuestionSession
@@ -306,6 +460,9 @@ function QuizScreen({
         attemptMode={plan.attemptMode}
         sessionId={`quiz:${seed}`}
         seed={seed}
+        initial={initial}
+        onProgress={onProgress}
+        onSaveExit={saveAndExit}
         onSubmit={submit}
         submitLabel="Finish quiz"
         reviewNote={plan.kind === 'practice' ? null : 'This concept comes back for review tomorrow.'}
@@ -323,6 +480,7 @@ function QuizScreen({
 
   return (
     <Screen width="learning">
+      <BackLink fallback={'/learn' as never} />
       <Breadcrumbs items={[{ label: 'Study', href: routes.learn() }, ...plan.crumbs]} style={styles.crumbs} />
       <Text style={styles.kicker}>
         {plan.kind === 'mastery-check'
@@ -382,6 +540,19 @@ function QuizScreen({
         </View>
       </Card>
 
+      {saved && !loadingSaved ? (
+        <Card style={styles.resumeCard}>
+          <Text style={styles.kicker}>UNFINISHED QUIZ</Text>
+          <Text style={styles.modeTitle}>
+            You are on question {Math.min(saved.index + 1, saved.itemIds.length)} of {saved.itemIds.length}.
+          </Text>
+          <Text style={styles.modeText}>Carry on where you stopped, or start a fresh quiz (this clears the saved one).</Text>
+          <View style={styles.startRow}>
+            <Button label="Resume quiz" onPress={() => restore(saved)} />
+          </View>
+        </Card>
+      ) : null}
+
       {error ? <InlineNotice tone="warning" message={error} /> : null}
 
       <View style={styles.startRow}>
@@ -396,7 +567,7 @@ function QuizScreen({
         ) : (
           <>
             <Button label="Back" variant="ghost" onPress={() => router.push(plan.backHref)} />
-            <Button label="Start quiz" trailing="→" size="lg" onPress={() => void start()} loading={starting} />
+            <Button label={saved ? 'Start a fresh quiz' : 'Start quiz'} trailing="→" size="lg" variant={saved ? 'secondary' : 'primary'} onPress={() => void start()} loading={starting} />
           </>
         )}
       </View>
@@ -411,6 +582,7 @@ function createStyles(colors: ThemeColors) {
     title: { fontSize: 28, fontWeight: '800', color: colors.text, marginTop: 4 },
     subtitle: { fontSize: 15, lineHeight: 22, color: colors.textSecondary, marginTop: 6, marginBottom: 14 },
     meta: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginVertical: 12 },
+    resumeCard: { gap: 8, marginBottom: 14 },
     modeCard: { gap: 12, marginBottom: 14 },
     modeTitle: { fontSize: 17, fontWeight: '800', color: colors.text },
     modeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },

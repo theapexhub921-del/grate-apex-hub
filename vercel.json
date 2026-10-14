@@ -3,5 +3,16 @@
   "framework": null,
   "buildCommand": "npx expo export --platform web && cp dist/+not-found.html dist/404.html",
   "outputDirectory": "dist",
-  "cleanUrls": true
+  "cleanUrls": true,
+  "crons": [
+    {
+      "path": "/api/reminders",
+      "schedule": "0 18 * * *"
+    }
+  ],
+  "functions": {
+    "api/reminders.mjs": {
+      "maxDuration": 60
+    }
+  }
 }

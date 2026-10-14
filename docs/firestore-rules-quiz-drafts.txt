@@ -1,0 +1,19 @@
+// GrAte Apex Hub - Firestore rule to ADD: quizzes in progress
+
+// Where to paste (Firebase console -> project grate-apex -> Firestore Database -> Rules):
+//   1. Put the cursor on a new line just above the block that starts with
+//        // Apex Coin gifts between friends (new app).
+//   2. Paste everything below the dashed line, then press Publish.
+// ---------------------------------------------------------------------------
+
+    // Quizzes in progress (new app): one document per unfinished quiz. Owner only.
+    match /progress/{uid}/quizDrafts/{key} {
+      allow read, delete: if request.auth != null && request.auth.uid == uid;
+      allow create, update: if request.auth != null && request.auth.uid == uid
+        && key.size() <= 400
+        && request.resource.data.keys().hasOnly(['lessonId', 'title', 'data', 'savedAt'])
+        && (request.resource.data.lessonId == null || (request.resource.data.lessonId is string && request.resource.data.lessonId.size() <= 120))
+        && request.resource.data.title is string && request.resource.data.title.size() <= 200
+        && request.resource.data.data is string && request.resource.data.data.size() <= 300000
+        && request.resource.data.savedAt == request.time;
+    }

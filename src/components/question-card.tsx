@@ -37,6 +37,9 @@ import { useTheme, useThemedStyles } from '@/hooks/use-theme';
 
 type QuestionCardProps = {
   question: Question;
+  /** Shows a star in the corner; `onStar` toggles it. */
+  starred?: boolean;
+  onStar?: () => void;
   value: Answer | undefined;
   onChange: (value: Answer) => void;
   revealed: boolean; // show right/wrong + explanation, and lock input
@@ -89,6 +92,8 @@ function answerText(question: Question, value: Answer | undefined): string | nul
 
 export function QuestionCard({
   question,
+  starred = false,
+  onStar,
   value,
   onChange,
   revealed,
@@ -136,7 +141,16 @@ export function QuestionCard({
 
   return (
     <Animated.View style={[styles.card, compact && styles.cardCompact, motion]}>
-      {headingParts.length > 0 && <Text style={styles.heading}>{headingParts.join(' · ')}</Text>}
+      {headingParts.length > 0 || onStar ? (
+        <View style={styles.headRow}>
+          <Text style={styles.heading}>{headingParts.join(' · ')}</Text>
+          {onStar ? (
+            <Interactive onPress={onStar} accessibilityRole="button" accessibilityLabel={starred ? 'Remove star from this question' : 'Star this question'} accessibilityState={{ selected: starred }} style={styles.starButton}>
+              <Icon name="star" size={18} color={starred ? colors.accent : colors.textTertiary} filled={starred} />
+            </Interactive>
+          ) : null}
+        </View>
+      ) : null}
 
       <Text style={[styles.prompt, compact && styles.promptCompact]} accessibilityRole="header">
         {question.prompt}
@@ -582,7 +596,9 @@ function createStyles(colors: ThemeColors) {
       ...elevation(colors, 1),
     },
     cardCompact: { padding: 18, marginBottom: 12 },
-    heading: { fontSize: 11, fontWeight: '800', color: colors.textTertiary, letterSpacing: 1, marginBottom: 10 },
+    heading: { flex: 1, fontSize: 11, fontWeight: '800', color: colors.textTertiary, letterSpacing: 1, marginBottom: 10 },
+    headRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
+    starButton: { padding: 4, marginTop: -4, marginRight: -4 },
     prompt: { ...Type.title3, fontSize: 19, lineHeight: 27, marginBottom: 16, color: colors.text },
     promptCompact: { fontSize: 20, lineHeight: 28 },
     meta: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: -6, marginBottom: 14 },

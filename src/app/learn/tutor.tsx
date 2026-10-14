@@ -1,3 +1,4 @@
+import { BackLink } from '@/components/learning/nav-bits';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
 import { Text } from '@/components/ui/text';
@@ -158,6 +159,7 @@ export default function TutorScreen() {
 
   return (
     <Screen width="content">
+      <BackLink fallback={'/learn' as never} />
       <PageHeader eyebrow="Learn together" title="AI voice tutor" subtitle="Talk through a topic, practise recall and ask follow-up questions out loud." />
 
       <Card style={styles.hero} tone="primary">

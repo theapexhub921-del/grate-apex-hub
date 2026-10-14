@@ -1,3 +1,4 @@
+import { BackLink } from '@/components/learning/nav-bits';
 import { router, type Href } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
 import { Text } from '@/components/ui/text';
@@ -15,6 +16,7 @@ export function LegalPage({ title, updated, intro, sections }: { title: string; 
   const styles = useThemedStyles(createStyles);
   return (
     <Screen width="prose">
+      <BackLink fallback={'/settings' as never} />
       <PageHeader title={title} subtitle={`Last updated ${updated}`} style={styles.header} />
       <Card style={styles.card}>
         <Text style={styles.body}>{intro}</Text>

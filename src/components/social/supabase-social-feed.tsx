@@ -1,12 +1,10 @@
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
-import { Image } from 'expo-image';
 import type { ReactNode } from 'react';
 import { useEffect, useId, useMemo, useState } from 'react';
-import { Alert, Modal, Platform, Pressable, ScrollView, Share, StyleSheet, View } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Text, TextInput } from '@/components/ui/text';
 import Svg, { Circle, Defs, LinearGradient, Stop } from 'react-native-svg';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Avatar } from '@/components/ui/avatar';
 import { PersonAvatar } from '@/components/social/profile-card';
@@ -14,12 +12,12 @@ import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
 import { Card } from '@/components/ui/interactive';
 import { SectionHeader } from '@/components/ui/screen';
-import { VideoPlayer } from '@/components/ui/video-player';
+import { StoryViewer, type StoryGroup } from '@/components/social/story-viewer';
 import { Sheet } from '@/components/ui/sheet';
 import { findLesson, getTopic } from '@/data/curriculum';
-import { markStorySeen, useSeenStories } from '@/data/story-views';
-import { createCommunityStory, deleteCommunityStory, listLiveStories, type CommunityMedia, type CommunityStory } from '@/data/community';
-import { personName, refreshSocial, type FriendActivity, type SocialPerson, useSocial } from '@/data/social';
+import { useSeenStories } from '@/data/story-views';
+import { STORY_BACKGROUNDS, createCommunityStory, deleteCommunityStory, listLiveStories, type CommunityMedia, type CommunityStory } from '@/data/community';
+import { personName, refreshSocial, type FriendActivity, useSocial } from '@/data/social';
 import { useAvatarUrl, useDisplayName } from '@/data/user';
 import { type ThemeColors, Type } from '@/constants/theme';
 import { useTheme, useThemedStyles } from '@/hooks/use-theme';
@@ -31,16 +29,15 @@ export function SocialActivityFeed({ children, showActivity = true }: { children
   const social = useSocial();
   const displayName = useDisplayName();
   const avatarUrl = useAvatarUrl();
-  const insets = useSafeAreaInsets();
   const [stories, setStories] = useState<CommunityStory[]>([]);
   const [storyOpen, setStoryOpen] = useState(false);
   const [storyDraft, setStoryDraft] = useState('');
   const [storyMedia, setStoryMedia] = useState<CommunityMedia | undefined>();
   const [storyBusy, setStoryBusy] = useState(false);
-  const [storyDeleting, setStoryDeleting] = useState(false);
   const [storyError, setStoryError] = useState<string | null>(null);
-  const [storySequence, setStorySequence] = useState<CommunityStory[]>([]);
-  const [storyIndex, setStoryIndex] = useState(0);
+  const [storyBg, setStoryBg] = useState<string>(STORY_BACKGROUNDS[0]);
+  // The viewer is opened with a snapshot of who to show, so the order stays put while watching.
+  const [viewer, setViewer] = useState<{ groups: StoryGroup[]; startGroup: number; startItem: number } | null>(null);
   const friends = social.people.filter((person) => person.relationship === 'friends');
   const myStories = useMemo(() => stories.filter((story) => story.author_id === social.userId).sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at)), [stories, social.userId]);
   const myStory = myStories[myStories.length - 1];
@@ -60,8 +57,6 @@ export function SocialActivityFeed({ children, showActivity = true }: { children
       .sort((a, b) => Number(a.seen) - Number(b.seen) || Date.parse(b.items[b.items.length - 1].created_at) - Date.parse(a.items[a.items.length - 1].created_at));
   }, [stories, social.userId, seenStories]);
   const mySeen = myStories.length > 0 && myStories.every((story) => seenStories.has(story.id));
-  const selectedStory = storySequence[storyIndex] ?? null;
-  useEffect(() => { if (selectedStory) markStorySeen(selectedStory.id); }, [selectedStory]);
 
   async function refreshStories() {
     setStoryError(null);
@@ -74,32 +69,28 @@ export function SocialActivityFeed({ children, showActivity = true }: { children
 
   useEffect(() => { queueMicrotask(() => { void refreshStories(); }); }, []);
 
-  useEffect(() => {
-    if (!selectedStory || selectedStory.media_type === 'video') return;
-    const timer = setTimeout(() => {
-      if (storyIndex + 1 < storySequence.length) setStoryIndex((index) => index + 1);
-      else { setStorySequence([]); setStoryIndex(0); }
-    }, 6000);
-    return () => clearTimeout(timer);
-  }, [selectedStory, storyIndex, storySequence.length]);
-
-  function openStorySequence(sequence: CommunityStory[]) {
-    setStorySequence(sequence);
-    // Start at the first story not watched yet.
-    const firstNew = sequence.findIndex((story) => !seenStories.has(story.id));
-    setStoryIndex(firstNew > 0 ? firstNew : 0);
+  function personGroup(authorId: string, items: CommunityStory[]): StoryGroup {
+    const mine = authorId === social.userId;
+    const friend = social.people.find((person) => person.userId === authorId);
+    return {
+      authorId,
+      isMine: mine,
+      name: mine ? displayName || 'You' : friend ? personName(friend) : items[0]?.author_name ? `@${items[0].author_name}` : 'Username pending',
+      avatarUrl: mine ? avatarUrl : friend?.avatarUrl ?? null,
+      items,
+    };
   }
 
-  function closeStorySequence() {
-    setStorySequence([]);
-    setStoryIndex(0);
-  }
-
-  function stepStory(direction: -1 | 1) {
-    const next = storyIndex + direction;
-    if (next < 0) return;
-    if (next >= storySequence.length) closeStorySequence();
-    else setStoryIndex(next);
+  /** Opens the viewer on one person; it carries on through the people after them, like Instagram. */
+  function openStories(authorId: string) {
+    const ordered = [
+      ...(myStories.length ? [personGroup(social.userId ?? '', myStories)] : []),
+      ...friendStoryGroups.map((group) => personGroup(group.authorId, group.items)),
+    ];
+    const startGroup = Math.max(0, ordered.findIndex((group) => group.authorId === authorId));
+    // Start at the first story of that person that has not been watched yet.
+    const firstNew = ordered[startGroup].items.findIndex((story) => !seenStories.has(story.id));
+    setViewer({ groups: ordered, startGroup, startItem: firstNew > 0 ? firstNew : 0 });
   }
 
   async function publishStory() {
@@ -107,9 +98,10 @@ export function SocialActivityFeed({ children, showActivity = true }: { children
     setStoryBusy(true);
     setStoryError(null);
     try {
-      await createCommunityStory(storyDraft, storyMedia);
+      await createCommunityStory(storyDraft, storyMedia, storyBg);
       setStoryDraft('');
       setStoryMedia(undefined);
+      setStoryBg(STORY_BACKGROUNDS[0]);
       setStoryOpen(false);
       await refreshStories();
     } catch (caught) {
@@ -119,35 +111,16 @@ export function SocialActivityFeed({ children, showActivity = true }: { children
     }
   }
 
-  async function deleteStory(story: CommunityStory) {
-    if (storyDeleting) return;
-    setStoryDeleting(true);
-    setStoryError(null);
+  /** Deletes one of my stories (the viewer asks first). True when it is gone. */
+  async function deleteStory(story: CommunityStory): Promise<boolean> {
     try {
       await deleteCommunityStory(story.id, story.media_path);
       setStories((all) => all.filter((item) => item.id !== story.id));
-      const remaining = storySequence.filter((item) => item.id !== story.id);
-      if (!remaining.length) closeStorySequence();
-      else {
-        setStorySequence(remaining);
-        setStoryIndex((index) => Math.min(index, remaining.length - 1));
-      }
+      return true;
     } catch (caught) {
       setStoryError(caught instanceof Error ? caught.message : 'Could not delete this story.');
-    } finally {
-      setStoryDeleting(false);
+      return false;
     }
-  }
-
-  function confirmDeleteStory(story: CommunityStory) {
-    if (Platform.OS === 'web') {
-      if (globalThis.confirm('Delete this story and its attached photo or video?')) void deleteStory(story);
-      return;
-    }
-    Alert.alert('Delete this story?', 'This removes the story and its attached photo or video.', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: () => { void deleteStory(story); } },
-    ]);
   }
 
   async function chooseStoryMedia() {
@@ -186,23 +159,26 @@ export function SocialActivityFeed({ children, showActivity = true }: { children
       <View style={styles.storiesSection}>
         {storyError ? <Text style={styles.errorText}>{storyError}</Text> : null}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.friendStrip}>
-          <Pressable
-            onPress={() => myStories.length ? openStorySequence(myStories) : setStoryOpen(true)}
-            accessibilityRole="button"
-            accessibilityLabel={myStory ? 'View your posted story' : 'Add a story'}
-            style={styles.friendItem}
-          >
-            <View style={styles.storyAvatarWrap}>
+          <View style={styles.friendItem}>
+            <Pressable
+              onPress={() => myStories.length ? openStories(social.userId ?? '') : setStoryOpen(true)}
+              accessibilityRole="button"
+              accessibilityLabel={myStory ? 'View your story' : 'Add a story'}
+              style={styles.storyAvatarWrap}
+            >
               <StoryAvatar uri={avatarUrl} name={displayName || 'You'} hasStory={Boolean(myStory)} seen={mySeen} />
-              {myStory ? <View style={styles.postedMark}><Icon name="check" size={10} color={colors.onPrimary} /></View> : <View style={styles.addBadge}><Icon name="plus" size={12} color={colors.primaryText} /></View>}
-            </View>
+            </Pressable>
+            {/* Always there, so you can add another story after posting one. */}
+            <Pressable onPress={() => setStoryOpen(true)} accessibilityRole="button" accessibilityLabel="Add to your story" hitSlop={8} style={styles.addBadge}>
+              <Icon name="plus" size={12} color={colors.primaryText} />
+            </Pressable>
             <Text style={styles.friendName} numberOfLines={1}>Your story</Text>
-          </Pressable>
+          </View>
           {friendStoryGroups.map(({ authorId, items, seen }) => {
             const friend = social.people.find((person) => person.userId === authorId);
             const name = friend ? personName(friend) : 'Username pending';
             return (
-              <Pressable key={authorId} onPress={() => openStorySequence(items)} accessibilityRole="button" accessibilityLabel={`View ${items.length} ${items.length === 1 ? 'story' : 'stories'} from ${name}`} style={styles.friendItem}>
+              <Pressable key={authorId} onPress={() => openStories(authorId)} accessibilityRole="button" accessibilityLabel={`View ${items.length} ${items.length === 1 ? 'story' : 'stories'} from ${name}`} style={styles.friendItem}>
                 <StoryAvatar uri={friend?.avatarUrl ?? null} name={name} hasStory seen={seen} />
                 <Text style={styles.friendName} numberOfLines={1}>{name}</Text>
               </Pressable>
@@ -251,7 +227,21 @@ export function SocialActivityFeed({ children, showActivity = true }: { children
 
       <Sheet visible={storyOpen} onClose={() => setStoryOpen(false)} title="Share a story" subtitle="Add text, a photo or a video. Stories expire after 24 hours.">
         <View style={styles.composer}>
-          <TextInput value={storyDraft} onChangeText={setStoryDraft} multiline maxLength={500} placeholder="What would you like your friends to see?" placeholderTextColor={colors.textTertiary} accessibilityLabel="Write a story" style={styles.storyInput} />
+          {storyMedia ? (
+            <TextInput value={storyDraft} onChangeText={setStoryDraft} multiline maxLength={200} placeholder="Add a caption" placeholderTextColor={colors.textTertiary} accessibilityLabel="Story caption" style={styles.storyInput} />
+          ) : (
+            <>
+              {/* A text story: type on a coloured card, exactly as it will look. */}
+              <View style={[styles.textPreview, { backgroundColor: storyBg }]}>
+                <TextInput value={storyDraft} onChangeText={setStoryDraft} multiline maxLength={200} placeholder="Type something…" placeholderTextColor="rgba(255,255,255,0.6)" accessibilityLabel="Write a story" style={styles.textPreviewInput} />
+              </View>
+              <View style={styles.bgRow}>
+                {STORY_BACKGROUNDS.map((color) => (
+                  <Pressable key={color} onPress={() => setStoryBg(color)} accessibilityRole="button" accessibilityLabel={`Background ${color}`} accessibilityState={{ selected: storyBg === color }} style={[styles.bgDot, { backgroundColor: color }, storyBg === color && styles.bgDotOn]} />
+                ))}
+              </View>
+            </>
+          )}
           {storyMedia ? (
             <View style={styles.mediaSelected}>
               <Icon name={storyMedia.type === 'video' ? 'play' : 'image'} size={16} color={colors.primaryText} />
@@ -266,34 +256,9 @@ export function SocialActivityFeed({ children, showActivity = true }: { children
           </View>
         </View>
       </Sheet>
-      <Modal visible={selectedStory !== null} transparent animationType="fade" onRequestClose={closeStorySequence}>
-        {selectedStory ? (
-          <View style={[styles.storyModal, { paddingTop: Math.max(insets.top, 14), paddingBottom: Math.max(insets.bottom, 14) }]}>
-            <View style={styles.storyProgress}>{storySequence.map((item, index) => <View key={item.id} style={styles.storyProgressTrack}><View style={[styles.storyProgressFill, index < storyIndex && styles.storyProgressDone, index === storyIndex && styles.storyProgressCurrent]} /></View>)}</View>
-            <View style={styles.storyModalHeader}>
-              <Avatar uri={selectedStory.author_id === social.userId ? avatarUrl : social.people.find((person) => person.userId === selectedStory.author_id)?.avatarUrl} name={storyAuthorName(selectedStory, social.people, social.userId, displayName)} size={38} />
-              <View style={styles.storyModalByline}><Text style={styles.storyModalName}>{storyAuthorName(selectedStory, social.people, social.userId, displayName)}</Text><Text style={styles.storyModalTime}>{timeAgo(new Date(selectedStory.created_at).getTime())}</Text></View>
-              {selectedStory.author_id === social.userId ? <Button label="Delete" variant="ghost" size="sm" icon={<Icon name="trash" size={16} color={colors.error} />} onPress={() => confirmDeleteStory(selectedStory)} disabled={storyDeleting} /> : null}
-              <Pressable onPress={closeStorySequence} accessibilityRole="button" accessibilityLabel="Close story" style={styles.storyClose}><Icon name="close" size={20} color={colors.text} /></Pressable>
-            </View>
-            <View style={styles.storyModalBody}>
-              {selectedStory.media_url && selectedStory.media_type === 'image' ? <Image source={{ uri: selectedStory.media_url }} contentFit="contain" style={styles.storyImage} accessibilityLabel="Story photo" /> : null}
-              {selectedStory.media_url && selectedStory.media_type === 'video' ? <VideoPlayer url={selectedStory.media_url} height={420} autoPlay label="Story video" /> : null}
-              {selectedStory.body ? <Text style={styles.storyText}>{selectedStory.body}</Text> : null}
-            </View>
-            <View style={styles.storyPager}><Button label="Previous" size="sm" variant="secondary" onPress={() => stepStory(-1)} disabled={storyIndex === 0} /><Text style={styles.storyModalTime}>{storyIndex + 1} of {storySequence.length}</Text><Button label={storyIndex + 1 === storySequence.length ? 'Done' : 'Next'} size="sm" onPress={() => stepStory(1)} /></View>
-          </View>
-        ) : null}
-      </Modal>
+      {viewer ? <StoryViewer groups={viewer.groups} startGroup={viewer.startGroup} startItem={viewer.startItem} onClose={() => setViewer(null)} onDelete={deleteStory} /> : null}
     </View>
   );
-}
-
-function storyAuthorName(story: CommunityStory, people: readonly SocialPerson[], userId: string | null, displayName: string | null) {
-  const friend = people.find((person) => person.userId === story.author_id);
-  if (friend) return personName(friend);
-  if (story.author_id === userId) return displayName || 'Your story';
-  return story.author_name ? `@${story.author_name}` : 'Username pending';
 }
 
 function StoryAvatar({ uri, name, hasStory, seen }: { uri?: string | null; name: string; hasStory: boolean; seen?: boolean }) {
@@ -362,7 +327,7 @@ function createStyles(colors: ThemeColors) {
     storyAvatarOuter: { width: 64, height: 64, alignItems: 'center', justifyContent: 'center' },
     storyEmptyRing: { borderRadius: 32, borderWidth: 2, borderStyle: 'dashed', borderColor: colors.borderStrong },
     postedMark: { position: 'absolute', right: 0, bottom: 0, width: 18, height: 18, borderRadius: 9, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.successText, borderWidth: 2, borderColor: colors.background },
-    addBadge: { position: 'absolute', right: 0, bottom: 0, width: 19, height: 19, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primarySubtle, borderWidth: 2, borderColor: colors.background },
+    addBadge: { position: 'absolute', right: 2, top: 46, width: 19, height: 19, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primarySubtle, borderWidth: 2, borderColor: colors.background },
     storyMeta: { fontSize: 9.5, fontWeight: '700', color: colors.textTertiary, textAlign: 'center', width: 80 },
     addStory: { width: 54, height: 54, borderRadius: 27, borderWidth: 1.5, borderColor: colors.primaryBorder, borderStyle: 'dashed', backgroundColor: colors.primarySubtle, alignItems: 'center', justifyContent: 'center' },
     friendItem: { width: 68, alignItems: 'center', gap: 6 },
@@ -386,6 +351,9 @@ function createStyles(colors: ThemeColors) {
     storyModalTime: { ...Type.caption, color: colors.textSecondary },
     storyClose: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center', borderRadius: 19, backgroundColor: colors.surfaceMuted },
     storyModalBody: { flex: 1, minHeight: 220, justifyContent: 'center', alignItems: 'center', gap: 14, paddingVertical: 8 },
+    tapZones: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, flexDirection: 'row' },
+    tapPrev: { flex: 1 },
+    tapNext: { flex: 2 },
     storyImage: { width: '100%', flex: 1, maxHeight: '84%', borderRadius: 16, backgroundColor: colors.surfaceMuted },
     storyProgress: { width: '100%', flexDirection: 'row', gap: 4 },
     storyProgressTrack: { height: 3, flex: 1, overflow: 'hidden', borderRadius: 2, backgroundColor: colors.track },
@@ -398,6 +366,11 @@ function createStyles(colors: ThemeColors) {
     storyActions: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
     mediaSelected: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     storyInput: { minHeight: 120, textAlignVertical: 'top', padding: 13, borderWidth: 1, borderColor: colors.borderStrong, borderRadius: 14, backgroundColor: colors.surfaceSunken, color: colors.text, fontSize: 15 },
+    textPreview: { minHeight: 200, borderRadius: 18, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 18, paddingVertical: 20 },
+    textPreviewInput: { width: '100%', minHeight: 120, textAlign: 'center', textAlignVertical: 'center', color: '#FFFFFF', fontSize: 24, lineHeight: 32, fontWeight: '800' },
+    bgRow: { flexDirection: 'row', gap: 12, justifyContent: 'center' },
+    bgDot: { width: 30, height: 30, borderRadius: 15, borderWidth: 2, borderColor: 'transparent' },
+    bgDotOn: { borderColor: colors.text },
     errorText: { ...Type.caption, color: colors.error },
   });
 }

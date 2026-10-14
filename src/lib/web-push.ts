@@ -24,11 +24,17 @@ function keyBytes(base64: string) {
   return Uint8Array.from(raw, (char) => char.charCodeAt(0));
 }
 
-type Device = { endpoint: string; keys: { p256dh: string; auth: string }; at: number };
+type Device = { endpoint: string; keys: { p256dh: string; auth: string }; at: number; tz?: number };
+
+/** Minutes behind UTC (e.g. 0 in UTC, -60 in UTC+1): lets the server send streak reminders at a sensible local hour. */
+const timeZoneOffset = () => new Date().getTimezoneOffset();
 
 /** Registers this browser for push and saves it on the account (call when alerts are on). */
 export async function registerWebPush() {
   if (!supported() || emulator || Notification.permission !== 'granted') return false;
+  // After a reload the signed-in user is restored a moment later; without waiting,
+  // the phone was never re-registered and a rotated push address stayed dead.
+  await auth.authStateReady();
   const uid = auth.currentUser?.uid;
   if (!uid) return false;
   try {
@@ -39,7 +45,9 @@ export async function registerWebPush() {
     if (!json.endpoint || !json.keys?.p256dh || !json.keys?.auth) return false;
     const ref = doc(db, 'users', uid);
     const existing = ((await getDoc(ref)).data()?.webPush ?? []) as Device[];
-    const devices = [{ endpoint: json.endpoint, keys: { p256dh: json.keys.p256dh, auth: json.keys.auth }, at: Date.now() }, ...existing.filter((device) => device?.endpoint && device.endpoint !== json.endpoint)].slice(0, MAX_DEVICES);
+    // Already saved as this account's newest device: nothing to write.
+    if (existing[0]?.endpoint === json.endpoint && existing[0]?.tz === timeZoneOffset()) return true;
+    const devices = [{ endpoint: json.endpoint, keys: { p256dh: json.keys.p256dh, auth: json.keys.auth }, at: Date.now(), tz: timeZoneOffset() }, ...existing.filter((device) => device?.endpoint && device.endpoint !== json.endpoint)].slice(0, MAX_DEVICES);
     await setDoc(ref, { webPush: devices }, { merge: true });
     return true;
   } catch {
@@ -76,6 +84,42 @@ export async function announceMessage(chatId: string, to: string | null | undefi
     const token = await auth.currentUser?.getIdToken();
     if (!token) return;
     await fetch(`${SERVER}/api/push`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` }, body: JSON.stringify({ chat: chatId, to }) });
+  } catch {
+    // the in-app notification still reaches them when they open the app
+  }
+}
+
+/** The same for a message just sent in a group (every other member's devices are alerted). */
+export async function announceGroupMessage(groupId: string) {
+  await announce({ kind: 'group', group: groupId });
+}
+
+/** The same for "started following you". */
+export async function announceFollow(to: string) {
+  await announce({ kind: 'follow', to });
+}
+
+/** A battle challenge I just sent to `to` (their phone is alerted). */
+export async function announceBattle(battleId: string, to: string) {
+  await announce({ kind: 'battle', battle: battleId, to });
+}
+
+/** I just played (or declined) a battle: tell the other player how it went. */
+export async function announceBattleResult(battleId: string, to: string) {
+  await announce({ kind: 'battle-result', battle: battleId, to });
+}
+
+/** A like or a comment/reply on someone's post: { kind: 'like', post, to } or { kind: 'comment', post, comment, to }. */
+export async function announceInteraction(body: Record<string, string>) {
+  await announce(body);
+}
+
+async function announce(body: Record<string, string>) {
+  if (emulator) return;
+  try {
+    const token = await auth.currentUser?.getIdToken();
+    if (!token) return;
+    await fetch(`${SERVER}/api/push`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` }, body: JSON.stringify(body) });
   } catch {
     // the in-app notification still reaches them when they open the app
   }

@@ -87,9 +87,11 @@ const notificationOptions: { key: NotificationCategory; label: string; descripti
   { key: 'studyReminders', label: 'Study reminders', description: 'Reminders for your planned study time.' },
   { key: 'learningReminders', label: 'Learning reminders', description: 'Lessons and reviews you planned to complete.' },
   { key: 'goalReminders', label: 'Goal reminders', description: 'Progress toward your personal goals.' },
-  { key: 'streakReminders', label: 'Streak reminders', description: 'A reminder when your learning streak is at risk.' },
+  { key: 'streakReminders', label: 'Streak reminders', description: 'A reminder in the evening when your learning streak is at risk.' },
   { key: 'announcements', label: 'Announcements', description: 'Platform news and feature updates.' },
   { key: 'socialEngagement', label: 'Social engagement', description: 'Reactions and replies to your posts.' },
+  { key: 'battles', label: 'Battles', description: 'Challenges from friends and how your battles ended.' },
+  { key: 'league', label: 'League', description: 'Your weekly league standing and promotions.' },
 ];
 
 // Settings are grouped into collapsible sections and opened from the gear

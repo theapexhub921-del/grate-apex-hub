@@ -6,7 +6,7 @@ import { Text } from '@/components/ui/text';
 import { MemoryStateBadge } from '@/components/learning/memory-ui';
 import { QuestionFigure } from '@/components/learning/figure-view';
 import { StumpComposer } from '@/components/social/stump-card';
-import { Breadcrumbs, StatTile } from '@/components/learning/nav-bits';
+import { Breadcrumbs, StatTile, BackLink } from '@/components/learning/nav-bits';
 import { Button } from '@/components/ui/button';
 import { Card, Interactive } from '@/components/ui/interactive';
 import { AnimatedNumber } from '@/components/ui/animated-number';
@@ -411,6 +411,7 @@ function ResultsView({ attempt }: { attempt: QuizAttempt }) {
   return (
     <View style={styles.screen}>
       <Screen width="wide">
+        <BackLink fallback={'/learn' as never} />
         <Breadcrumbs
           items={[
             { label: 'Study', href: routes.learn() },

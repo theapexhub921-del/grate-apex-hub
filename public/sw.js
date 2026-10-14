@@ -56,7 +56,14 @@ self.addEventListener('push', (event) => {
   try { data = event.data ? event.data.json() : {}; } catch { data = { body: event.data ? event.data.text() : '' }; }
   event.waitUntil((async () => {
     const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-    if (windows.some((client) => client.visibilityState === 'visible' && client.focused)) return;
+    // Apple's push service (iPhone and iPad) cancels a site's alerts after a few pushes
+    // that show nothing, so there every push is shown, even with the app on screen.
+    let apple = false;
+    try {
+      const subscription = await self.registration.pushManager.getSubscription();
+      apple = Boolean(subscription && new URL(subscription.endpoint).hostname.endsWith('apple.com'));
+    } catch { /* treat as not Apple */ }
+    if (!apple && windows.some((client) => client.visibilityState === 'visible' && client.focused)) return;
     await self.registration.showNotification(data.title || 'GrAte Apex Hub', {
       body: data.body || '',
       icon: '/icons/grateapex-192.png',
@@ -75,9 +82,11 @@ self.addEventListener('notificationclick', (event) => {
     const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
     const existing = windows[0];
     if (existing) {
-      await existing.focus();
-      if ('navigate' in existing) await existing.navigate(href);
-      return;
+      try {
+        await existing.focus();
+        if ('navigate' in existing) await existing.navigate(href);
+        return;
+      } catch { /* some phones refuse: open the page in a new window instead */ }
     }
     await self.clients.openWindow(href);
   })());

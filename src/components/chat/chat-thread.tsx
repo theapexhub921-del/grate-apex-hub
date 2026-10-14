@@ -29,7 +29,7 @@ import { personName, useSocial } from '@/data/social';
 import { useAuth } from '@/hooks/use-auth';
 import { useTheme, useThemedStyles } from '@/hooks/use-theme';
 import { uploadMedia, uploadVoiceNote, type Media } from '@/lib/media';
-import { announceMessage } from '@/lib/web-push';
+import { announceGroupMessage, announceMessage } from '@/lib/web-push';
 
 const EMOJI = ['😀', '😂', '🥹', '😍', '😎', '🤔', '😴', '😭', '🔥', '❤️', '👍', '🙏', '🎉', '📚', '🧠', '💯', '✅', '🩺'];
 const STATUS_LABEL: Record<MessageStatus, string> = { sent: 'Sent', delivered: 'Delivered', read: 'Seen' };
@@ -55,7 +55,7 @@ function dayLabel(at: number) {
 }
 
 /** A conversation with a friend, like WhatsApp and Instagram messages. */
-export function ChatThread({ friendId = '', groupId, name }: { friendId?: string; groupId?: string | null; name?: string | null }) {
+export function ChatThread({ friendId = '', groupId, name, onBack }: { friendId?: string; groupId?: string | null; name?: string | null; /** Phones: returns to the chats list. */ onBack?: () => void }) {
   const styles = useThemedStyles(createStyles);
   const colors = useTheme();
   const { user } = useAuth();
@@ -145,7 +145,7 @@ export function ChatThread({ friendId = '', groupId, name }: { friendId?: string
     setBusy(true);
     try {
       const url = await uploadVoiceNote(note.blob);
-      if (isGroup) await sendGroupMessage(chatId, '', { audio: { url, seconds: note.seconds } });
+      if (isGroup) { await sendGroupMessage(chatId, '', { audio: { url, seconds: note.seconds } }); void announceGroupMessage(chatId); }
       else { await sendVoiceNote(chatId, url, note.seconds); void announceMessage(chatId, friendId); }
       await refresh(chatId);
     } catch (caught) {
@@ -161,7 +161,7 @@ export function ChatThread({ friendId = '', groupId, name }: { friendId?: string
     setBusy(true);
     setNotice(null);
     try {
-      if (isGroup) await sendGroupMessage(chatId, draft, { reply, ...extras });
+      if (isGroup) { await sendGroupMessage(chatId, draft, { reply, ...extras }); void announceGroupMessage(chatId); }
       else { await sendChatMessage(chatId, draft, { reply, ...extras }); void announceMessage(chatId, friendId); }
       setDraft('');
       setReply(null);
@@ -267,8 +267,13 @@ export function ChatThread({ friendId = '', groupId, name }: { friendId?: string
   // ── Rendering ──
   return (
     <View style={styles.thread}>
-      <View style={styles.header}>
-        {isGroup ? <Avatar name={title} size={44} ring="gold" /> : <PersonAvatar uid={friendId} uri={friend?.avatarUrl ?? null} name={title} size={44} status={meta?.otherOnline ? 'online' : null} />}
+      <View style={[styles.header, onBack && styles.headerPhone]}>
+        {onBack ? (
+          <Interactive onPress={onBack} accessibilityRole="button" accessibilityLabel="Back to chats" style={styles.backButton}>
+            <Icon name="chevronLeft" size={24} color={colors.text} strokeWidth={2.2} />
+          </Interactive>
+        ) : null}
+        {isGroup ? <Avatar name={title} size={onBack ? 40 : 44} ring="gold" /> : <PersonAvatar uid={friendId} uri={friend?.avatarUrl ?? null} name={title} size={onBack ? 40 : 44} status={meta?.otherOnline ? 'online' : null} />}
         <View style={styles.headText}>
           <View style={styles.nameRow}>
             <Text style={styles.headName} numberOfLines={1}>{title}</Text>
@@ -574,6 +579,8 @@ function createStyles(colors: ThemeColors) {
     presence: { fontSize: 12.5, color: colors.textSecondary },
     typing: { color: colors.successText, fontWeight: '700' },
     headButton: { padding: 8, borderRadius: 999 },
+    headerPhone: { gap: 8, paddingHorizontal: 10 },
+    backButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 999, marginLeft: -6 },
     search: { marginHorizontal: 16, marginTop: 10, borderWidth: 1, borderColor: colors.borderStrong, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8, color: colors.text, backgroundColor: colors.surfaceSunken },
     searchCount: { fontSize: 12, color: colors.textTertiary, textAlign: 'center' },
     pinned: { flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 16, marginTop: 8, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 12, backgroundColor: colors.accentSubtle },

@@ -7,7 +7,7 @@ import { MemoryDistribution } from '@/components/learning/memory-ui';
 import { applyStreakRecovery } from '@/data/progress';
 import { buyStreakRecoveryWithCoins, readApexCoinBalance, readStreakRecoveryOffer, type StreakRecoveryOffer } from '@/data/apex-coins';
 import { getStreakFreezeBalance } from '@/data/community';
-import { StatTile } from '@/components/learning/nav-bits';
+import { StatTile, BackLink } from '@/components/learning/nav-bits';
 import { LevelProgressCard } from '@/components/level-progress';
 import { SubjectGlyph, TopicGlyph } from '@/components/learning/glyphs';
 import { RankProgressCard } from '@/components/rank-progress';
@@ -264,6 +264,7 @@ export default function ProgressScreen() {
 
   return (
     <Screen width="wide">
+      <BackLink fallback={'/profile' as never} />
       <Text style={styles.title} accessibilityRole="header">
         My Progress
       </Text>

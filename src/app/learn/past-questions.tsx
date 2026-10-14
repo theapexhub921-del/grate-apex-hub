@@ -17,6 +17,7 @@ import { setKind } from '@/data/practice-modes';
 import { useAuth } from '@/hooks/use-auth';
 import { useTheme, useThemedStyles } from '@/hooks/use-theme';
 import { routes } from '@/lib/routes';
+import { findPractice, resumeHref, resumeLabel, useQuizDrafts } from '@/hooks/use-quiz-drafts';
 
 type Paper = { id: string; name: string; count: number; kind: 'past' | 'predicted' };
 type CoursePapers = { course: LegacyCourse; papers: Paper[] };
@@ -25,6 +26,7 @@ type CoursePapers = { course: LegacyCourse; papers: Paper[] };
 // predicted papers) from each course's question bank, sat as an exam with the
 // answers at the end. Your own class comes first; other semesters are a tap away.
 export default function PastQuestionsScreen() {
+  const drafts = useQuizDrafts();
   const styles = useThemedStyles(createStyles);
   const colors = useTheme();
   const { session } = useAuth();
@@ -70,14 +72,17 @@ export default function PastQuestionsScreen() {
                 <Text style={styles.meta}>{papers.length} paper{papers.length === 1 ? '' : 's'} · {papers.reduce((s, paper) => s + paper.count, 0)} questions</Text>
               </View>
             </View>
-            {papers.map((paper) => (
-              <Interactive key={paper.id} onPress={() => router.push(routes.legacyPractice({ course: course.id, set: paper.id, exam: true }))} accessibilityRole="button" accessibilityLabel={`${paper.name}, ${paper.count} questions`} style={({ hovered }) => [styles.paper, hovered && styles.paperHover]}>
+            {papers.map((paper) => {
+              const saved = findPractice(drafts, course.id, `paper-${paper.id}`);
+              return (
+              <Interactive key={paper.id} onPress={() => router.push(saved ? resumeHref(saved) : routes.legacyPractice({ course: course.id, set: paper.id, exam: true }))} accessibilityRole="button" accessibilityLabel={`${paper.name}, ${paper.count} questions`} style={({ hovered }) => [styles.paper, hovered && styles.paperHover]}>
                 <Icon name={paper.kind === 'predicted' ? 'achievement' : 'book'} size={16} color={colors.accentText} />
                 <Text style={styles.paperName}>{paper.name}</Text>
-                <Text style={styles.meta}>{paper.count} questions</Text>
+                <Text style={styles.meta}>{saved ? `Resume · ${resumeLabel(saved)}` : `${paper.count} questions`}</Text>
                 <Icon name="chevronRight" size={16} color={colors.textTertiary} />
               </Interactive>
-            ))}
+              );
+            })}
           </Card>
         ))}
       </View>

@@ -1,14 +1,15 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { BackLink } from '@/components/learning/nav-bits';
 import { Arena, Countdown, Rule } from '@/components/learning/apex-arena';
 import { ApexDone, ApexRun, type ApexStats } from '@/components/learning/apex-run';
 import { ApexWordmark } from '@/components/motion/apex-wordmark';
-import { type FeedbackMode, QuestionSession, type SessionResult } from '@/components/learning/question-session';
+import { type FeedbackMode, QuestionSession, type SessionProgress, type SessionResult } from '@/components/learning/question-session';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/interactive';
+import { deleteQuizDraft, getQuizDraft, type QuizDraft, saveQuizDraft } from '@/data/quiz-drafts';
 import { Pill } from '@/components/ui/pill';
 import { Screen } from '@/components/ui/screen';
 import { ErrorScreen, LoadingState } from '@/components/ui/state-views';
@@ -55,7 +56,9 @@ export default function LegacyPracticeScreen() {
   const [title, setTitle] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<FeedbackMode>(settings.feedback);
-  const [result, setResult] = useState<{ correct: number; total: number; xp: number; pre?: number | null } | null>(null);
+  const [result, setResult] = useState<{ correct: number; total: number; xp: number; pre?: number | null; missed: Question[] } | null>(null);
+  // "Review mistakes": a second round with only the questions just got wrong.
+  const [reviewing, setReviewing] = useState<{ round: number; questions: Question[] } | null>(null);
   const [apexStats, setApexStats] = useState<ApexStats | null>(null);
   const [apexXp, setApexXp] = useState<number | null>(null);
   // Apex Challenge: the arena intro, then 3 · 2 · 1 · GO, then the run (as on the Apex Challenge screen).
@@ -135,11 +138,134 @@ export default function LegacyPracticeScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [course, seed, paramKey, reviewIds]);
 
-  const items = useMemo(() => (questions ?? []).map((question) => ({ question })), [questions]);
+  // ── Resume: an unfinished practice is saved as you go, with the order of its questions ──
+  const continueSaved = param(params.continue) === '1';
+  const draftKey = course && !apex ? `hb:${course.id}:${settings.key}` : '';
+  const [saved, setSaved] = useState<QuizDraft | null>(null);
+  const [draftReady, setDraftReady] = useState(!draftKey);
+  const finished = useRef(false);
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const latest = useRef<SessionProgress | null>(null);
+  const queryText = Object.entries(params)
+    .filter(([name]) => name !== 'continue')
+    .map(([name, value]) => `${encodeURIComponent(name)}=${encodeURIComponent(param(value) ?? '')}`)
+    .join('&');
+
+  useEffect(() => {
+    if (!draftKey) return;
+    let live = true;
+    getQuizDraft(draftKey)
+      .then((draft) => {
+        if (!live) return;
+        setSaved(draft);
+        if (draft && continueSaved) setMode(draft.mode);
+      })
+      .catch(() => undefined)
+      .finally(() => live && setDraftReady(true));
+    return () => { live = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftKey]);
+
+  // The same questions in the same order as when the quiz was saved (rebuilt from the same seed, then put in the saved order).
+  const resuming = continueSaved && saved !== null;
+  const items = useMemo(() => {
+    const list = questions ?? [];
+    if (!resuming || !saved) return list.map((question) => ({ question }));
+    const byId = new Map(list.map((question) => [question.id, question]));
+    const ordered = saved.itemIds.map((id) => byId.get(id)).filter((question): question is Question => Boolean(question));
+    return (ordered.length ? ordered : list).map((question) => ({ question }));
+  }, [questions, resuming, saved]);
+
+  const initial = useMemo<SessionProgress | undefined>(() => {
+    if (!resuming || !saved) return undefined;
+    const ids = new Set(items.map((item) => item.question.id));
+    const kept = (list: string[]) => list.filter((id) => ids.has(id));
+    return {
+      index: saved.itemIds.slice(0, saved.index).filter((id) => ids.has(id)).length,
+      answers: Object.fromEntries(Object.entries(saved.answers).filter(([id]) => ids.has(id))) as SessionProgress['answers'],
+      checked: kept(saved.checked),
+      skipped: kept(saved.skipped),
+      recorded: kept(saved.recorded),
+      timedOut: kept(saved.timedOut),
+      elapsed: saved.elapsed ?? 0,
+    };
+  }, [items, resuming, saved]);
+
+  const live = useRef({ items, seed, mode, draftKey, queryText, lessonId: lessonId ?? null, title });
+  useEffect(() => {
+    live.current = { items, seed, mode, draftKey, queryText, lessonId: lessonId ?? null, title };
+  });
+
+  function writeDraft(state: SessionProgress, strict = false): Promise<void> {
+    const current = live.current;
+    if (!current.draftKey || current.items.length === 0) return Promise.resolve();
+    const saving = saveQuizDraft({
+      key: current.draftKey,
+      lessonId: current.lessonId,
+      title: current.title,
+      query: current.queryText,
+      path: '/learn/hb-practice',
+      seed: current.seed,
+      mode: current.mode,
+      itemIds: current.items.map((item) => item.question.id),
+      index: state.index,
+      answers: state.answers,
+      checked: state.checked,
+      skipped: state.skipped,
+      recorded: state.recorded,
+      timedOut: state.timedOut,
+      elapsed: state.elapsed,
+    });
+    return strict ? saving : saving.catch((problem) => console.warn('Could not save practice progress:', problem));
+  }
+
+  // "Save & exit": save right now (only if there is something to keep), then go back to the course.
+  async function saveAndExit(state: SessionProgress) {
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    const started = state.index > 0 || Object.keys(state.answers).length > 0 || state.skipped.length > 0;
+    if (started) await writeDraft(state, true);
+    finished.current = true;
+    router.replace(routes.legacyCourse(course!.id));
+  }
+
+  function onProgress(state: SessionProgress) {
+    latest.current = state;
+    if (finished.current) return;
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => void writeDraft(state), 800);
+  }
+
+  // Leaving part-way keeps the latest answers.
+  useEffect(
+    () => () => {
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+      if (!finished.current && latest.current) void writeDraft(latest.current);
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
+  );
 
   if (!course) return <ErrorScreen title="Course not found" message="Open practice from a course in Study." primary={{ label: 'Back to Study', onPress: () => router.replace(routes.learn()) }} />;
   if (error) return <ErrorScreen title="Practice unavailable" message={error} primary={{ label: 'Back to the course', onPress: () => router.replace(routes.legacyCourse(course.id)) }} />;
-  if (!questions) return <LoadingState label="Preparing your questions…" />;
+  if (!questions || !draftReady) return <LoadingState label="Preparing your questions…" />;
+
+  // An unfinished copy of this practice exists: carry on, or start again.
+  if (saved && !continueSaved && !apex && !result) {
+    return (
+      <Screen width="learning">
+        <BackLink fallback={routes.legacyCourse(course.id)} />
+        <Card style={styles.header}>
+          <Text style={styles.sub}>UNFINISHED PRACTICE</Text>
+          <Text style={styles.title}>{saved.title || title}</Text>
+          <Text style={styles.sub}>You are on question {Math.min(saved.index + 1, saved.itemIds.length)} of {saved.itemIds.length}. Resuming keeps the same questions in the same order.</Text>
+          <View style={styles.apexActions}>
+            <Button label="Resume" onPress={() => router.replace(`/learn/hb-practice?${saved.query}&continue=1` as never)} />
+            <Button label="Start fresh" variant="secondary" onPress={() => { void deleteQuizDraft(saved.key).catch(() => undefined); setSaved(null); }} />
+          </View>
+        </Card>
+      </Screen>
+    );
+  }
 
   if (apex && apexPhase === 'intro' && !result) {
     return (
@@ -201,8 +327,28 @@ export default function LegacyPracticeScreen() {
   }
 
   async function submit(session: SessionResult) {
-    const correct = questions!.filter((question) => isAnswerCorrect(question, session.answers[question.id])).length;
-    const total = questions!.length;
+    // Hold the autosave while submitting; it is switched back on if submitting fails.
+    finished.current = true;
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    try {
+      await submitPractice(session);
+    } catch (problem) {
+      finished.current = false;
+      throw problem;
+    }
+    if (draftKey && !reviewing) void deleteQuizDraft(draftKey).catch(() => undefined);
+  }
+
+  async function submitPractice(session: SessionResult) {
+    const asked = reviewing ? reviewing.questions : questions!;
+    const missed = asked.filter((question) => !isAnswerCorrect(question, session.answers[question.id]));
+    const correct = asked.length - missed.length;
+    const total = asked.length;
+    // A mistakes round is extra practice: no second XP award.
+    if (reviewing) {
+      setResult({ correct, total, xp: 0, missed });
+      return;
+    }
     const percent = total ? (correct / total) * 100 : 0;
     // XP once a day per practice source, scaled like this app's quizzes.
     const base = apex ? XP_RULES.apex.completion : XP_RULES.lessonQuiz.completion;
@@ -223,7 +369,7 @@ export default function LegacyPracticeScreen() {
       pre = practice.phase === 'post' ? percentOf(saved.pre) : undefined;
       await savePrePost(course!.id, practice.phase, { correct, total, ids: questions!.map((question) => question.id), at: Date.now() });
     }
-    setResult({ correct, total, xp, pre });
+    setResult({ correct, total, xp, pre, missed });
   }
 
   if (result) {
@@ -233,12 +379,22 @@ export default function LegacyPracticeScreen() {
         <Card style={styles.result}>
           <Text style={styles.resultEmoji}>{percent >= 75 ? '🏆' : percent >= 50 ? '💪' : '📚'}</Text>
           <Text style={styles.resultScore}>{result.correct}/{result.total}</Text>
-          <Text style={styles.resultTitle}>{title}</Text>
+          <Text style={styles.resultTitle}>{reviewing ? `${title} · mistakes` : title}</Text>
           <Pill label={`${percent}%`} tone={percent >= 75 ? 'success' : percent >= 50 ? 'gold' : 'neutral'} />
-          <Text style={styles.resultText}>{result.xp > 0 ? `+${result.xp} XP` : 'XP for this practice was already earned today.'}</Text>
+          <Text style={styles.resultText}>{result.xp > 0 ? `+${result.xp} XP` : reviewing ? 'Mistakes round — no extra XP.' : 'XP for this practice was already earned today.'}</Text>
           {practice.kind === 'prepost' && practice.phase === 'pre' ? <Text style={styles.resultText}>Now study the course, then take the post-test to see how much you’ve improved.</Text> : null}
           {practice.kind === 'prepost' && practice.phase === 'post' && result.pre != null ? <Text style={styles.resultText}>Pre-test {result.pre}% → post-test {percent}% ({percent - result.pre >= 0 ? '+' : ''}{percent - result.pre} points)</Text> : null}
           <View style={styles.resultActions}>
+            {practice.kind !== 'prepost' && result.missed.length > 0 ? (
+              <Button
+                label={`Review ${result.missed.length} mistake${result.missed.length === 1 ? '' : 's'}`}
+                onPress={() => {
+                  setMode('instant');
+                  setReviewing({ round: (reviewing?.round ?? 0) + 1, questions: result.missed });
+                  setResult(null);
+                }}
+              />
+            ) : null}
             {practice.kind !== 'prepost' ? <Button label="Try again" onPress={() => router.replace(`/learn/hb-practice?${new URLSearchParams({ ...Object.fromEntries(Object.entries(params).map(([key, value]) => [key, String(param(value) ?? '')])), attempt: String(Date.now()) })}` as never)} /> : null}
             <Button label="Back to the course" variant="secondary" onPress={() => router.replace(routes.legacyCourse(course!.id))} />
           </View>
@@ -250,21 +406,25 @@ export default function LegacyPracticeScreen() {
   return (
     <Screen width="learning">
       <QuestionSession
-        items={items}
+        key={reviewing?.round ?? 0}
+        items={reviewing ? reviewing.questions.map((question) => ({ question })) : items}
         mode={mode}
         onModeChange={settings.seconds || settings.feedback === 'submit' ? undefined : setMode}
         perQuestionSeconds={settings.seconds}
         attemptMode={apex ? 'apex' : 'practice'}
-        sessionId={`hb:${seed}`}
-        seed={seed}
+        sessionId={`hb:${seed}${reviewing ? `:r${reviewing.round}` : ''}`}
+        seed={reviewing ? `${seed}:r${reviewing.round}` : seed}
+        initial={reviewing ? undefined : initial}
+        onProgress={apex || reviewing ? undefined : onProgress}
+        onSaveExit={apex || reviewing || !draftKey ? undefined : saveAndExit}
         onSubmit={submit}
         submitLabel="Finish"
         reviewNote={null}
         header={
           <View style={styles.header}>
             <BackLink fallback={routes.legacyCourse(course.id)} />
-            <Text style={styles.title} numberOfLines={2}>{title}</Text>
-            <Text style={styles.sub}>{[`${questions.length} questions`, settings.seconds ? `${settings.seconds} seconds a question` : null, settings.feedback === 'submit' ? 'answers at the end, like the real paper' : null, settings.variants ? 'multiple choice, typing, true/false and matching' : null].filter(Boolean).join(' · ')}</Text>
+            <Text style={styles.title} numberOfLines={2}>{reviewing ? `${title} · mistakes` : title}</Text>
+            <Text style={styles.sub}>{reviewing ? `${reviewing.questions.length} question${reviewing.questions.length === 1 ? '' : 's'} you missed, answers shown as you go` : [`${questions.length} questions`, settings.seconds ? `${settings.seconds} seconds a question` : null, settings.feedback === 'submit' ? 'answers at the end, like the real paper' : null, settings.variants ? 'multiple choice, typing, true/false and matching' : null].filter(Boolean).join(' · ')}</Text>
           </View>
         }
       />
