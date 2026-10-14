@@ -315,6 +315,7 @@ The full redesign rationale is in `docs/redesign-notes.md`.
 
 * `src/data/notifications.ts` derives notifications from real learning state. Only read marks are stored, on the device.
 * The bell and centre UI are in `src/components/notifications.tsx`.
+* Phone and computer alerts that arrive when the app is closed (messages, follows, likes, comments, **battle challenges and results**) go through `api/push.mjs`; **streak-at-risk and weekly league reminders** are sent on a daily schedule by `api/reminders.mjs` (needs `FIREBASE_SERVICE_ACCOUNT` and `CRON_SECRET` in Vercel). Shared rules are in `api/_push-logic.mjs`, checked by `tests/push-logic.test.mjs`. Setup, switches and a safe dry run: `docs/push-notifications.md`.
 
 ### Locked elements
 

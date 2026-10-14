@@ -11,6 +11,7 @@ import { Sheet } from '@/components/ui/sheet';
 import { Text } from '@/components/ui/text';
 import { Type, type ThemeColors } from '@/constants/theme';
 import { type Battle, type BattleCourse, battleRecord, battleStatus, createBattle, declineBattle, listBattles } from '@/data/battles';
+import { announceBattle, announceBattleResult } from '@/lib/web-push';
 import { readClassSelection } from '@/data/class-curriculum';
 import { publishedTopics } from '@/data/curriculum';
 import { legacyCoursesForClass } from '@/data/legacy-study';
@@ -65,6 +66,7 @@ export function BattlesCard() {
     setError(null);
     try {
       const battle = await createBattle({ userId: person.userId, username: person.username }, course);
+      void announceBattle(battle.id, person.userId); // their phone is alerted (best effort)
       setOpen(false);
       setPicking(false);
       router.push({ pathname: '/social/battle', params: { id: battle.id } } as never);
@@ -154,7 +156,7 @@ export function BattlesCard() {
                 {status === 'waiting-for-you' ? (
                   <View style={styles.row}>
                     <Button label="Play" size="sm" onPress={() => { setOpen(false); router.push({ pathname: '/social/battle', params: { id: battle.id } } as never); }} />
-                    {incoming ? <Button label="Decline" size="sm" variant="ghost" onPress={() => void declineBattle(battle).then(refresh)} /> : null}
+                    {incoming ? <Button label="Decline" size="sm" variant="ghost" onPress={() => void declineBattle(battle).then(() => { void announceBattleResult(battle.id, battle.challengerId); return refresh(); })} /> : null}
                   </View>
                 ) : (
                   <Pill

@@ -62,7 +62,7 @@ export function useNotifications() {
 export function preferenceFor(item: AppNotification) {
   if (item.id.startsWith('acct:')) return ((item as { kind?: string }).kind === 'follow' ? 'friendRequests' : 'socialEngagement') as 'friendRequests' | 'socialEngagement';
   if (item.id.startsWith('msg:')) return 'messages' as const;
-  if (item.id.startsWith('league:')) return 'socialEngagement' as const;
+  if (item.id.startsWith('league:')) return 'league' as const;
   if (item.id.startsWith('inapp:')) return 'socialEngagement' as const;
   if (item.id.startsWith('social:')) return 'friendRequests' as const;
   if (item.group === 'updates') return 'announcements' as const;

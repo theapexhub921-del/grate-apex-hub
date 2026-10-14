@@ -24,7 +24,10 @@ function keyBytes(base64: string) {
   return Uint8Array.from(raw, (char) => char.charCodeAt(0));
 }
 
-type Device = { endpoint: string; keys: { p256dh: string; auth: string }; at: number };
+type Device = { endpoint: string; keys: { p256dh: string; auth: string }; at: number; tz?: number };
+
+/** Minutes behind UTC (e.g. 0 in UTC, -60 in UTC+1): lets the server send streak reminders at a sensible local hour. */
+const timeZoneOffset = () => new Date().getTimezoneOffset();
 
 /** Registers this browser for push and saves it on the account (call when alerts are on). */
 export async function registerWebPush() {
@@ -43,8 +46,8 @@ export async function registerWebPush() {
     const ref = doc(db, 'users', uid);
     const existing = ((await getDoc(ref)).data()?.webPush ?? []) as Device[];
     // Already saved as this account's newest device: nothing to write.
-    if (existing[0]?.endpoint === json.endpoint) return true;
-    const devices = [{ endpoint: json.endpoint, keys: { p256dh: json.keys.p256dh, auth: json.keys.auth }, at: Date.now() }, ...existing.filter((device) => device?.endpoint && device.endpoint !== json.endpoint)].slice(0, MAX_DEVICES);
+    if (existing[0]?.endpoint === json.endpoint && existing[0]?.tz === timeZoneOffset()) return true;
+    const devices = [{ endpoint: json.endpoint, keys: { p256dh: json.keys.p256dh, auth: json.keys.auth }, at: Date.now(), tz: timeZoneOffset() }, ...existing.filter((device) => device?.endpoint && device.endpoint !== json.endpoint)].slice(0, MAX_DEVICES);
     await setDoc(ref, { webPush: devices }, { merge: true });
     return true;
   } catch {
@@ -94,6 +97,16 @@ export async function announceGroupMessage(groupId: string) {
 /** The same for "started following you". */
 export async function announceFollow(to: string) {
   await announce({ kind: 'follow', to });
+}
+
+/** A battle challenge I just sent to `to` (their phone is alerted). */
+export async function announceBattle(battleId: string, to: string) {
+  await announce({ kind: 'battle', battle: battleId, to });
+}
+
+/** I just played (or declined) a battle: tell the other player how it went. */
+export async function announceBattleResult(battleId: string, to: string) {
+  await announce({ kind: 'battle-result', battle: battleId, to });
 }
 
 /** A like or a comment/reply on someone's post: { kind: 'like', post, to } or { kind: 'comment', post, comment, to }. */

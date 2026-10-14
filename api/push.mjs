@@ -4,6 +4,8 @@
 //   { kind: 'follow', to }    "started following you"
 //   { kind: 'like', post, to }               someone liked your post
 //   { kind: 'comment', post, comment, to }   a comment on your post, or a reply to your comment
+//   { kind: 'battle', battle, to }           "challenged you to a battle"
+//   { kind: 'battle-result', battle, to }    the other player played / declined / finished a battle
 //
 // Sends a push to the recipient's phones and computers, so it
 // arrives even when GrAte Apex Hub is closed. Nothing is trusted from the
@@ -14,15 +16,20 @@
 //  - the sender must be a member of the chat (or group) and its latest message
 //    must be theirs, sent in the last two minutes; the text comes from the chat itself.
 //    A follow must be a follow document by the sender, created in the last two minutes;
-//  - pushes go only to real browser push services (no other addresses).
+//  - pushes go only to real browser push services (no other addresses);
+//  - a battle challenge must be an entry the sender wrote in their own battlesOut, naming
+//    `to` as the opponent, made in the last two minutes; a battle result is only sent for a
+//    battle the two really share, and only after the sender has played (or declined) it.
+// Streak and league reminders are not here: api/reminders.mjs sends those on a schedule.
 // The private push key lives in Vercel's settings (VAPID_PRIVATE_KEY).
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import webpush from 'web-push';
 
+import { battleResultMessage, battleSide, BATTLE_ID, pushAddress, USER_ID } from './_push-logic.mjs';
+
 const PROJECT = 'grate-apex';
 const FIRESTORE = `https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents`;
 const KEYS = createRemoteJWKSet(new URL('https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com'));
-const PUSH_HOSTS = [/^fcm\.googleapis\.com$/, /\.push\.services\.mozilla\.com$/, /\.notify\.windows\.com$/, /^web\.push\.apple\.com$/, /\.push\.apple\.com$/];
 
 function plain(value) {
   if (!value || typeof value !== 'object') return undefined;
@@ -65,15 +72,6 @@ async function latestGroupMessage(groupId, token) {
   const doc = rows?.[0]?.document;
   return doc ? fieldsOf(doc) : null;
 }
-
-const pushAddress = (endpoint) => {
-  try {
-    const url = new URL(endpoint);
-    return url.protocol === 'https:' && PUSH_HOSTS.some((host) => host.test(url.hostname));
-  } catch {
-    return false;
-  }
-};
 
 // Best-effort brake against a client calling again and again (one server instance remembers it for a short while).
 const recent = new Map();
@@ -143,6 +141,56 @@ export default async function handler(req, res) {
     const others = members.filter((uid) => uid !== sender && /^[A-Za-z0-9]{6,64}$/.test(uid));
     const counts = await Promise.all(others.map(async (uid) => deliver(await read(`users/${uid}`, token), 'messages', payload)));
     return res.status(200).json({ sent: counts.reduce((total, count) => total + count, 0) });
+  }
+
+  if (kind === 'battle' || kind === 'battle-result') {
+    const battleId = String(body.battle ?? '');
+    const to = String(body.to ?? '');
+    if (!BATTLE_ID.test(battleId) || !USER_ID.test(to) || to === sender) return res.status(400).json({ error: 'Bad request.' });
+    // A challenge is sent once; a result is announced once per player.
+    if (tooSoon(`${sender}:${kind}:${battleId}`, kind === 'battle' ? 30_000 : 10 * 60_000)) return res.status(429).json({ error: 'Slow down.' });
+    // Both learners' documents are readable by any signed-in learner (the same reads the app does).
+    const [mine, other] = await Promise.all([read(`users/${sender}`, token), read(`users/${to}`, token)]);
+    const username = typeof mine?.username === 'string' ? mine.username : null;
+    const href = `/social/battle?id=${encodeURIComponent(battleId)}`;
+
+    if (kind === 'battle') {
+      const entry = mine?.battlesOut?.[battleId];
+      if (!entry || entry.opponent !== to || !(Date.now() - Number(entry.createdAt) < FRESH)) return res.status(409).json({ error: 'No new challenge to announce.' });
+      const course = String(entry.course?.name ?? 'a battle').slice(0, 40);
+      const sent = await deliver(other, 'battles', {
+        title: username ? `@${username} challenged you to a battle` : 'You have been challenged to a battle',
+        body: `${course} · ${Number(entry.count) || 10} questions, same for both of you. Tap to play.`,
+        tag: `battle:${battleId}`,
+        href,
+      });
+      return res.status(200).json({ sent });
+    }
+
+    // A result: find out who is the challenger from the documents themselves.
+    let senderIsChallenger;
+    let entry;
+    let reply;
+    if (mine?.battlesOut?.[battleId]?.opponent === to) {
+      senderIsChallenger = true;
+      entry = mine.battlesOut[battleId];
+      reply = other?.battleResults?.[battleId];
+    } else if (other?.battlesOut?.[battleId]?.opponent === sender) {
+      senderIsChallenger = false;
+      entry = other.battlesOut[battleId];
+      reply = mine?.battleResults?.[battleId];
+    } else {
+      return res.status(403).json({ error: 'Not your battle.' });
+    }
+    const challenger = battleSide(entry.result);
+    const declined = reply?.declined === true;
+    const opponent = declined ? null : battleSide(reply);
+    // The sender must really have played (or declined) before the other player hears about it.
+    if (!(senderIsChallenger ? challenger : opponent || declined)) return res.status(409).json({ error: 'No result to announce.' });
+    const message = battleResultMessage({ recipientIsChallenger: !senderIsChallenger, senderName: username, course: entry.course?.name, challenger, opponent, declined });
+    if (!message) return res.status(200).json({ sent: 0 });
+    const sent = await deliver(other, 'battles', { ...message, tag: `battle:${battleId}`, href });
+    return res.status(200).json({ sent });
   }
 
   if (kind === 'follow') {
