@@ -3,6 +3,7 @@ import { ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native'
 import { Text } from '@/components/ui/text';
 
 import { QuestionCard } from '@/components/question-card';
+import { toggleStar, useStarredIds } from '@/data/starred-questions';
 import { Button } from '@/components/ui/button';
 import { Card, Interactive } from '@/components/ui/interactive';
 import { Pill } from '@/components/ui/pill';
@@ -71,6 +72,8 @@ export function QuestionSession({
   const { width } = useWindowDimensions();
   const desktop = isDesktopWidth(width);
   const scrollRef = useRef<ScrollView>(null);
+  // Starred questions are shared with the Starred page.
+  const starredIds = useStarredIds();
   const [index, setIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, Answer>>({});
   const [checked, setChecked] = useState<Set<string>>(() => new Set());
@@ -327,6 +330,8 @@ export function QuestionSession({
           <QuestionCard
             key={question.id}
             question={question}
+            starred={starredIds.has(question.id)}
+            onStar={() => void toggleStar(question.id).catch(() => undefined)}
             value={answers[question.id]}
             onChange={select}
             revealed={mode === 'instant' && isChecked}

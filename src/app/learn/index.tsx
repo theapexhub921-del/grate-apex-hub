@@ -289,6 +289,7 @@ export default function LearnScreen() {
       disabled: overall.counts.tracked === 0,
     },
     { id: 'custom', icon: 'edit', title: 'Custom quiz', detail: 'Choose the lessons, how many questions, a timer and when you see the answers.', onPress: () => router.push(routes.customQuizBuilder()) },
+    { id: 'starred', icon: 'star', title: 'Starred questions', detail: 'Questions you starred while practising, to go over again.', onPress: () => router.push('/learn/starred' as never) },
     { id: 'past', icon: 'book', title: 'Past question bank', detail: 'Real past papers and predicted papers, sat like the exam.', onPress: () => router.push('/learn/past-questions' as never) },
     { id: 'planner', icon: 'calendar', title: 'Timetable and plans', detail: 'Your weekly calendar, and a lesson path for your goals.', onPress: () => router.push('/learn/planner' as never) },
     { id: 'chat', icon: 'sparkle', title: 'Study chat', detail: 'Ask the AI anything: concepts, study plans, memory tricks and quizzes.', onPress: () => router.push('/learn/chat' as never) },

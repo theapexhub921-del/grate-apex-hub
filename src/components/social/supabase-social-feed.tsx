@@ -2,7 +2,7 @@ import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { Image } from 'expo-image';
 import type { ReactNode } from 'react';
-import { useEffect, useId, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Alert, Modal, Platform, Pressable, ScrollView, Share, StyleSheet, View } from 'react-native';
 import { Text, TextInput } from '@/components/ui/text';
 import Svg, { Circle, Defs, LinearGradient, Stop } from 'react-native-svg';
@@ -18,7 +18,7 @@ import { VideoPlayer } from '@/components/ui/video-player';
 import { Sheet } from '@/components/ui/sheet';
 import { findLesson, getTopic } from '@/data/curriculum';
 import { markStorySeen, useSeenStories } from '@/data/story-views';
-import { createCommunityStory, deleteCommunityStory, listLiveStories, type CommunityMedia, type CommunityStory } from '@/data/community';
+import { createCommunityStory, deleteCommunityStory, listLiveStories, listStoryViewers, recordStoryView, type CommunityMedia, type CommunityStory, type StoryViewer } from '@/data/community';
 import { personName, refreshSocial, type FriendActivity, type SocialPerson, useSocial } from '@/data/social';
 import { useAvatarUrl, useDisplayName } from '@/data/user';
 import { type ThemeColors, Type } from '@/constants/theme';
@@ -41,6 +41,12 @@ export function SocialActivityFeed({ children, showActivity = true }: { children
   const [storyError, setStoryError] = useState<string | null>(null);
   const [storySequence, setStorySequence] = useState<CommunityStory[]>([]);
   const [storyIndex, setStoryIndex] = useState(0);
+  // Progress through the current story (0 to 1), and whether a finger is holding it still.
+  const [progress, setProgress] = useState(0);
+  const [paused, setPaused] = useState(false);
+  const [viewers, setViewers] = useState<StoryViewer[]>([]);
+  const viewedRef = useRef<Set<string>>(new Set());
+  const pressStart = useRef(0);
   const friends = social.people.filter((person) => person.relationship === 'friends');
   const myStories = useMemo(() => stories.filter((story) => story.author_id === social.userId).sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at)), [stories, social.userId]);
   const myStory = myStories[myStories.length - 1];
@@ -74,17 +80,51 @@ export function SocialActivityFeed({ children, showActivity = true }: { children
 
   useEffect(() => { queueMicrotask(() => { void refreshStories(); }); }, []);
 
+  // Each story fills its bar in 6 seconds (15 for video, where the video's end moves on sooner).
+  // Holding a finger on the story pauses it.
   useEffect(() => {
-    if (!selectedStory || selectedStory.media_type === 'video') return;
-    const timer = setTimeout(() => {
-      if (storyIndex + 1 < storySequence.length) setStoryIndex((index) => index + 1);
-      else { setStorySequence([]); setStoryIndex(0); }
-    }, 6000);
-    return () => clearTimeout(timer);
-  }, [selectedStory, storyIndex, storySequence.length]);
+    if (!selectedStory || paused) return;
+    const total = selectedStory.media_type === 'video' ? 15000 : 6000;
+    const started = Date.now() - progress * total;
+    const timer = setInterval(() => {
+      const next = (Date.now() - started) / total;
+      if (next >= 1) { clearInterval(timer); stepStory(1); }
+      else setProgress(next);
+    }, 100);
+    return () => clearInterval(timer);
+    // progress is read once when a story starts or resumes, so it is left out on purpose.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedStory?.id, storyIndex, storySequence.length, paused]);
+
+  // Tell the owner I have seen their story (once per story, and never for my own).
+  useEffect(() => {
+    if (!selectedStory || selectedStory.author_id === social.userId || viewedRef.current.has(selectedStory.id)) return;
+    viewedRef.current.add(selectedStory.id);
+    void recordStoryView(selectedStory).catch(() => undefined);
+  }, [selectedStory, social.userId]);
+
+  // The owner sees who has viewed their story.
+  useEffect(() => {
+    if (!selectedStory || selectedStory.author_id !== social.userId) return;
+    let live = true;
+    void listStoryViewers(selectedStory.id).then((list) => { if (live) setViewers(list); }).catch(() => { if (live) setViewers([]); });
+    return () => { live = false; };
+  }, [selectedStory?.id, social.userId]);
+
+  function holdStart() {
+    pressStart.current = Date.now();
+    setPaused(true);
+  }
+
+  // A quick tap moves to the previous or next story; a longer hold only pauses.
+  function tap(direction: -1 | 1) {
+    if (Date.now() - pressStart.current < 250) stepStory(direction);
+  }
 
   function openStorySequence(sequence: CommunityStory[]) {
     setStorySequence(sequence);
+    setProgress(0);
+    setPaused(false);
     // Start at the first story not watched yet.
     const firstNew = sequence.findIndex((story) => !seenStories.has(story.id));
     setStoryIndex(firstNew > 0 ? firstNew : 0);
@@ -93,11 +133,14 @@ export function SocialActivityFeed({ children, showActivity = true }: { children
   function closeStorySequence() {
     setStorySequence([]);
     setStoryIndex(0);
+    setProgress(0);
+    setPaused(false);
   }
 
   function stepStory(direction: -1 | 1) {
     const next = storyIndex + direction;
     if (next < 0) return;
+    setProgress(0);
     if (next >= storySequence.length) closeStorySequence();
     else setStoryIndex(next);
   }
@@ -269,7 +312,7 @@ export function SocialActivityFeed({ children, showActivity = true }: { children
       <Modal visible={selectedStory !== null} transparent animationType="fade" onRequestClose={closeStorySequence}>
         {selectedStory ? (
           <View style={[styles.storyModal, { paddingTop: Math.max(insets.top, 14), paddingBottom: Math.max(insets.bottom, 14) }]}>
-            <View style={styles.storyProgress}>{storySequence.map((item, index) => <View key={item.id} style={styles.storyProgressTrack}><View style={[styles.storyProgressFill, index < storyIndex && styles.storyProgressDone, index === storyIndex && styles.storyProgressCurrent]} /></View>)}</View>
+            <View style={styles.storyProgress}>{storySequence.map((item, index) => <View key={item.id} style={styles.storyProgressTrack}><View style={[styles.storyProgressFill, { width: index < storyIndex ? '100%' : index === storyIndex ? `${Math.round(progress * 100)}%` : '0%' }]} /></View>)}</View>
             <View style={styles.storyModalHeader}>
               <Avatar uri={selectedStory.author_id === social.userId ? avatarUrl : social.people.find((person) => person.userId === selectedStory.author_id)?.avatarUrl} name={storyAuthorName(selectedStory, social.people, social.userId, displayName)} size={38} />
               <View style={styles.storyModalByline}><Text style={styles.storyModalName}>{storyAuthorName(selectedStory, social.people, social.userId, displayName)}</Text><Text style={styles.storyModalTime}>{timeAgo(new Date(selectedStory.created_at).getTime())}</Text></View>
@@ -278,9 +321,22 @@ export function SocialActivityFeed({ children, showActivity = true }: { children
             </View>
             <View style={styles.storyModalBody}>
               {selectedStory.media_url && selectedStory.media_type === 'image' ? <Image source={{ uri: selectedStory.media_url }} contentFit="contain" style={styles.storyImage} accessibilityLabel="Story photo" /> : null}
-              {selectedStory.media_url && selectedStory.media_type === 'video' ? <VideoPlayer url={selectedStory.media_url} height={420} autoPlay label="Story video" /> : null}
+              {selectedStory.media_url && selectedStory.media_type === 'video' ? <VideoPlayer url={selectedStory.media_url} height={420} autoPlay label="Story video" onEnded={() => stepStory(1)} /> : null}
               {selectedStory.body ? <Text style={styles.storyText}>{selectedStory.body}</Text> : null}
+              {selectedStory.media_type === 'video' ? null : (
+                <View style={styles.tapZones}>
+                  <Pressable style={styles.tapPrev} onPressIn={holdStart} onPressOut={() => setPaused(false)} onPress={() => tap(-1)} accessibilityLabel="Previous story" />
+                  <Pressable style={styles.tapNext} onPressIn={holdStart} onPressOut={() => setPaused(false)} onPress={() => tap(1)} accessibilityLabel="Next story" />
+                </View>
+              )}
             </View>
+            {selectedStory.author_id === social.userId ? (
+              <Text style={styles.storyModalTime}>
+                {viewers.length
+                  ? `Seen by ${viewers.length} ${viewers.length === 1 ? 'person' : 'people'}: ${viewers.slice(0, 5).map((viewer) => viewer.username).join(', ')}${viewers.length > 5 ? '…' : ''}`
+                  : 'No views yet'}
+              </Text>
+            ) : null}
             <View style={styles.storyPager}><Button label="Previous" size="sm" variant="secondary" onPress={() => stepStory(-1)} disabled={storyIndex === 0} /><Text style={styles.storyModalTime}>{storyIndex + 1} of {storySequence.length}</Text><Button label={storyIndex + 1 === storySequence.length ? 'Done' : 'Next'} size="sm" onPress={() => stepStory(1)} /></View>
           </View>
         ) : null}
@@ -386,6 +442,9 @@ function createStyles(colors: ThemeColors) {
     storyModalTime: { ...Type.caption, color: colors.textSecondary },
     storyClose: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center', borderRadius: 19, backgroundColor: colors.surfaceMuted },
     storyModalBody: { flex: 1, minHeight: 220, justifyContent: 'center', alignItems: 'center', gap: 14, paddingVertical: 8 },
+    tapZones: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, flexDirection: 'row' },
+    tapPrev: { flex: 1 },
+    tapNext: { flex: 2 },
     storyImage: { width: '100%', flex: 1, maxHeight: '84%', borderRadius: 16, backgroundColor: colors.surfaceMuted },
     storyProgress: { width: '100%', flexDirection: 'row', gap: 4 },
     storyProgressTrack: { height: 3, flex: 1, overflow: 'hidden', borderRadius: 2, backgroundColor: colors.track },

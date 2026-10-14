@@ -417,6 +417,17 @@ service cloud.firestore {
         && request.resource.data.updatedAt == request.time;
     }
 
+    // Starred questions (new app): one document per question a learner starred. Owner only.
+    match /progress/{uid}/starred/{sid} {
+      allow read, delete: if request.auth != null && request.auth.uid == uid;
+      allow create: if request.auth != null && request.auth.uid == uid
+        && sid.size() <= 300
+        && request.resource.data.keys().hasOnly(['questionId', 'starredAt'])
+        && request.resource.data.questionId is string && request.resource.data.questionId.size() <= 200
+        && request.resource.data.starredAt == request.time;
+      allow update: if false;
+    }
+
     // Apex Coin gifts between friends (new app). Coins only — XP can never be
     // transferred. The sender pays and records the gift in ONE batch (the rule
     // checks the sender's balance really went down by the amount); the friend's

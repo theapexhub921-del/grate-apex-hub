@@ -8,7 +8,7 @@ import { poster, safeUrl } from '@/lib/media-urls';
 
 // Phones: shows the video's still frame; tapping plays it in the system player.
 // (The web version, video-player.web.tsx, plays it inside the page.)
-export function VideoPlayer({ url, height = 320, label = 'Video' }: { url: string; height?: number; autoPlay?: boolean; label?: string }) {
+export function VideoPlayer({ url, height = 320, label = 'Video' }: { url: string; height?: number; autoPlay?: boolean; label?: string; onEnded?: () => void }) {
   return (
     <Interactive onPress={() => void Linking.openURL(url).catch(() => {})} accessibilityRole="button" accessibilityLabel={`Play ${label.toLowerCase()}`} style={[styles.frame, { height }]}>
       {safeUrl(url) ? <Image source={{ uri: poster(url) }} contentFit="cover" style={StyleSheet.absoluteFill} /> : null}

@@ -147,7 +147,8 @@ export default function LegacyCourseScreen() {
               </View>
               <View style={styles.pathCard}>
                 {started && !isDone ? <Text style={styles.kicker}>IN PROGRESS</Text> : null}
-                <PressableCard onPress={() => router.push(routes.legacyLesson(lesson.id))} accessibilityLabel={`${lesson.title}. ${isDone ? 'Completed' : started ? 'In progress' : 'Not started'}`} style={styles.lessonCard}>
+                <Card style={styles.lessonCard}>
+                  <Interactive onPress={() => router.push(routes.legacyLesson(lesson.id))} accessibilityRole="button" accessibilityLabel={`${lesson.title}. ${isDone ? 'Completed' : started ? 'In progress' : 'Not started'}`} style={styles.lessonBody}>
                   <View style={styles.lessonTop}>
                     <View style={styles.lessonIcon}><Text style={styles.lessonEmoji}>{lesson.icon || course.icon}</Text></View>
                     <View style={styles.flex}>
@@ -160,24 +161,25 @@ export default function LegacyCourseScreen() {
                     <ProgressBar value={lesson.sections.length ? read / lesson.sections.length : 0} height={5} style={styles.flex} label={`${lesson.title} sections read`} />
                     <Text style={styles.meta}>{read}/{lesson.sections.length} sections</Text>
                   </View>
-                  <View style={styles.lessonFoot}>
-                    <Text style={styles.metaSoft}>{lesson.sections.length} sections · ~{lesson.minutes} min</Text>
-                    <View style={styles.chips}>
-                      {lesson.subject ? (
-                        <Interactive onPress={() => router.push(routes.lesson(lesson.id, { layer: 'learn' }))} accessibilityRole="button" accessibilityLabel={`Learn by answering: ${lesson.title}`} style={styles.answerChip}>
-                          <Icon name="challenge" size={14} color={colors.primaryText} />
-                          <Text style={styles.answerText}>Learn by answering</Text>
-                        </Interactive>
-                      ) : null}
-                      {questions > 0 ? (
-                        <Interactive onPress={() => router.push(routes.legacyPractice({ course: course.id, lesson: lesson.id }))} accessibilityRole="button" style={styles.practice}>
-                          <Icon name="edit" size={14} color={colors.accentText} />
-                          <Text style={styles.practiceText}>Practice · {questions} questions</Text>
-                        </Interactive>
-                      ) : null}
+                  </Interactive>
+                    <View style={styles.lessonFoot}>
+                      <Text style={styles.metaSoft}>{lesson.sections.length} sections · ~{lesson.minutes} min</Text>
+                      <View style={styles.chips}>
+                        {lesson.subject ? (
+                          <Interactive onPress={() => router.push(routes.lesson(lesson.id, { layer: 'learn' }))} accessibilityRole="button" accessibilityLabel={`Learn by answering: ${lesson.title}`} style={styles.answerChip}>
+                            <Icon name="challenge" size={14} color={colors.primaryText} />
+                            <Text style={styles.answerText}>Learn by answering</Text>
+                          </Interactive>
+                        ) : null}
+                        {questions > 0 ? (
+                          <Interactive onPress={() => router.push(routes.legacyPractice({ course: course.id, lesson: lesson.id }))} accessibilityRole="button" style={styles.practice}>
+                            <Icon name="edit" size={14} color={colors.accentText} />
+                            <Text style={styles.practiceText}>Practice · {questions} questions</Text>
+                          </Interactive>
+                        ) : null}
+                      </View>
                     </View>
-                  </View>
-                </PressableCard>
+                </Card>
               </View>
             </View>
             </View>
@@ -238,6 +240,7 @@ function createStyles(colors: ThemeColors) {
     pathCard: { flex: 1, minWidth: 0, paddingBottom: 14, gap: 6 },
     kicker: { ...Type.overline, color: colors.primaryText, marginTop: 4 },
     lessonCard: { gap: 10 },
+    lessonBody: { gap: 10 },
     lessonTop: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
     lessonIcon: { width: 48, height: 48, borderRadius: 14, backgroundColor: colors.surfaceMuted, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
     lessonEmoji: { fontSize: 24 },

@@ -583,6 +583,22 @@ export async function createCommunityStory(body: string, media?: CommunityMedia)
   return toStory(me.uid, ref.id, { username: me.username, media: uploaded, text: text || undefined, createdAt: Date.now() });
 }
 
+export type StoryViewer = { id: string; username: string; at: string | null };
+
+/** Records that I have seen someone's story (once; the rules refuse a second write). */
+export async function recordStoryView(story: CommunityStory) {
+  const me = await myUsername();
+  if (me.uid === story.author_id) return;
+  await setDoc(doc(db, 'users', story.author_id, 'stories', story.id, 'views', me.uid), { username: me.username, at: serverTimestamp() });
+}
+
+/** Who has seen one of my stories. */
+export async function listStoryViewers(storyId: string): Promise<StoryViewer[]> {
+  const me = await signedInUserId();
+  const snap = await getDocs(collection(db, 'users', me, 'stories', storyId, 'views'));
+  return snap.docs.map((item) => ({ id: item.id, username: String(item.data().username ?? 'Someone'), at: iso(item.data().at) }));
+}
+
 /** Removes my story from the app (the file stays in Cloudinary). */
 export async function deleteCommunityStory(storyId: string, mediaPath: string | null) {
   void mediaPath;
