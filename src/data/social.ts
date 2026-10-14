@@ -21,6 +21,7 @@ import { rankSuggestions, relationshipOf } from '@/data/friend-suggestions';
 import type { AppNotification } from '@/data/notifications';
 import { chooseUsername } from '@/lib/accounts';
 import { auth, db } from '@/lib/firebase';
+import { announceFollow } from '@/lib/web-push';
 
 export type Relationship = 'none' | 'friends' | 'outgoing' | 'incoming';
 
@@ -307,6 +308,8 @@ export async function sendFriendRequest(targetUserId: string) {
     await setDoc(doc(collection(db, 'users', targetUserId, 'notifications')), {
       type: 'follow', from: me, fromName: myName, read: false, createdAt: Date.now(),
     }).catch(() => undefined);
+    // And a push to their phone, if they have alerts on (best effort).
+    void announceFollow(targetUserId);
   }
   await refreshSocial();
 }

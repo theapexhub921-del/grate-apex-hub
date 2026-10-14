@@ -29,6 +29,9 @@ type Device = { endpoint: string; keys: { p256dh: string; auth: string }; at: nu
 /** Registers this browser for push and saves it on the account (call when alerts are on). */
 export async function registerWebPush() {
   if (!supported() || emulator || Notification.permission !== 'granted') return false;
+  // After a reload the signed-in user is restored a moment later; without waiting,
+  // the phone was never re-registered and a rotated push address stayed dead.
+  await auth.authStateReady();
   const uid = auth.currentUser?.uid;
   if (!uid) return false;
   try {
@@ -39,6 +42,8 @@ export async function registerWebPush() {
     if (!json.endpoint || !json.keys?.p256dh || !json.keys?.auth) return false;
     const ref = doc(db, 'users', uid);
     const existing = ((await getDoc(ref)).data()?.webPush ?? []) as Device[];
+    // Already saved as this account's newest device: nothing to write.
+    if (existing[0]?.endpoint === json.endpoint) return true;
     const devices = [{ endpoint: json.endpoint, keys: { p256dh: json.keys.p256dh, auth: json.keys.auth }, at: Date.now() }, ...existing.filter((device) => device?.endpoint && device.endpoint !== json.endpoint)].slice(0, MAX_DEVICES);
     await setDoc(ref, { webPush: devices }, { merge: true });
     return true;
@@ -76,6 +81,32 @@ export async function announceMessage(chatId: string, to: string | null | undefi
     const token = await auth.currentUser?.getIdToken();
     if (!token) return;
     await fetch(`${SERVER}/api/push`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` }, body: JSON.stringify({ chat: chatId, to }) });
+  } catch {
+    // the in-app notification still reaches them when they open the app
+  }
+}
+
+/** The same for a message just sent in a group (every other member's devices are alerted). */
+export async function announceGroupMessage(groupId: string) {
+  await announce({ kind: 'group', group: groupId });
+}
+
+/** The same for "started following you". */
+export async function announceFollow(to: string) {
+  await announce({ kind: 'follow', to });
+}
+
+/** A like or a comment/reply on someone's post: { kind: 'like', post, to } or { kind: 'comment', post, comment, to }. */
+export async function announceInteraction(body: Record<string, string>) {
+  await announce(body);
+}
+
+async function announce(body: Record<string, string>) {
+  if (emulator) return;
+  try {
+    const token = await auth.currentUser?.getIdToken();
+    if (!token) return;
+    await fetch(`${SERVER}/api/push`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` }, body: JSON.stringify(body) });
   } catch {
     // the in-app notification still reaches them when they open the app
   }

@@ -19,6 +19,7 @@ import {
 
 import { auth, db } from '@/lib/firebase';
 import { cleanMedia, optimized, safeUrl, uploadMedia, uploadVoiceNote } from '@/lib/media';
+import { announceInteraction } from '@/lib/web-push';
 
 export type CommunityMedia = {
   uri: string;
@@ -67,6 +68,8 @@ export type CommunityStory = {
   media_path: string | null;
   media_url?: string | null;
   media_type?: 'image' | 'video' | null;
+  /** Background colour of a text-only story (a #rrggbb value from STORY_BACKGROUNDS). */
+  bg?: string | null;
   created_at: string;
   expires_at: string;
 };
@@ -404,6 +407,18 @@ export async function deleteCommunityPost(postId: string) {
   await deleteDoc(doc(db, 'posts', postId));
 }
 
+/**
+ * Tells someone, in their bell (both apps) and on their phone, about what I just did.
+ * Best effort: the like or comment itself is what matters. `id` makes a repeat
+ * (like, unlike, like again) a single notification: the rules refuse the second write.
+ */
+async function notifyAccount(to: string, me: { uid: string; username: string }, type: 'like' | 'comment' | 'reply', text: string, push: Record<string, string>, id?: string) {
+  if (to === me.uid) return;
+  const ref = id ? doc(db, 'users', to, 'notifications', id) : doc(collection(db, 'users', to, 'notifications'));
+  const wrote = await setDoc(ref, { type, from: me.uid, fromName: me.username, ...(text ? { text: text.slice(0, 100) } : {}), read: false, createdAt: Date.now() }).then(() => true, () => false);
+  if (wrote) void announceInteraction({ ...push, to });
+}
+
 /** Like or unlike; returns whether the post is now liked. */
 export async function togglePostLike(postId: string): Promise<boolean> {
   const me = await myUsername();
@@ -414,6 +429,12 @@ export async function togglePostLike(postId: string): Promise<boolean> {
   else batch.set(likeRef, { username: me.username, createdAt: serverTimestamp() });
   batch.update(doc(db, 'posts', postId), { likeCount: increment(liked ? -1 : 1) });
   await batch.commit();
+  if (!liked) {
+    void getDoc(doc(db, 'posts', postId)).then((post) => {
+      const d = post.data();
+      if (typeof d?.authorUid === 'string') void notifyAccount(d.authorUid, me, 'like', String(d.title || d.body || ''), { kind: 'like', post: postId }, `like_${postId}_${me.uid}`);
+    }).catch(() => undefined);
+  }
   return !liked;
 }
 
@@ -429,9 +450,28 @@ export async function addPostComment(postId: string, body: string, reply?: { par
   const voiceMedia = voice ? [{ t: 'audio', url: await uploadVoiceNote(voice.blob), d: Math.max(1, Math.round(voice.seconds)) }] : null;
   const batch = writeBatch(db);
   const link = reply ? { parentId: reply.parentId.slice(0, 60), replyTo: reply.replyTo ? reply.replyTo.slice(0, 30) : null } : {};
-  batch.set(doc(collection(db, 'posts', postId, 'replies')), { body: text, authorUid: me.uid, authorName: me.username, createdAt: serverTimestamp(), ...link, ...(voiceMedia ? { media: voiceMedia } : {}) });
+  const commentRef = doc(collection(db, 'posts', postId, 'replies'));
+  batch.set(commentRef, { body: text, authorUid: me.uid, authorName: me.username, createdAt: serverTimestamp(), ...link, ...(voiceMedia ? { media: voiceMedia } : {}) });
   batch.update(doc(db, 'posts', postId), { replyCount: increment(1), lastActivityAt: serverTimestamp() });
   await batch.commit();
+  void notifyAboutComment(postId, commentRef.id, me, text || 'Sent a voice comment', reply?.parentId);
+}
+
+/** The person I replied to hears "replied to you"; the post's author hears "commented on your post". */
+async function notifyAboutComment(postId: string, commentId: string, me: { uid: string; username: string }, text: string, parentId?: string) {
+  try {
+    const [post, parent] = await Promise.all([
+      getDoc(doc(db, 'posts', postId)),
+      parentId ? getDoc(doc(db, 'posts', postId, 'replies', parentId)) : Promise.resolve(null),
+    ]);
+    const postAuthor = typeof post.data()?.authorUid === 'string' ? (post.data()!.authorUid as string) : null;
+    const parentAuthor = typeof parent?.data()?.authorUid === 'string' ? (parent!.data()!.authorUid as string) : null;
+    const push = { kind: 'comment', post: postId, comment: commentId };
+    if (parentAuthor && parentAuthor !== me.uid) await notifyAccount(parentAuthor, me, 'reply', text, push);
+    if (postAuthor && postAuthor !== me.uid && postAuthor !== parentAuthor) await notifyAccount(postAuthor, me, 'comment', text, push);
+  } catch {
+    // the comment is posted; the alert is a bonus
+  }
 }
 
 /** Remove a comment (its writer, or the post's author, under the shared rules). */
@@ -521,6 +561,10 @@ function toGroup(id: string, d: Record<string, any>, me: string | null): StudyGr
 // Cloudinary (an unsigned preset can't delete).
 
 export const STORY_MS = 24 * 60 * 60 * 1000;
+
+/** Background colours a text-only story can have (the first is the default). */
+export const STORY_BACKGROUNDS = ['#4F46E5', '#0F766E', '#BE185D', '#B45309', '#1D4ED8', '#111827'] as const;
+const isStoryBg = (value: unknown): value is string => typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value);
 const storyTime = (value: any) => (value?.toMillis ? value.toMillis() : typeof value === 'number' ? value : 0);
 
 function toStory(uid: string, id: string, d: Record<string, any>): CommunityStory {
@@ -534,6 +578,7 @@ function toStory(uid: string, id: string, d: Record<string, any>): CommunityStor
     media_path: null,
     media_url: media ? (media.t === 'image' ? optimized(media.url) : media.url) : null,
     media_type: media ? (media.t === 'video' ? 'video' : 'image') : null,
+    bg: isStoryBg(d.bg) ? d.bg : null,
     created_at: new Date(at).toISOString(),
     expires_at: new Date(at + STORY_MS).toISOString(),
   };
@@ -565,7 +610,7 @@ export async function listLiveStories(): Promise<CommunityStory[]> {
   return lists.flat().sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at));
 }
 
-export async function createCommunityStory(body: string, media?: CommunityMedia): Promise<CommunityStory> {
+export async function createCommunityStory(body: string, media?: CommunityMedia, bg?: string): Promise<CommunityStory> {
   const text = body.trim();
   if (!media && text.length < 1) throw new Error('Add text, a photo or a video.');
   if (text.length > 200) throw new Error('Story text can be up to 200 characters.');
@@ -573,14 +618,17 @@ export async function createCommunityStory(body: string, media?: CommunityMedia)
   const uploaded = media ? cleanMedia([await uploadMedia(media)])[0] : null;
   if (media && !uploaded) throw new Error('Upload failed.');
   const ref = doc(collection(db, 'users', me.uid, 'stories'));
+  // Only a text-only story has a coloured background (the rules allow a `bg` field).
+  const background = !uploaded && isStoryBg(bg) ? bg : undefined;
   await setDoc(ref, {
     username: me.username,
     kind: uploaded ? 'media' : 'text',
     ...(uploaded ? { media: uploaded } : {}),
     ...(text ? { text } : {}),
+    ...(background ? { bg: background } : {}),
     createdAt: serverTimestamp(),
   });
-  return toStory(me.uid, ref.id, { username: me.username, media: uploaded, text: text || undefined, createdAt: Date.now() });
+  return toStory(me.uid, ref.id, { username: me.username, media: uploaded, text: text || undefined, bg: background, createdAt: Date.now() });
 }
 
 export type StoryViewer = { id: string; username: string; at: string | null };

@@ -167,6 +167,15 @@ Every lesson has an "Ask AI" tab (questions answered from the lesson's own text)
 
 * Providers, tried in order: any OpenAI-compatible service (`CHAT_API_KEY`, optional `CHAT_API_BASE` default Groq, optional `CHAT_MODEL`), then Gemini (`GEMINI_API_KEY`, optional `GEMINI_CHAT_MODEL`). If the first is rate-limited or down, the next answers. Set at least one key in Vercel, then redeploy.
 
+## Stories (Instagram-style)
+
+Stories live in `users/{uid}/stories` (rules already allow them; nothing to deploy). The data is in `src/data/community.ts` (`listLiveStories`, `createCommunityStory`, `STORY_BACKGROUNDS`), the strip of rings and the composer are in `src/components/social/supabase-social-feed.tsx`, and the full-screen viewer is `src/components/social/story-viewer.tsx`.
+
+* Tap right / left for next / previous, hold to pause, swipe sideways to change person, swipe down to close; it carries on to the next person; arrow keys, Space and Esc work on the web.
+* A photo's timer waits until it has loaded. Web videos drive their own progress bar; on phones a video shows its still frame for 15 seconds.
+* Text-only stories can have one of six background colours (saved as `bg`).
+* "+" on your own ring always adds another story.
+
 ## Progress system
 
 GRATEAPEX has persistent progress using AsyncStorage.

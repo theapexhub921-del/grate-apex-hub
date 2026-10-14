@@ -29,7 +29,7 @@ import { personName, useSocial } from '@/data/social';
 import { useAuth } from '@/hooks/use-auth';
 import { useTheme, useThemedStyles } from '@/hooks/use-theme';
 import { uploadMedia, uploadVoiceNote, type Media } from '@/lib/media';
-import { announceMessage } from '@/lib/web-push';
+import { announceGroupMessage, announceMessage } from '@/lib/web-push';
 
 const EMOJI = ['😀', '😂', '🥹', '😍', '😎', '🤔', '😴', '😭', '🔥', '❤️', '👍', '🙏', '🎉', '📚', '🧠', '💯', '✅', '🩺'];
 const STATUS_LABEL: Record<MessageStatus, string> = { sent: 'Sent', delivered: 'Delivered', read: 'Seen' };
@@ -145,7 +145,7 @@ export function ChatThread({ friendId = '', groupId, name, onBack }: { friendId?
     setBusy(true);
     try {
       const url = await uploadVoiceNote(note.blob);
-      if (isGroup) await sendGroupMessage(chatId, '', { audio: { url, seconds: note.seconds } });
+      if (isGroup) { await sendGroupMessage(chatId, '', { audio: { url, seconds: note.seconds } }); void announceGroupMessage(chatId); }
       else { await sendVoiceNote(chatId, url, note.seconds); void announceMessage(chatId, friendId); }
       await refresh(chatId);
     } catch (caught) {
@@ -161,7 +161,7 @@ export function ChatThread({ friendId = '', groupId, name, onBack }: { friendId?
     setBusy(true);
     setNotice(null);
     try {
-      if (isGroup) await sendGroupMessage(chatId, draft, { reply, ...extras });
+      if (isGroup) { await sendGroupMessage(chatId, draft, { reply, ...extras }); void announceGroupMessage(chatId); }
       else { await sendChatMessage(chatId, draft, { reply, ...extras }); void announceMessage(chatId, friendId); }
       setDraft('');
       setReply(null);
