@@ -83,7 +83,9 @@ export default function LegacyPracticeScreen() {
       // The pre-test's questions are left out of the post-test.
       const before = practice.kind === 'prepost' && practice.phase === 'post' ? new Set((await loadPrePost(course.id)).pre?.ids ?? []) : null;
       const take = (size: number) => (settings.count === Infinity ? size : Math.min(settings.count, size));
-      if (course.subject) {
+      // HB2 with a past-question set from the supplementary bank: skip to the legacy bank path.
+      const isHb2SupplSet = course.subject && setId && !hb2Sets(course.id).find((s) => s.id === setId);
+      if (course.subject && !isHb2SupplSet) {
         // HB2: this app's questions (their ids feed spaced review).
         const sets = hb2Sets(course.id);
         const all = sets.flatMap((item) => item.questions);

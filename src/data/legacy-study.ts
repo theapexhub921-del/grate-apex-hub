@@ -173,7 +173,14 @@ export function loadLegacyBank(courseId: string): Promise<LegacyBank> {
 
 /** A course's question sets for the course page (name and size). */
 export async function loadCourseSets(courseId: string): Promise<{ id: string; name: string; count: number }[]> {
-  if (hb2Course(courseId)) return hb2Sets(courseId).map((set) => ({ id: set.id, name: set.name, count: set.questions.length }));
+  if (hb2Course(courseId)) {
+    const topicSets = hb2Sets(courseId).map((set) => ({ id: set.id, name: set.name, count: set.questions.length }));
+    // Also load the supplementary past-question bank for this HB2 course (e.g. hb2-biochemistry.json).
+    const extraSets = await loadLegacyBank(courseId)
+      .then((bank) => bank.sets.map((set) => ({ id: set.id, name: set.name, count: set.questions.length })))
+      .catch(() => [] as { id: string; name: string; count: number }[]);
+    return [...topicSets, ...extraSets];
+  }
   return (await loadLegacyBank(courseId)).sets.map((set) => ({ id: set.id, name: set.name, count: set.questions.length }));
 }
 
