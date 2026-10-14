@@ -10,7 +10,7 @@ import { Platform } from 'react-native';
 
 import { auth, db } from '@/lib/firebase';
 
-export const VAPID_PUBLIC_KEY = 'BEktVvLyF3GzwpF9Yln_JEXbCp9G0_aAehyiqE24_mAANIM9bG9fQ_M6qV6iKqp40ZRFEknZbNTJyFpwGWOjVjY';
+export const VAPID_PUBLIC_KEY = 'BEnNFxMfYmtCrqEwBrzOE3_Nx6NIcOMYw4xQROpCQlYPtRZksKskhTvbiuL1mqn3Mj5N3JjnpksSkXiE7G4BJBM';
 
 const MAX_DEVICES = 5;
 const emulator = process.env.EXPO_PUBLIC_FIREBASE_EMULATOR === '1';
@@ -40,7 +40,20 @@ export async function registerWebPush() {
   try {
     const registration = await Promise.race([navigator.serviceWorker.ready, new Promise<null>((resolve) => setTimeout(() => resolve(null), 5000))]);
     if (!registration) return false;
-    const subscription = (await registration.pushManager.getSubscription()) ?? (await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(VAPID_PUBLIC_KEY) }));
+    const serverKey = keyBytes(VAPID_PUBLIC_KEY);
+    let subscription = await registration.pushManager.getSubscription();
+    // A subscription made with an older push key can never be reached by the server's current key,
+    // so replace it quietly (learners do not have to turn alerts off and on again).
+    const savedKey = subscription?.options?.applicationServerKey;
+    if (subscription && savedKey) {
+      const saved = new Uint8Array(savedKey);
+      const same = saved.length === serverKey.length && saved.every((byte, index) => byte === serverKey[index]);
+      if (!same) {
+        await subscription.unsubscribe();
+        subscription = null;
+      }
+    }
+    subscription ??= await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: serverKey });
     const json = subscription.toJSON() as { endpoint?: string; keys?: { p256dh?: string; auth?: string } };
     if (!json.endpoint || !json.keys?.p256dh || !json.keys?.auth) return false;
     const ref = doc(db, 'users', uid);
@@ -65,7 +78,7 @@ export async function unregisterWebPush() {
     const subscription = await registration.pushManager.getSubscription();
     if (!subscription) return;
     const endpoint = subscription.endpoint;
-    await subscription.unsubscribe().catch(() => {});
+    await subscription.unsubscribe().catch(() => { });
     if (!uid) return;
     const ref = doc(db, 'users', uid);
     const existing = ((await getDoc(ref)).data()?.webPush ?? []) as Device[];

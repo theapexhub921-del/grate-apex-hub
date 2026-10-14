@@ -217,7 +217,10 @@ export default async function handler(req, res) {
   const privateKey = process.env.VAPID_PRIVATE_KEY;
   if (!publicKey || !privateKey) return res.status(503).json({ error: 'Push notifications are not set up.' });
   const account = serviceAccount();
-  if (!account) return res.status(503).json({ error: 'Set FIREBASE_SERVICE_ACCOUNT in Vercel first.' });
+  if (!account) {
+    const raw = process.env.FIREBASE_SERVICE_ACCOUNT;
+    return res.status(503).json({ error: raw ? `FIREBASE_SERVICE_ACCOUNT is set (${raw.length} characters) but could not be read as a service account.` : 'Set FIREBASE_SERVICE_ACCOUNT in Vercel first (the running deployment does not have it).' });
+  }
 
   const now = Date.now();
   const dry = req.query?.dry === '1';
