@@ -1,12 +1,16 @@
-const CACHE_NAME = 'grateapex-pwa-v6';
+const CACHE_NAME = 'grateapex-pwa-v7';
 const CACHE_PREFIX = 'grateapex-pwa-';
 const APP_SHELL = ['/', '/manifest.webmanifest', '/icons/grateapex-192.png', '/icons/grateapex-512.png'];
 const CACHEABLE_DESTINATIONS = new Set(['font', 'image', 'script', 'style']);
 
 self.addEventListener('install', (event) => {
   event.waitUntil((async () => {
-    const cache = await caches.open(CACHE_NAME);
-    await cache.addAll(APP_SHELL);
+    // One missing file must never stop the worker from installing (a failed install
+    // means no push at all), so each file is cached on its own and failures are ignored.
+    try {
+      const cache = await caches.open(CACHE_NAME);
+      await Promise.all(APP_SHELL.map((url) => cache.add(url).catch(() => undefined)));
+    } catch { /* caching is optional */ }
     await self.skipWaiting();
   })());
 });

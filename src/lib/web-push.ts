@@ -35,6 +35,7 @@ const timeZoneOffset = () => new Date().getTimezoneOffset();
 /** Registers this browser for push and saves it on the account (call when alerts are on). */
 export async function registerWebPush() {
   webPushError = null;
+  let workerProblem = '';
   if (!supported() || emulator || Notification.permission !== 'granted') return false;
   // After a reload the signed-in user is restored a moment later; without waiting,
   // the phone was never re-registered and a rotated push address stayed dead.
@@ -42,8 +43,10 @@ export async function registerWebPush() {
   const uid = auth.currentUser?.uid;
   if (!uid) return false;
   try {
-    const registration = await Promise.race([navigator.serviceWorker.ready, new Promise<null>((resolve) => setTimeout(() => resolve(null), 5000))]);
-    if (!registration) { webPushError = 'The background service is not ready yet. Close and reopen the app, then try again.'; return false; }
+    // Make sure the worker is registered (harmless if the page already did it), then wait for it to be active.
+    await navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).catch((error) => { workerProblem = error instanceof Error ? error.message : String(error); });
+    const registration = await Promise.race([navigator.serviceWorker.ready, new Promise<null>((resolve) => setTimeout(() => resolve(null), 20000))]);
+    if (!registration) { webPushError = `The background service is not ready yet${workerProblem ? ` (${workerProblem})` : ''}. Close and reopen the app, then try again.`; return false; }
     const serverKey = keyBytes(VAPID_PUBLIC_KEY);
     let subscription = await registration.pushManager.getSubscription();
     // A subscription made with an older push key can never be reached by the server's current key,
