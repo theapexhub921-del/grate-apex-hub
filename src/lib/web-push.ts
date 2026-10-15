@@ -10,7 +10,7 @@ import { Platform } from 'react-native';
 
 import { auth, db } from '@/lib/firebase';
 
-export const VAPID_PUBLIC_KEY = 'BEnNFxMfYmtCrqEwBrzOE3_Nx6NIcOMYw4xQROpCQlYPtRZksKskhTvbiuL1mqn3Mj5N3JjnpksSkXiE7G4BJBM';
+export const VAPID_PUBLIC_KEY = 'BCk5aBexMixVfqDa-M2BoJzVIhYj2lQwkGfVFvu9977rvGTmrJ0A96VGT9V8HgOSjDa4Qj7J6mG-96n9L-uQ4HQ';
 
 const MAX_DEVICES = 5;
 const emulator = process.env.EXPO_PUBLIC_FIREBASE_EMULATOR === '1';
