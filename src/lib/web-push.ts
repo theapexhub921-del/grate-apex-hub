@@ -8,6 +8,7 @@
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { Platform } from 'react-native';
 
+import { readStreakReminderHour } from '@/data/settings';
 import { auth, db } from '@/lib/firebase';
 
 export const VAPID_PUBLIC_KEY = 'BCk5aBexMixVfqDa-M2BoJzVIhYj2lQwkGfVFvu9977rvGTmrJ0A96VGT9V8HgOSjDa4Qj7J6mG-96n9L-uQ4HQ';
@@ -27,7 +28,7 @@ function keyBytes(base64: string) {
 /** Why the last registerWebPush() failed (null when it worked or was skipped). */
 export let webPushError: string | null = null;
 
-type Device = { endpoint: string; keys: { p256dh: string; auth: string }; at: number; tz?: number };
+type Device = { endpoint: string; keys: { p256dh: string; auth: string }; at: number; tz?: number; hour?: number };
 
 /** Minutes behind UTC (e.g. 0 in UTC, -60 in UTC+1): lets the server send streak reminders at a sensible local hour. */
 const timeZoneOffset = () => new Date().getTimezoneOffset();
@@ -66,8 +67,9 @@ export async function registerWebPush() {
     const ref = doc(db, 'users', uid);
     const existing = ((await getDoc(ref)).data()?.webPush ?? []) as Device[];
     // Already saved as this account's newest device: nothing to write.
-    if (existing[0]?.endpoint === json.endpoint && existing[0]?.tz === timeZoneOffset()) return true;
-    const devices = [{ endpoint: json.endpoint, keys: { p256dh: json.keys.p256dh, auth: json.keys.auth }, at: Date.now(), tz: timeZoneOffset() }, ...existing.filter((device) => device?.endpoint && device.endpoint !== json.endpoint)].slice(0, MAX_DEVICES);
+    const hour = await readStreakReminderHour();
+    if (existing[0]?.endpoint === json.endpoint && existing[0]?.tz === timeZoneOffset() && (existing[0]?.hour ?? null) === hour) return true;
+    const devices = [{ endpoint: json.endpoint, keys: { p256dh: json.keys.p256dh, auth: json.keys.auth }, at: Date.now(), tz: timeZoneOffset(), ...(hour === null ? {} : { hour }) }, ...existing.filter((device) => device?.endpoint && device.endpoint !== json.endpoint)].slice(0, MAX_DEVICES);
     await setDoc(ref, { webPush: devices }, { merge: true });
     return true;
   } catch (error) {

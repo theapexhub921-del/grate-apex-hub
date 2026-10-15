@@ -64,6 +64,8 @@ type SettingsData = {
   /** Show and send read receipts (blue ticks) in messages. */
   readReceipts: boolean;
   answerBounceEnabled: boolean;
+  /** Hour of the day (0-23, this device's time) for the streak reminder; null = the default evening window. */
+  streakReminderHour: number | null;
   /** The original app's theme (The Originals; Hybrid when its family is 'originals'). */
   legacyTheme: string;
   /**
@@ -95,6 +97,7 @@ const defaultSettings: SettingsData = {
   shareOnlineStatus: false,
   readReceipts: true,
   answerBounceEnabled: true,
+  streakReminderHour: null,
   legacyTheme: 'dark', // the original app's default
   themeFamily: null,
 };
@@ -190,6 +193,7 @@ async function loadSettings() {
       shareOnlineStatus: data?.shareOnlineStatus === true,
       readReceipts: data?.readReceipts !== false,
       answerBounceEnabled: data?.answerBounceEnabled !== false,
+      streakReminderHour: Number.isInteger(data?.streakReminderHour) && data.streakReminderHour >= 0 && data.streakReminderHour <= 23 ? data.streakReminderHour : null,
       legacyTheme: isLegacyThemeId(data?.legacyTheme) ? data.legacyTheme : defaultSettings.legacyTheme,
       // (Before 2026-10-10 only Hybrid had a family: 'originals' meant legacy.)
       // A brand-new install starts on Apex Legacy, one of the four free themes;
@@ -409,6 +413,23 @@ export function usePushNotificationsPreference(): boolean {
 export async function setPushNotificationsPreference(enabled: boolean) {
   await ensureSettingsLoaded();
   settings = { ...settings, pushNotificationsEnabled: enabled };
+  notify();
+  await saveSettings();
+}
+
+/** The hour (0-23) the learner wants the streak reminder, or null for the default evening window. */
+export function useStreakReminderHour(): number | null {
+  return useSyncExternalStore(subscribe, () => settings.streakReminderHour, () => defaultSettings.streakReminderHour);
+}
+
+export async function readStreakReminderHour(): Promise<number | null> {
+  await ensureSettingsLoaded();
+  return settings.streakReminderHour;
+}
+
+export async function setStreakReminderHour(hour: number | null) {
+  await ensureSettingsLoaded();
+  settings = { ...settings, streakReminderHour: hour };
   notify();
   await saveSettings();
 }

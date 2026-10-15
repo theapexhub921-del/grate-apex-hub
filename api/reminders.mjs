@@ -140,6 +140,14 @@ async function send(devices, payload) {
   return results.filter((result) => result.status === 'fulfilled').length;
 }
 
+async function markStreakPush(token, uid, key) {
+  try {
+    await api(token, `/users/${uid}?updateMask.fieldPaths=streakPushDay`, { method: 'PATCH', body: JSON.stringify({ fields: { streakPushDay: { stringValue: key } } }) });
+  } catch {
+    // worst case the learner is reminded again on the next run
+  }
+}
+
 /** Sends in small groups so one slow push service cannot stall the run. */
 async function sendAll(jobs, dry) {
   let learners = 0;
@@ -148,7 +156,10 @@ async function sendAll(jobs, dry) {
     const group = jobs.slice(i, i + 25);
     learners += group.length;
     if (dry) continue;
-    pushes += (await Promise.all(group.map((job) => send(job.devices, job.payload)))).reduce((total, count) => total + count, 0);
+    const counts = await Promise.all(group.map((job) => send(job.devices, job.payload)));
+    pushes += counts.reduce((total, count) => total + count, 0);
+    // Remember that today's reminder went out, so a later run the same day does not send it again.
+    await Promise.all(group.map((job, index) => (job.mark && counts[index] > 0 ? markStreakPush(job.mark.token, job.mark.uid, job.mark.key) : null)));
   }
   return { learners, pushes };
 }
@@ -162,7 +173,7 @@ async function streakJob(token, now) {
   const candidates = progress
     .map((doc) => ({ id: idOf(doc), ...fieldsOf(doc) }))
     .filter((item) => item.streak > 0 && typeof item.lastActivityDate === 'string' && item.lastActivityDate >= since);
-  const users = await getMany(token, 'users', candidates.map((item) => item.id), ['webPush', 'preferences.notification_preferences']);
+  const users = await getMany(token, 'users', candidates.map((item) => item.id), ['webPush', 'preferences.notification_preferences', 'streakPushDay']);
   const jobs = [];
   for (const item of candidates) {
     const user = users.get(item.id);
@@ -170,9 +181,11 @@ async function streakJob(token, now) {
     if (!devices.length) continue;
     const tz = typeof devices[0].tz === 'number' ? devices[0].tz : 0;
     const { key, hour } = localDay(now, tz);
-    if (!inReminderHours(hour) || !streakAtRisk(item.streak, item.lastActivityDate, now, tz)) continue;
+    const wanted = typeof devices[0].hour === 'number' ? devices[0].hour : undefined; // the learner's chosen hour, if any
+    if (!inReminderHours(hour, wanted) || !streakAtRisk(item.streak, item.lastActivityDate, now, tz) || user?.streakPushDay === key) continue;
     jobs.push({
       devices,
+      mark: { token, uid: item.id, key },
       payload: {
         title: `Your ${item.streak}-day streak is at risk`,
         body: 'Complete a lesson today to keep it going.',

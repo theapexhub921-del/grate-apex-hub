@@ -31,6 +31,8 @@ import {
   usePageZoomPreference,
   useAppearancePreference,
   usePushNotificationsPreference,
+  useStreakReminderHour,
+  setStreakReminderHour,
   useAnswerBouncePreference,
   useNotificationPreferences,
   setFontSizePreference,
@@ -60,9 +62,10 @@ import { routes } from '@/lib/routes';
 import { signOut } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { enableDeviceNotifications } from '@/lib/device-notifications';
-import { sendTestPush, unregisterWebPush } from '@/lib/web-push';
+import { registerWebPush, sendTestPush, unregisterWebPush } from '@/lib/web-push';
 
 const HOME_HREF = '/' as Href;
+const formatHour = (hour: number) => `${hour % 12 === 0 ? 12 : hour % 12}:00 ${hour < 12 ? 'AM' : 'PM'}`;
 type ThemeSwatchScheme = Exclude<AppearancePreference, 'system'>;
 
 const navigationOptions: { value: TabBarMode; label: string; description: string }[] = [
@@ -107,6 +110,7 @@ export default function SettingsScreen() {
   const fontSize = useFontSizePreference();
   const privacy = usePrivacyPreferences();
   const pushNotificationsEnabled = usePushNotificationsPreference();
+  const streakReminderHour = useStreakReminderHour();
   const answerBounceEnabled = useAnswerBouncePreference();
   const notificationPreferences = useNotificationPreferences();
   const tabBarMode = useTabBarMode();
@@ -202,6 +206,11 @@ export default function SettingsScreen() {
     } finally {
       setResettingProgress(false);
     }
+  }
+
+  async function changeStreakHour(hour: number | null) {
+    await setStreakReminderHour(hour);
+    void registerWebPush(); // saves the new hour with this device so the server can use it
   }
 
   async function updatePushNotifications(enabled: boolean) {
@@ -410,6 +419,17 @@ export default function SettingsScreen() {
             />
           </View>
         ))}
+        <View style={styles.optionRow}>
+          <View style={styles.flex}>
+            <Text style={styles.optionLabel}>Streak reminder time</Text>
+            <Text style={styles.optionDescription}>
+              {streakReminderHour === null ? 'Default: in the evening (3 PM to 9 PM).' : `Around ${formatHour(streakReminderHour)} on days your streak is at risk.`}
+            </Text>
+          </View>
+          <Button label="−" variant="secondary" size="sm" onPress={() => void changeStreakHour(((streakReminderHour ?? 18) + 23) % 24)} />
+          <Button label="+" variant="secondary" size="sm" onPress={() => void changeStreakHour(((streakReminderHour ?? 17) + 1) % 24)} />
+          {streakReminderHour !== null ? <Button label="Default" variant="ghost" size="sm" onPress={() => void changeStreakHour(null)} /> : null}
+        </View>
       </SettingsSection>
 
       <SettingsSection title="Legal">

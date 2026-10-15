@@ -87,7 +87,16 @@ export function streakAtRisk(streak, lastActivityDate, now, tzOffsetMinutes = 0)
 
 /** Streak reminders go out in the learner's late afternoon or evening, never at night. */
 export const REMINDER_HOURS = { from: 15, to: 21 };
-export const inReminderHours = (hour) => hour >= REMINDER_HOURS.from && hour <= REMINDER_HOURS.to;
+/**
+ * A learner can pick their own hour (0-23, their local time). The reminder then goes out from that hour
+ * until five hours later, so a run that is a little late (or only one run a day) still catches them.
+ * Without a chosen hour the usual 15:00-21:00 window applies.
+ */
+export const reminderWindow = (wanted) => (Number.isInteger(wanted) && wanted >= 0 && wanted <= 23 ? { from: wanted, to: Math.min(23, wanted + 5) } : REMINDER_HOURS);
+export const inReminderHours = (hour, wanted) => {
+  const window = reminderWindow(wanted);
+  return hour >= window.from && hour <= window.to;
+};
 
 // ── Leagues ───────────────────────────────────────────────────────────
 

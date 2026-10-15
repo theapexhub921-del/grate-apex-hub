@@ -145,3 +145,13 @@ test('only real browser push services are accepted', () => {
   assert.equal(pushAddress('http://fcm.googleapis.com/x'), false);
   assert.equal(pushAddress('not a url'), false);
 });
+
+test('a learner-chosen reminder hour opens a five-hour window; no choice keeps 15:00-21:00', async () => {
+  const { inReminderHours } = await import('../api/_push-logic.mjs');
+  assert.equal(inReminderHours(10), false);
+  assert.equal(inReminderHours(16), true);
+  assert.equal(inReminderHours(9, 8), true);
+  assert.equal(inReminderHours(7, 8), false);
+  assert.equal(inReminderHours(14, 8), false);
+  assert.equal(inReminderHours(23, 22), true);
+});
