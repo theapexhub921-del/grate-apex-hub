@@ -98,6 +98,17 @@ export const inReminderHours = (hour, wanted) => {
   return hour >= window.from && hour <= window.to;
 };
 
+// ── Review reminders ──────────────────────────────────────────────────
+
+/** A review reminder is only worth sending when at least this many topics are waiting. */
+export const REVIEW_MIN_DUE = 5;
+
+/** How many entries of a learner's review schedule (progress/{uid}.reviewSchedule) are due at `now`. */
+export function reviewDueCount(items, now) {
+  if (!Array.isArray(items)) return 0;
+  return items.filter((item) => item && typeof item.dueAt === 'number' && item.dueAt <= now).length;
+}
+
 // ── Leagues ───────────────────────────────────────────────────────────
 
 export const LEAGUE_NAMES = ['Bronze', 'Silver', 'Gold', 'Sapphire', 'Ruby', 'Emerald', 'Amethyst', 'Pearl', 'Obsidian', 'Diamond'];

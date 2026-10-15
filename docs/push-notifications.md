@@ -10,6 +10,7 @@ honour each learner's switches in Settings → Notifications.
 | **Battle challenge** ("@x challenged you") | `api/push.mjs`, `kind: 'battle'` | when the challenge is sent | Battles |
 | **Battle result** (won / lost / drawn / declined / "played your battle") | `api/push.mjs`, `kind: 'battle-result'` | when the other player finishes or declines | Battles |
 | **Streak at risk** ("Your 5-day streak is at risk") | `api/reminders.mjs` (Vercel Cron) | every day, in the learner's 15:00–21:00 | Streak reminders |
+| **Review due** ("12 topics are ready to review") | `api/reminders.mjs` (Vercel Cron) | daily, 15:00–21:00 local, when at least 5 topics are due, they have not studied today, no streak reminder is needed, and not two days in a row | Learning reminders |
 | **League standing** (promotion zone / close to dropping / XP to promotion) | `api/reminders.mjs` (Vercel Cron) | Sundays, same run | League |
 
 `api/push.mjs` acts for a signed-in learner and checks everything with that learner's own token.

@@ -91,3 +91,16 @@ export async function showDeviceNotification(item: Pick<AppNotification, 'id' | 
     // remains available even if a browser blocks the device-level alert.
   }
 }
+
+/** Clears the number on the app icon and the waiting alerts (call when the app is opened or comes back to the screen). */
+export async function clearAppBadge() {
+  if (Platform.OS !== 'web' || typeof navigator === 'undefined') return;
+  try {
+    await (navigator as Navigator & { clearAppBadge?: () => Promise<void> }).clearAppBadge?.();
+    const registration = await readyWorker(1500);
+    const waiting = (await registration?.getNotifications()) ?? [];
+    waiting.forEach((item) => item.close());
+  } catch {
+    // badges are optional
+  }
+}

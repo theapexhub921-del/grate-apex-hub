@@ -1,6 +1,6 @@
 // GET /api/reminders   (run once a day by Vercel Cron, see vercel.json)
 //   Authorization: Bearer <CRON_SECRET>      (Vercel adds this itself when CRON_SECRET is set)
-//   ?job=streak | league   run only one job (for testing); default: streak every day, league on Sundays
+//   ?job=streak | review | league   run only one job (for testing); default: streak every day, league on Sundays
 //   ?dry=1                 count who WOULD be alerted, send nothing
 //
 // Two scheduled pushes that no learner's app can send for itself, because the
@@ -19,7 +19,7 @@
 import { importPKCS8, SignJWT } from 'jose';
 import webpush from 'web-push';
 
-import { inReminderHours, leagueNudge, leagueWeek, localDay, pushAddress, streakAtRisk } from './_push-logic.mjs';
+import { inReminderHours, leagueNudge, leagueWeek, localDay, pushAddress, REVIEW_MIN_DUE, reviewDueCount, streakAtRisk } from './_push-logic.mjs';
 
 const PROJECT = 'grate-apex';
 const DB = `projects/${PROJECT}/databases/(default)/documents`;
@@ -140,9 +140,9 @@ async function send(devices, payload) {
   return results.filter((result) => result.status === 'fulfilled').length;
 }
 
-async function markStreakPush(token, uid, key) {
+async function markPush(token, uid, field, key) {
   try {
-    await api(token, `/users/${uid}?updateMask.fieldPaths=streakPushDay`, { method: 'PATCH', body: JSON.stringify({ fields: { streakPushDay: { stringValue: key } } }) });
+    await api(token, `/users/${uid}?updateMask.fieldPaths=${field}`, { method: 'PATCH', body: JSON.stringify({ fields: { [field]: { stringValue: key } } }) });
   } catch {
     // worst case the learner is reminded again on the next run
   }
@@ -159,7 +159,7 @@ async function sendAll(jobs, dry) {
     const counts = await Promise.all(group.map((job) => send(job.devices, job.payload)));
     pushes += counts.reduce((total, count) => total + count, 0);
     // Remember that today's reminder went out, so a later run the same day does not send it again.
-    await Promise.all(group.map((job, index) => (job.mark && counts[index] > 0 ? markStreakPush(job.mark.token, job.mark.uid, job.mark.key) : null)));
+    await Promise.all(group.map((job, index) => (job.mark && counts[index] > 0 ? markPush(job.mark.token, job.mark.uid, job.mark.field ?? 'streakPushDay', job.mark.key) : null)));
   }
   return { learners, pushes };
 }
@@ -195,6 +195,47 @@ async function streakJob(token, now) {
     });
   }
   return { candidates: candidates.length, jobs };
+}
+
+/** "N topics are ready to review": from the review schedule the app keeps in progress/{uid}.reviewSchedule. */
+async function reviewJob(token, now) {
+  const progress = await listAll(token, 'progress', ['streak', 'lastActivityDate']);
+  // Only learners active in the last two weeks (an inactive learner's schedule is just old news).
+  const since = localDay(now - 14 * 86_400_000, 0).key;
+  const active = progress
+    .map((doc) => ({ id: idOf(doc), ...fieldsOf(doc) }))
+    .filter((item) => typeof item.lastActivityDate === 'string' && item.lastActivityDate >= since);
+  const ids = active.map((item) => item.id);
+  const [schedules, users] = await Promise.all([
+    getMany(token, 'progress', ids, ['reviewSchedule']),
+    getMany(token, 'users', ids, ['webPush', 'preferences.notification_preferences', 'reviewPushDay']),
+  ]);
+  const jobs = [];
+  for (const item of active) {
+    const user = users.get(item.id);
+    const devices = devicesFor(user, 'learningReminders');
+    if (!devices.length) continue;
+    const tz = typeof devices[0].tz === 'number' ? devices[0].tz : 0;
+    const { key, hour } = localDay(now, tz);
+    if (!inReminderHours(hour)) continue;
+    // Not when they already studied today, not when the streak reminder is the one they need,
+    // and at most one review reminder every other day.
+    if (item.lastActivityDate === key || streakAtRisk(item.streak, item.lastActivityDate, now, tz)) continue;
+    if (user?.reviewPushDay === key || user?.reviewPushDay === localDay(now - 86_400_000, tz).key) continue;
+    const due = reviewDueCount(schedules.get(item.id)?.reviewSchedule, now);
+    if (due < REVIEW_MIN_DUE) continue;
+    jobs.push({
+      devices,
+      mark: { token, uid: item.id, field: 'reviewPushDay', key },
+      payload: {
+        title: `${due} topics are ready to review`,
+        body: 'A few minutes of review now helps you remember them.',
+        tag: `review:${key}`,
+        href: '/learn/review',
+      },
+    });
+  }
+  return { active: active.length, jobs };
 }
 
 async function leagueJob(token, now) {
@@ -239,6 +280,7 @@ export default async function handler(req, res) {
   const dry = req.query?.dry === '1';
   const only = typeof req.query?.job === 'string' ? req.query.job : '';
   const runStreak = only ? only === 'streak' : true;
+  const runReview = only ? only === 'review' : true;
   const runLeague = only ? only === 'league' : new Date(now).getUTCDay() === 0; // Sundays
   webpush.setVapidDetails('https://grateapex.vercel.app', publicKey, privateKey);
 
@@ -248,6 +290,10 @@ export default async function handler(req, res) {
     if (runStreak) {
       const { candidates, jobs } = await streakJob(token, now);
       report.streak = { checked: candidates, ...(await sendAll(jobs, dry)) };
+    }
+    if (runReview) {
+      const { active, jobs } = await reviewJob(token, now);
+      report.review = { checked: active, ...(await sendAll(jobs, dry)) };
     }
     if (runLeague) {
       const { week, members, jobs } = await leagueJob(token, now);

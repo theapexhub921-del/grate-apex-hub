@@ -155,3 +155,11 @@ test('a learner-chosen reminder hour opens a five-hour window; no choice keeps 1
   assert.equal(inReminderHours(14, 8), false);
   assert.equal(inReminderHours(23, 22), true);
 });
+
+test('review reminders count only entries that are due', async () => {
+  const { reviewDueCount, REVIEW_MIN_DUE } = await import('../api/_push-logic.mjs');
+  const now = 1_000_000;
+  assert.equal(reviewDueCount([{ dueAt: 999_999 }, { dueAt: 1_000_000 }, { dueAt: 1_000_001 }, { dueAt: 'x' }, null], now), 2);
+  assert.equal(reviewDueCount(undefined, now), 0);
+  assert.ok(REVIEW_MIN_DUE >= 1);
+});

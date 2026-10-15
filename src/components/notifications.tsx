@@ -18,7 +18,7 @@ import { type AppNotification, buildNotifications, markNotificationsRead, useRea
 import { useNotificationPreferences, usePushNotificationsPreference } from '@/data/settings';
 import { markSocialNotificationsRead, readSocialNotificationIds, socialAppNotifications, useSocial } from '@/data/social';
 import { useTheme, useThemedStyles } from '@/hooks/use-theme';
-import { showDeviceNotification } from '@/lib/device-notifications';
+import { clearAppBadge, showDeviceNotification } from '@/lib/device-notifications';
 import { registerWebPush } from '@/lib/web-push';
 import { useMessageNotifications } from '@/data/message-notifications';
 import { markAccountNotificationsRead, useAccountNotifications } from '@/data/account-notifications';
@@ -81,6 +81,15 @@ export function DeviceNotificationBridge() {
   const seen = useRef(new Set<string>());
   const started = useRef(false);
   const [toast, setToast] = useState<AppNotification | null>(null);
+
+  // Opening the app (or coming back to it) clears the number on the app icon.
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    void clearAppBadge();
+    const onVisible = () => { if (document.visibilityState === 'visible') void clearAppBadge(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, []);
 
   // With alerts on, this browser also registers for push, so messages arrive even when the app is closed.
   // It is repeated whenever the app comes back to the screen: phones rotate push

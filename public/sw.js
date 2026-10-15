@@ -53,6 +53,16 @@ self.addEventListener('fetch', (event) => {
   })());
 });
 
+// The number on the app icon = alerts still waiting in the notification centre.
+// (Alerts with the same tag replace each other, so this is a fair unread count.)
+async function syncBadge() {
+  try {
+    const waiting = (await self.registration.getNotifications()).length;
+    if (waiting > 0) await navigator.setAppBadge?.(waiting);
+    else await navigator.clearAppBadge?.();
+  } catch { /* badges are optional */ }
+}
+
 // Push from the server (api/push.mjs): new messages while the app is closed or in the background.
 // When the app is open on screen it shows its own toast, so no system alert then.
 self.addEventListener('push', (event) => {
@@ -76,6 +86,7 @@ self.addEventListener('push', (event) => {
       renotify: Boolean(data.tag),
       data: { href: data.href || '/' },
     });
+    await syncBadge();
   })());
 });
 
@@ -83,6 +94,7 @@ self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const href = event.notification.data?.href || '/';
   event.waitUntil((async () => {
+    await syncBadge();
     const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
     const existing = windows[0];
     if (existing) {
