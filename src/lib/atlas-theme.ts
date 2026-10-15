@@ -66,6 +66,9 @@ export function atlasThemeVars(colors: ThemeColors): AtlasThemeVars {
 
 // The atlas page lives in public/, so on the web it is served from the app's own address.
 export const ATLAS_PAGE = '/atlas/skeleton.html';
+// The deployed site (Vercel "clean URLs") redirects the .html address to this one, so phones
+// open this one directly and skip the redirect.
+export const ATLAS_PAGE_DEPLOYED = '/atlas/skeleton';
 
 export function atlasHash(vars: AtlasThemeVars): string {
   return `#theme=${encodeURIComponent(JSON.stringify(vars))}`;

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { BackLink } from '@/components/learning/nav-bits';
+import { SkeletonAtlas } from '@/components/learning/skeleton-atlas';
 import { LegacyCourseTile } from '@/components/learning/legacy-course-tile';
 import { CoursePracticeModes } from '@/components/learning/course-practice-modes';
 import { Button } from '@/components/ui/button';
@@ -12,6 +13,7 @@ import { Card, Interactive, PressableCard } from '@/components/ui/interactive';
 import { Pill } from '@/components/ui/pill';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import { Screen, SectionHeader } from '@/components/ui/screen';
+import { SegmentedControl } from '@/components/ui/segmented-control';
 import { ErrorScreen, LoadingState } from '@/components/ui/state-views';
 import { Text } from '@/components/ui/text';
 import { Type, type ThemeColors } from '@/constants/theme';
@@ -31,7 +33,7 @@ export default function LegacyCourseScreen() {
   const drafts = useQuizDrafts();
   const styles = useThemedStyles(createStyles);
   const colors = useTheme();
-  const params = useLocalSearchParams<{ course?: string | string[] }>();
+  const params = useLocalSearchParams<{ course?: string | string[]; tab?: string | string[] }>();
   const course = legacyCourse(param(params.course));
   const progress = useProgress();
   const history = useQuestionHistory();
@@ -42,6 +44,8 @@ export default function LegacyCourseScreen() {
   const [sets, setSets] = useState<{ id: string; name: string; count: number }[] | null>(null);
   const [sectionsRead, setSectionsRead] = useState<Record<string, number>>({});
   const [error, setError] = useState<string | null>(null);
+  // Anatomy also has the 3D skeleton atlas: add &tab=atlas to the address (e.g. ?course=hb2-anatomy&tab=atlas) to open it directly.
+  const [tab, setTab] = useState<'lessons' | 'atlas'>(param(params.tab) === 'atlas' ? 'atlas' : 'lessons');
 
   useEffect(() => {
     if (!course) return;
@@ -57,6 +61,9 @@ export default function LegacyCourseScreen() {
   if (!course) return <ErrorScreen title="Course not found" message="Open a course from Study." primary={{ label: 'Back to Study', onPress: () => router.replace(routes.learn()) }} />;
   if (error) return <ErrorScreen title="Course unavailable" message={error} primary={{ label: 'Back to Study', onPress: () => router.replace(routes.learn()) }} />;
   if (!lessons) return <LoadingState label="Loading lessons…" />;
+
+  // The anatomy courses (HB1 "anatomy" and HB2 "hb2-anatomy") also have the 3D skeleton atlas.
+  const isAnatomy = course.id === 'anatomy' || course.id === 'hb2-anatomy';
 
   const done = lessons.filter((lesson) => completed.has(lesson.id)).length;
   // Topics (HB2): each gets a clear heading in the path — its number, lessons and progress.
@@ -89,6 +96,23 @@ export default function LegacyCourseScreen() {
         </View>
       </Card>
 
+      {isAnatomy ? (
+        <SegmentedControl
+          label="Anatomy sections"
+          value={tab}
+          onChange={setTab}
+          options={[
+            { value: 'lessons', label: 'Lessons' },
+            { value: 'atlas', label: 'Atlas' },
+          ]}
+          style={styles.tabs}
+        />
+      ) : null}
+
+      {isAnatomy && tab === 'atlas' ? (
+        <SkeletonAtlas />
+      ) : (
+        <>
       {review && review.tracked > 0 ? (
         <Card style={styles.reviewCard}>
           <View style={styles.reviewText}>
@@ -202,12 +226,15 @@ export default function LegacyCourseScreen() {
           </View>
         </>
       ) : null}
+        </>
+      )}
     </Screen>
   );
 }
 
 function createStyles(colors: ThemeColors) {
   return StyleSheet.create({
+    tabs: { marginBottom: 16 },
     flex: { flex: 1, minWidth: 0 },
     header: { flexDirection: 'row', flexWrap: 'wrap', gap: 18, padding: 20, marginTop: 8 },
     headerText: { flex: 1, minWidth: 240, gap: 8 },

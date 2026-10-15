@@ -6,7 +6,7 @@ import { Card } from '@/components/ui/interactive';
 import { Text } from '@/components/ui/text';
 import { Type, type ThemeColors } from '@/constants/theme';
 import { useTheme, useThemedStyles } from '@/hooks/use-theme';
-import { ATLAS_PAGE, atlasHash, atlasThemeVars } from '@/lib/atlas-theme';
+import { ATLAS_PAGE_DEPLOYED, atlasHash, atlasThemeVars } from '@/lib/atlas-theme';
 
 // Where the atlas page is hosted for the phone apps (same address the app already uses for its API).
 const SITE = process.env.EXPO_PUBLIC_API_BASE || 'https://grateapex.vercel.app';
@@ -18,7 +18,7 @@ export function SkeletonAtlas() {
   const styles = useThemedStyles(createStyles);
 
   const open = () => {
-    void WebBrowser.openBrowserAsync(`${SITE}${ATLAS_PAGE}${atlasHash(atlasThemeVars(colors))}`);
+    void WebBrowser.openBrowserAsync(`${SITE}${ATLAS_PAGE_DEPLOYED}${atlasHash(atlasThemeVars(colors))}`);
   };
 
   return (
