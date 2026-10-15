@@ -315,7 +315,13 @@ The full redesign rationale is in `docs/redesign-notes.md`.
 
 * `src/data/notifications.ts` derives notifications from real learning state. Only read marks are stored, on the device.
 * The bell and centre UI are in `src/components/notifications.tsx`.
-* Phone and computer alerts that arrive when the app is closed (messages, follows, likes, comments, **battle challenges and results**) go through `api/push.mjs`; **streak-at-risk and weekly league reminders** are sent on a daily schedule by `api/reminders.mjs` (needs `FIREBASE_SERVICE_ACCOUNT` and `CRON_SECRET` in Vercel). Shared rules are in `api/_push-logic.mjs`, checked by `tests/push-logic.test.mjs`. Setup, switches and a safe dry run: `docs/push-notifications.md`.
+* Phone and computer alerts that arrive when the app is closed (messages, follows, likes, comments, **battle challenges and results**) go through `api/push.mjs`; **streak-at-risk, review-due, weekly league and Sunday weekly-summary pushes** are sent on a daily schedule by `api/reminders.mjs` (needs `FIREBASE_SERVICE_ACCOUNT` and `CRON_SECRET` in Vercel). Shared rules are in `api/_push-logic.mjs`, checked by `tests/push-logic.test.mjs`. Setup, switches and a safe dry run: `docs/push-notifications.md`.
+
+### Offline study
+
+* `public/sw.js` keeps the app shell, scripts, pages already visited, question banks (`/curriculum/*.json`, shown from the saved copy and refreshed in the background) and lecture diagrams (`/figures/*`). Banks and diagrams live in the `grateapex-offline-v1` cache, which app updates never delete.
+* Settings → Offline study (`src/components/offline-study-card.tsx`, `src/data/offline-study.ts`, `src/lib/offline-study.ts`) downloads a class's banks, diagrams, original lessons and lesson pictures on request. Lesson text, pictures and the lesson list are stored in the same cache on the web (not localStorage, which is too small); `legacy-study.ts` reads them when there is no connection.
+* If you change `OFFLINE_CACHE`, change it in both `public/sw.js` and `src/lib/offline-study.ts`.
 
 ### Locked elements
 

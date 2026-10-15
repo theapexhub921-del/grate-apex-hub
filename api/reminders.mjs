@@ -1,6 +1,6 @@
 // GET /api/reminders   (run once a day by Vercel Cron, see vercel.json)
 //   Authorization: Bearer <CRON_SECRET>      (Vercel adds this itself when CRON_SECRET is set)
-//   ?job=streak | review | league   run only one job (for testing); default: streak every day, league on Sundays
+//   ?job=streak | review | league | weekly   run only one job (for testing); default: streak and review every day, league and weekly on Sundays
 //   ?dry=1                 count who WOULD be alerted, send nothing
 //
 // Two scheduled pushes that no learner's app can send for itself, because the
@@ -10,16 +10,18 @@
 //    zone is saved with the device in registerWebPush; UTC if unknown).
 //  - LEAGUE (Sundays): where they stand in this week's league, whether they are in
 //    the promotion zone, close to dropping, or how many XP from promotion.
+//  - WEEKLY SUMMARY (Sundays, their own evening): the week's XP, questions answered and
+//    streak, once a week, only to learners who studied that week.
 //
 // Unlike api/push.mjs this does not act for a signed-in learner, so it needs
 // permission to read every learner's data: a Firebase service account, saved in
 // Vercel as FIREBASE_SERVICE_ACCOUNT (the whole JSON file, or that JSON in base64).
 // Learners' notification switches (Settings → Notifications: Streak reminders,
-// League) are honoured. Deliveries use the same push keys as api/push.mjs.
+// League, Weekly summary) are honoured. Deliveries use the same push keys as api/push.mjs.
 import { importPKCS8, SignJWT } from 'jose';
 import webpush from 'web-push';
 
-import { inReminderHours, leagueNudge, leagueWeek, localDay, pushAddress, REVIEW_MIN_DUE, reviewDueCount, streakAtRisk } from './_push-logic.mjs';
+import { inReminderHours, isSundayLocal, leagueNudge, leagueWeek, localDay, localWeekStart, pushAddress, REVIEW_MIN_DUE, reviewDueCount, streakAtRisk, weeklySummary } from './_push-logic.mjs';
 
 const PROJECT = 'grate-apex';
 const DB = `projects/${PROJECT}/databases/(default)/documents`;
@@ -238,6 +240,70 @@ async function reviewJob(token, now) {
   return { active: active.length, jobs };
 }
 
+/** Questions a learner answered in quizzes since `sinceMs` (sum of their attempts' sizes), or null if it could not be read. */
+async function questionsSince(token, uid, sinceMs) {
+  try {
+    const response = await api(token, `/progress/${encodeURIComponent(uid)}:runQuery`, {
+      method: 'POST',
+      body: JSON.stringify({
+        structuredQuery: {
+          from: [{ collectionId: 'attempts' }],
+          where: { fieldFilter: { field: { fieldPath: 'completedAt' }, op: 'GREATER_THAN_OR_EQUAL', value: { integerValue: String(Math.round(sinceMs)) } } },
+          select: { fields: [{ fieldPath: 'total' }] },
+          limit: 500,
+        },
+      }),
+    });
+    if (!response.ok) return null;
+    return (await response.json()).filter((row) => row.document).reduce((sum, row) => sum + (Number(fieldsOf(row.document).total) || 0), 0);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Sunday's "your week" summary, sent once a week in the learner's own Sunday evening.
+ * XP: lifetime XP minus this week's league start point, so it is only known for learners whose
+ * league entry is for this week (the summary then leaves the XP out rather than guess).
+ */
+async function weeklyJob(token, now) {
+  const progress = await listAll(token, 'progress', ['xp', 'streak', 'lastActivityDate']);
+  // Only learners who studied in the last 8 days can have something to report ('YYYY-MM-DD' compares as text).
+  const since = localDay(now - 8 * 86_400_000, 0).key;
+  const active = progress
+    .map((doc) => ({ id: idOf(doc), ...fieldsOf(doc) }))
+    .filter((item) => typeof item.lastActivityDate === 'string' && item.lastActivityDate >= since);
+  const users = await getMany(token, 'users', active.map((item) => item.id), ['webPush', 'preferences.notification_preferences', 'weeklyPushWeek', 'league']);
+  const ready = [];
+  for (const item of active) {
+    const user = users.get(item.id);
+    const devices = devicesFor(user, 'weeklySummary');
+    if (!devices.length) continue;
+    const tz = typeof devices[0].tz === 'number' ? devices[0].tz : 0;
+    const { key: today, hour } = localDay(now, tz);
+    const week = localWeekStart(now, tz);
+    const wanted = typeof devices[0].hour === 'number' ? devices[0].hour : undefined;
+    if (!isSundayLocal(now, tz) || !inReminderHours(hour, wanted) || user?.weeklyPushWeek === week.key) continue;
+    if (item.lastActivityDate < week.key) continue; // did not study this week
+    ready.push({ item, user, devices, tz, today, week });
+  }
+  const jobs = [];
+  for (let i = 0; i < ready.length; i += 25) {
+    const group = ready.slice(i, i + 25);
+    const questions = await Promise.all(group.map(({ item, week }) => questionsSince(token, item.id, week.startMs)));
+    group.forEach(({ item, user, devices, tz, today, week }, index) => {
+      const entry = user?.league;
+      const trusted = entry && entry.week === week.key && (Number(entry.startXp) > 0 || typeof entry.weeklyXp === 'number');
+      const xp = trusted ? Math.max(0, (Number(item.xp) || 0) - (Number(entry.startXp) || 0)) : null;
+      const alive = item.lastActivityDate === today || item.lastActivityDate === localDay(now - 86_400_000, tz).key;
+      const message = weeklySummary({ xp, questions: questions[index], streak: alive ? item.streak : 0 });
+      if (!message) return;
+      jobs.push({ devices, mark: { token, uid: item.id, field: 'weeklyPushWeek', key: week.key }, payload: { ...message, tag: `weekly:${week.key}`, href: '/progress' } });
+    });
+  }
+  return { active: active.length, jobs };
+}
+
 async function leagueJob(token, now) {
   const week = leagueWeek(now);
   const jobs = [];
@@ -282,6 +348,7 @@ export default async function handler(req, res) {
   const runStreak = only ? only === 'streak' : true;
   const runReview = only ? only === 'review' : true;
   const runLeague = only ? only === 'league' : new Date(now).getUTCDay() === 0; // Sundays
+  const runWeekly = only ? only === 'weekly' : new Date(now).getUTCDay() === 0; // Sundays (each learner's own Sunday evening is checked inside)
   webpush.setVapidDetails('https://grateapex.vercel.app', publicKey, privateKey);
 
   const report = { dry };
@@ -298,6 +365,10 @@ export default async function handler(req, res) {
     if (runLeague) {
       const { week, members, jobs } = await leagueJob(token, now);
       report.league = { week, members, ...(await sendAll(jobs, dry)) };
+    }
+    if (runWeekly) {
+      const { active, jobs } = await weeklyJob(token, now);
+      report.weekly = { checked: active, ...(await sendAll(jobs, dry)) };
     }
   } catch (problem) {
     return res.status(500).json({ error: problem instanceof Error ? problem.message : 'The reminders failed.', ...report });

@@ -9,6 +9,7 @@ import { ATMOSPHERE } from '@/components/atmosphere/config';
 import { useOriginalAutoHide } from '@/components/experience/legacy-navigation';
 import { useIsAdmin, useThemeLocks } from '@/components/experience/experience-sync';
 import { BackLink } from '@/components/learning/nav-bits';
+import { OfflineStudyCard } from '@/components/offline-study-card';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
 import { Interactive } from '@/components/ui/interactive';
@@ -95,6 +96,7 @@ const notificationOptions: { key: NotificationCategory; label: string; descripti
   { key: 'socialEngagement', label: 'Social engagement', description: 'Reactions and replies to your posts.' },
   { key: 'battles', label: 'Battles', description: 'Challenges from friends and how your battles ended.' },
   { key: 'league', label: 'League', description: 'Your weekly league standing and promotions.' },
+  { key: 'weeklySummary', label: 'Weekly summary', description: 'A Sunday message with your week’s XP, questions answered and streak.' },
 ];
 
 // Settings are grouped into collapsible sections and opened from the gear
@@ -456,6 +458,10 @@ export default function SettingsScreen() {
           </View>
           <Icon name="chevronRight" size={18} color={colors.textTertiary} />
         </Interactive>
+      </SettingsSection>
+
+      <SettingsSection title="Offline study">
+        <OfflineStudyCard />
       </SettingsSection>
 
       <SettingsSection title="Install on your devices">

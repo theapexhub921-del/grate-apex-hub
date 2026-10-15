@@ -109,6 +109,41 @@ export function reviewDueCount(items, now) {
   return items.filter((item) => item && typeof item.dueAt === 'number' && item.dueAt <= now).length;
 }
 
+// ── Weekly summary ────────────────────────────────────────────────────
+
+/** The weekly summary goes out on Sunday, in the same evening hours as the other reminders. */
+export const isSundayLocal = (time, tzOffsetMinutes = 0) => new Date(time - (Number(tzOffsetMinutes) || 0) * 60_000).getUTCDay() === 0;
+
+/**
+ * Monday 00:00 of the learner's own week (their time zone) containing `time`:
+ * { key: 'YYYY-MM-DD', startMs } where startMs is that moment as a real timestamp.
+ * `key` doubles as "this week" when remembering that the summary was sent.
+ */
+export function localWeekStart(time, tzOffsetMinutes = 0) {
+  const tz = Number(tzOffsetMinutes) || 0;
+  const d = new Date(time - tz * 60_000); // wall-clock time, read with the UTC getters
+  d.setUTCHours(0, 0, 0, 0);
+  d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+  return { key: `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`, startMs: d.getTime() + tz * 60_000 };
+}
+
+const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
+/**
+ * The Sunday summary for one learner, or null when there is nothing true to say.
+ * `xp` is null when the week's XP is unknown (only learners with this week's league entry have it);
+ * `questions` counts questions answered in quizzes this week; `streak` is the current streak (0 if broken).
+ * Zero and unknown figures are left out, and a week with nothing at all sends nothing.
+ */
+export function weeklySummary({ xp, questions, streak }) {
+  const parts = [];
+  if (Number.isFinite(xp) && xp > 0) parts.push(`${Math.round(xp).toLocaleString('en-US')} XP`);
+  if (Number.isFinite(questions) && questions > 0) parts.push(`${plural(Math.round(questions), 'question', 'questions')} answered`);
+  if (Number.isFinite(streak) && streak > 0) parts.push(`${streak}-day streak`);
+  if (!parts.length) return null;
+  return { title: 'Your week on GrAte Apex Hub', body: `${parts.join(' · ')}. A new week starts tomorrow.` };
+}
+
 // ── Leagues ───────────────────────────────────────────────────────────
 
 export const LEAGUE_NAMES = ['Bronze', 'Silver', 'Gold', 'Sapphire', 'Ruby', 'Emerald', 'Amethyst', 'Pearl', 'Obsidian', 'Diamond'];

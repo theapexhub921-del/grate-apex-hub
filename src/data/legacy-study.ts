@@ -17,6 +17,7 @@ import { Platform } from 'react-native';
 
 import type { ClassSelection } from '@/data/class-curriculum';
 import { auth, db } from '@/lib/firebase';
+import { isOffline, offlineSupported, readOffline, readSavedFile, writeOffline } from '@/lib/offline-study';
 import { type BankQuestion } from '@/data/legacy-questions';
 import { HB2_COURSES, hb2Course, hb2LessonById, hb2Lessons, hb2Sets, lessonBody } from '@/data/hb2-study';
 import type { SubjectId } from '@/data/lesson-types';
@@ -81,8 +82,21 @@ let lessonList: Promise<LegacyLessonMeta[]> | null = null;
 /** Every original lesson's title and sections (the list is open to any signed-in student). */
 export function loadLegacyLessonList(): Promise<LegacyLessonMeta[]> {
   if (!lessonList) {
-    lessonList = getDocs(collection(db, 'lessons'))
-      .then((snap) => snap.docs.map((item) => ({ ...(item.data() as Omit<LegacyLessonMeta, 'id'>), id: item.id, course: item.id.split('-')[0] })).sort((a, b) => a.order - b.order))
+    // With no connection (or when the database cannot be reached) the copy saved on the last visit is used.
+    const saved = async (error: unknown) => {
+      const list = await readOffline<LegacyLessonMeta[]>('lesson-list');
+      if (list?.length) return list;
+      throw error;
+    };
+    lessonList = (isOffline()
+      ? saved(new Error('You are offline and the lessons have not been saved on this device yet.'))
+      : getDocs(collection(db, 'lessons'))
+        .then((snap) => snap.docs.map((item) => ({ ...(item.data() as Omit<LegacyLessonMeta, 'id'>), id: item.id, course: item.id.split('-')[0] })).sort((a, b) => a.order - b.order))
+        .then((list) => {
+          void writeOffline('lesson-list', list);
+          return list;
+        })
+        .catch(saved))
       .catch((error) => {
         lessonList = null;
         throw error;
@@ -112,18 +126,33 @@ export async function loadLegacyLessonBody(id: string): Promise<LegacyLessonBody
   const hit = bodyCache.get(id);
   if (hit) return hit;
   const key = `grateapex_legacy_lesson_${id}`;
+  // The copy kept for offline reading: browser cache on the web (it can hold a whole class; web storage is too small),
+  // AsyncStorage on phones. Lessons saved by earlier versions in AsyncStorage are still read.
+  const savedBody = async () => {
+    const offline = await readOffline<LegacyLessonBody>(`lesson/${id}`);
+    if (offline) return offline;
+    const old = await AsyncStorage.getItem(key).catch(() => null);
+    return old ? (JSON.parse(old) as LegacyLessonBody) : null;
+  };
   try {
+    if (isOffline()) {
+      const body = await savedBody();
+      if (body) {
+        bodyCache.set(id, body);
+        return body;
+      }
+    }
     const snap = await getDoc(doc(db, 'lessonContent', id));
     if (!snap.exists()) throw new Error('This lesson has not been published yet.');
     const data = snap.data() as LegacyLessonBody;
     const body = { sections: data.sections ?? [], extras: data.extras };
     bodyCache.set(id, body);
-    AsyncStorage.setItem(key, JSON.stringify(body)).catch(() => {});
+    if (offlineSupported()) void writeOffline(`lesson/${id}`, body);
+    else AsyncStorage.setItem(key, JSON.stringify(body)).catch(() => {});
     return body;
   } catch (error) {
-    const saved = await AsyncStorage.getItem(key).catch(() => null);
-    if (saved) {
-      const body = JSON.parse(saved) as LegacyLessonBody;
+    const body = await savedBody();
+    if (body) {
       bodyCache.set(id, body);
       return body;
     }
@@ -138,11 +167,16 @@ const images = new Map<string, Promise<string | null>>();
 export function loadLegacyImage(name: string): Promise<string | null> {
   const hit = images.get(name);
   if (hit) return hit;
-  const promise = getDoc(doc(db, 'lessonImages', name.replace(/\.[a-z]+$/i, '')))
-    .then((snap) => {
+  const id = name.replace(/\.[a-z]+$/i, '');
+  const saved = () => readOffline<string>(`image/${id}`);
+  const promise = (isOffline() ? saved() : getDoc(doc(db, 'lessonImages', id))
+    .then(async (snap) => {
       const rec = snap.data() as { mime?: string; data?: string } | undefined;
-      return rec?.mime && rec.data ? `data:${rec.mime};base64,${rec.data}` : null;
+      const url = rec?.mime && rec.data ? `data:${rec.mime};base64,${rec.data}` : null;
+      if (url) void writeOffline(`image/${id}`, url);
+      return url;
     })
+    .catch(saved))
     .catch(() => null);
   images.set(name, promise);
   return promise;
@@ -162,6 +196,12 @@ export function loadLegacyBank(courseId: string): Promise<LegacyBank> {
     .then((response) => {
       if (!response.ok) throw new Error('The question bank could not be loaded.');
       return response.json() as Promise<LegacyBank>;
+    })
+    // No connection and no worker serving it: the copy saved for offline study (Settings → Offline study), if any.
+    .catch(async (error) => {
+      const saved = await readSavedFile<LegacyBank>(`/curriculum/${courseId}.json`);
+      if (saved) return saved;
+      throw error;
     })
     .catch((error) => {
       banks.delete(courseId);

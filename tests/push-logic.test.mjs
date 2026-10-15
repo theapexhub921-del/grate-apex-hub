@@ -163,3 +163,40 @@ test('review reminders count only entries that are due', async () => {
   assert.equal(reviewDueCount(undefined, now), 0);
   assert.ok(REVIEW_MIN_DUE >= 1);
 });
+
+// ── Weekly summary ────────────────────────────────────────────────────
+test('the weekly summary is for Sundays in the learner’s own time zone', async () => {
+  const { isSundayLocal } = await import('../api/_push-logic.mjs');
+  const sundayEvening = Date.UTC(2026, 9, 18, 18, 0); // Sunday 18 Oct 2026, 18:00 UTC
+  assert.equal(isSundayLocal(sundayEvening, 0), true);
+  assert.equal(isSundayLocal(sundayEvening, 360), true); // UTC-6: Sunday 12:00
+  assert.equal(isSundayLocal(sundayEvening, -420), false); // UTC+7: already Monday 01:00
+  assert.equal(isSundayLocal(Date.UTC(2026, 9, 17, 18, 0), 0), false); // Saturday
+});
+
+test('a learner’s week starts on their own Monday, and the key is stable all week', async () => {
+  const { localWeekStart } = await import('../api/_push-logic.mjs');
+  const sundayEvening = Date.UTC(2026, 9, 18, 18, 0);
+  const utc = localWeekStart(sundayEvening, 0);
+  assert.equal(utc.key, '2026-10-12');
+  assert.equal(utc.startMs, Date.UTC(2026, 9, 12, 0, 0));
+  assert.equal(localWeekStart(Date.UTC(2026, 9, 12, 0, 0), 0).key, '2026-10-12'); // Monday 00:00 itself
+  assert.equal(localWeekStart(Date.UTC(2026, 9, 11, 23, 59), 0).key, '2026-10-05'); // a minute earlier is last week
+  // UTC-5 (offset +300): Monday 00:00 local is 05:00 UTC.
+  const west = localWeekStart(sundayEvening, 300);
+  assert.equal(west.key, '2026-10-12');
+  assert.equal(west.startMs, Date.UTC(2026, 9, 12, 5, 0));
+  // UTC+2 (offset -120): Monday 00:00 local is Sunday 22:00 UTC before.
+  assert.equal(localWeekStart(sundayEvening, -120).startMs, Date.UTC(2026, 9, 11, 22, 0));
+});
+
+test('the weekly summary says only what is known, and nothing for an empty week', async () => {
+  const { weeklySummary } = await import('../api/_push-logic.mjs');
+  const full = weeklySummary({ xp: 1240, questions: 86, streak: 5 });
+  assert.equal(full.title, 'Your week on GrAte Apex Hub');
+  assert.match(full.body, /^1,240 XP · 86 questions answered · 5-day streak\./);
+  assert.match(weeklySummary({ xp: 10, questions: 1, streak: 0 }).body, /^10 XP · 1 question answered\./);
+  assert.match(weeklySummary({ xp: null, questions: 12, streak: 3 }).body, /^12 questions answered · 3-day streak\./); // XP unknown: left out
+  assert.equal(weeklySummary({ xp: 0, questions: 0, streak: 0 }), null);
+  assert.equal(weeklySummary({ xp: null, questions: null, streak: 0 }), null);
+});

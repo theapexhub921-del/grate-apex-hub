@@ -1,4 +1,8 @@
-const CACHE_NAME = 'grateapex-pwa-v7';
+const CACHE_NAME = 'grateapex-pwa-v8';
+// Study material kept for offline revision (question banks, lecture diagrams, and what
+// Settings → Offline study saves: src/lib/offline-study.ts). A different prefix from
+// CACHE_PREFIX on purpose: an app update must never delete what a learner saved.
+const OFFLINE_CACHE = 'grateapex-offline-v1';
 const CACHE_PREFIX = 'grateapex-pwa-';
 const APP_SHELL = ['/', '/manifest.webmanifest', '/icons/grateapex-192.png', '/icons/grateapex-512.png'];
 const CACHEABLE_DESTINATIONS = new Set(['font', 'image', 'script', 'style']);
@@ -32,7 +36,57 @@ self.addEventListener('fetch', (event) => {
   if (request.mode === 'navigate') {
     // Always the newest page from the network (bypassing the HTTP cache); the
     // saved copy is only for offline use.
-    event.respondWith(fetch(request.url, { cache: 'no-store', credentials: 'same-origin' }).catch(async () => (await caches.match(request)) || (await caches.match('/'))));
+    event.respondWith((async () => {
+      try {
+        const response = await fetch(request.url, { cache: 'no-store', credentials: 'same-origin' });
+        // Keep the page just opened, so a screen visited once still opens with no connection.
+        if (response.ok && response.type === 'basic' && !response.redirected) {
+          const copy = response.clone();
+          event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.put(request, copy)).catch(() => undefined));
+        }
+        return response;
+      } catch {
+        // Offline: this exact page, the same page without its query string, or the app shell.
+        return (await caches.match(request)) || (await caches.match(request, { ignoreSearch: true })) || (await caches.match('/')) || Response.error();
+      }
+    })());
+    return;
+  }
+
+  const url = new URL(request.url);
+
+  // Question banks: show the saved copy straight away (the network can be slow or absent),
+  // and refresh it in the background (a cheap "has it changed?" check) for next time.
+  // A request that explicitly asks for a fresh copy (Settings → Offline study) goes to the network.
+  if (url.pathname.startsWith('/curriculum/') && url.pathname.endsWith('.json')) {
+    if (request.cache === 'reload' || request.cache === 'no-store') return;
+    event.respondWith((async () => {
+      const cache = await caches.open(OFFLINE_CACHE);
+      const cached = await cache.match(request);
+      const refresh = fetch(request.url, { cache: 'no-cache' }).then(async (response) => {
+        if (response.ok) await cache.put(request, response.clone());
+        return response;
+      });
+      if (cached) {
+        event.waitUntil(refresh.catch(() => undefined));
+        return cached;
+      }
+      return refresh;
+    })());
+    return;
+  }
+
+  // Lecture diagrams: once seen, they are kept for offline study.
+  if (url.pathname.startsWith('/figures/')) {
+    if (request.cache === 'reload' || request.cache === 'no-store') return;
+    event.respondWith((async () => {
+      const cache = await caches.open(OFFLINE_CACHE);
+      const cached = await cache.match(request);
+      if (cached) return cached;
+      const response = await fetch(request);
+      if (response.ok) await cache.put(request, response.clone());
+      return response;
+    })());
     return;
   }
 

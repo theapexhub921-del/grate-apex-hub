@@ -31,7 +31,7 @@ export type MessagingPermission = 'everyone' | 'friends';
 export type NotificationCategory =
   | 'friendActivity' | 'friendRequests' | 'messages' | 'groupActivity'
   | 'studyReminders' | 'learningReminders' | 'goalReminders' | 'streakReminders'
-  | 'announcements' | 'socialEngagement' | 'battles' | 'league';
+  | 'announcements' | 'socialEngagement' | 'battles' | 'league' | 'weeklySummary';
 export type NotificationPreferences = Record<NotificationCategory, boolean>;
 
 const defaultNotificationPreferences: NotificationPreferences = {
@@ -47,6 +47,7 @@ const defaultNotificationPreferences: NotificationPreferences = {
   socialEngagement: true,
   battles: true,
   league: true,
+  weeklySummary: true,
 };
 
 type SettingsData = {
