@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useMemo } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Text } from '@/components/ui/text';
 
@@ -15,6 +15,7 @@ import { Card } from '@/components/ui/interactive';
 import { Pill } from '@/components/ui/pill';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import { Columns, Screen, SectionHeader } from '@/components/ui/screen';
+import { SegmentedControl } from '@/components/ui/segmented-control';
 import { EmptyState } from '@/components/ui/state-views';
 import { Type, isDesktopWidth, type ThemeColors } from '@/constants/theme';
 import { classLessonCompletion, firstClassOffering, firstIncompleteClassBefore, isClassAhead, isSubjectOffered, makeClassSelection, readAcademicTrial, readClassSelection, sameClassSelection } from '@/data/class-curriculum';
@@ -29,12 +30,17 @@ import { useAuth } from '@/hooks/use-auth';
 import { useTheme, useThemedStyles } from '@/hooks/use-theme';
 import { param, routes } from '@/lib/routes';
 
-export function SubjectScreen({ subject }: { subject: SubjectId }) {
+// `atlas` (optional): an interactive atlas for the subject. When given, the page gets a
+// Courses | Atlas switch under its title, and the Atlas tab shows it in place of the course list.
+// Opening /learn/anatomy?tab=atlas lands straight on the atlas.
+export function SubjectScreen({ subject, atlas }: { subject: SubjectId; atlas?: ReactNode }) {
   const styles = useThemedStyles(createStyles);
   const { width } = useWindowDimensions();
   const desktop = isDesktopWidth(width);
   const { user } = useAuth();
-  const params = useLocalSearchParams<{ viewClass?: string | string[]; viewSemester?: string | string[] }>();
+  const params = useLocalSearchParams<{ viewClass?: string | string[]; viewSemester?: string | string[]; tab?: string | string[] }>();
+  const [tab, setTab] = useState<'courses' | 'atlas'>(param(params.tab) === 'atlas' ? 'atlas' : 'courses');
+  const showAtlas = Boolean(atlas) && tab === 'atlas';
   const ownSelection = readClassSelection(user?.user_metadata);
   const trial = readAcademicTrial(user?.user_metadata);
   const viewSelection = makeClassSelection(param(params.viewClass), Number(param(params.viewSemester))) ?? ownSelection;
@@ -91,6 +97,23 @@ export function SubjectScreen({ subject }: { subject: SubjectId }) {
         </View>
       </View>
 
+      {atlas ? (
+        <SegmentedControl
+          label={`${info.name} sections`}
+          value={tab}
+          onChange={setTab}
+          options={[
+            { value: 'courses', label: 'Courses' },
+            { value: 'atlas', label: 'Atlas' },
+          ]}
+          style={styles.tabs}
+        />
+      ) : null}
+
+      {showAtlas ? (
+        atlas
+      ) : (
+        <>
       {status === 'available' ? (
         <Card style={styles.summary}>
           <View style={styles.summaryRow}>
@@ -199,6 +222,8 @@ export function SubjectScreen({ subject }: { subject: SubjectId }) {
           ))}
         </View>
       ) : null}
+        </>
+      )}
     </Screen>
   );
 }
@@ -244,6 +269,7 @@ function TopicProgression({ topics, now }: { topics: TopicProgress[]; now: numbe
 function createStyles(colors: ThemeColors) {
   return StyleSheet.create({
     crumbs: { marginBottom: 14 },
+    tabs: { marginBottom: 18 },
     header: { flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 18 },
     emoji: { fontSize: 40 },
     headerText: { flex: 1 },
