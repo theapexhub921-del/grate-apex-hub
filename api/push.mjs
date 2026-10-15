@@ -5,6 +5,7 @@
 //   { kind: 'like', post, to }               someone liked your post
 //   { kind: 'comment', post, comment, to }   a comment on your post, or a reply to your comment
 //   { kind: 'battle', battle, to }           "challenged you to a battle"
+//   { kind: 'test' }                         a test push to the caller's own devices (returns each device's status)
 //   { kind: 'battle-result', battle, to }    the other player played / declined / finished a battle
 //
 // Sends a push to the recipient's phones and computers, so it
@@ -107,7 +108,7 @@ export default async function handler(req, res) {
   webpush.setVapidDetails('https://grateapex.vercel.app', publicKey, privateKey);
 
   /** Sends one payload to everything a person has registered; returns how many pushes went out. */
-  async function deliver(recipient, preference, payload) {
+  async function deliver(recipient, preference, payload, report) {
     if (recipient?.preferences?.notification_preferences?.[preference] === false) return 0;
     const devices = (Array.isArray(recipient?.webPush) ? recipient.webPush : [])
       .filter((device) => device && pushAddress(device.endpoint) && device.keys?.p256dh && device.keys?.auth)
@@ -115,7 +116,22 @@ export default async function handler(req, res) {
     const results = await Promise.allSettled(
       devices.map((device) => webpush.sendNotification({ endpoint: device.endpoint, keys: { p256dh: device.keys.p256dh, auth: device.keys.auth } }, JSON.stringify(payload), { TTL: 6 * 3600, urgency: 'high' }))
     );
+    // Say why a push failed (Apple answers 403 for a wrong/missing push key, 410 for a dead address).
+    results.forEach((result, index) => {
+      const host = new URL(devices[index].endpoint).hostname;
+      if (result.status === 'rejected') console.error('push failed', host, result.reason?.statusCode, String(result.reason?.body ?? result.reason?.message ?? '').slice(0, 200));
+      if (report) report.push({ host, status: result.status === 'fulfilled' ? result.value?.statusCode ?? 201 : result.reason?.statusCode ?? 0, detail: result.status === 'rejected' ? String(result.reason?.body ?? result.reason?.message ?? '').slice(0, 120) : undefined });
+    });
     return results.filter((result) => result.status === 'fulfilled').length;
+  }
+
+  if (kind === 'test') {
+    // A test push to the caller's own devices, with the push service's answer for each.
+    if (tooSoon(`${sender}:test`, 5_000)) return res.status(429).json({ error: 'Slow down.' });
+    const me = await read(`users/${sender}`, token);
+    const report = [];
+    const sent = await deliver(me, '__none__', { title: 'Test notification', body: 'Push is working on this device.', tag: 'test', href: '/settings' }, report);
+    return res.status(200).json({ sent, devices: report, registered: Array.isArray(me?.webPush) ? me.webPush.length : 0 });
   }
 
   if (kind === 'group') {

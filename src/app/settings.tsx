@@ -60,7 +60,7 @@ import { routes } from '@/lib/routes';
 import { signOut } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { enableDeviceNotifications } from '@/lib/device-notifications';
-import { unregisterWebPush } from '@/lib/web-push';
+import { sendTestPush, unregisterWebPush } from '@/lib/web-push';
 
 const HOME_HREF = '/' as Href;
 type ThemeSwatchScheme = Exclude<AppearancePreference, 'system'>;
@@ -394,6 +394,7 @@ export default function SettingsScreen() {
           />
         </View>
         {pushNotificationNotice ? <Text style={styles.optionDescription}>{pushNotificationNotice}</Text> : null}
+        {pushNotificationsEnabled && Platform.OS === 'web' ? <Button label="Send a test notification" variant="secondary" size="sm" onPress={() => { setPushNotificationNotice('Sending…'); void sendTestPush().then(setPushNotificationNotice); }} /> : null}
         {notificationOptions.map((option) => (
           <View key={option.key} style={styles.optionRow}>
             <View style={styles.flex}>

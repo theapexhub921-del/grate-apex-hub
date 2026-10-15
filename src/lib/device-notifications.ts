@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
 
 import type { AppNotification } from '@/data/notifications';
+import * as WebPush from '@/lib/web-push';
 
 export type DeviceNotificationResult = {
   granted: boolean;
@@ -34,7 +35,10 @@ function isSupported() {
 /** Ask from a learner-initiated action, then confirm that alerts are ready. */
 export async function enableDeviceNotifications(): Promise<DeviceNotificationResult> {
   if (!isSupported()) {
-    return { granted: false, message: 'Device notifications are available in the installed web app on supported browsers.' };
+    const ios = typeof navigator !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent);
+    return { granted: false, message: ios
+      ? 'On iPhone and iPad, notifications only work in the app installed on your Home Screen (iOS 16.4 or newer): tap Share → Add to Home Screen, open GrAte Apex Hub from that icon, then turn notifications on there.'
+      : 'Device notifications are available in the installed web app on supported browsers.' };
   }
 
   // Blocked before: browsers never ask again, so say how to unblock.
@@ -45,6 +49,12 @@ export async function enableDeviceNotifications(): Promise<DeviceNotificationRes
 
   if (permission !== 'granted') {
     return { granted: false, message: 'Notifications are off. You can allow them later in your browser or device settings.' };
+  }
+
+  // Register for push now so a failure is shown here instead of staying silent.
+  const registered = await WebPush.registerWebPush();
+  if (!registered && WebPush.webPushError) {
+    return { granted: false, message: `Allowed, but this device could not register for push: ${WebPush.webPushError}` };
   }
 
   // A confirmation alert, without waiting long for the background worker.

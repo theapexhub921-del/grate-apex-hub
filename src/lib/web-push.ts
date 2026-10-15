@@ -24,6 +24,9 @@ function keyBytes(base64: string) {
   return Uint8Array.from(raw, (char) => char.charCodeAt(0));
 }
 
+/** Why the last registerWebPush() failed (null when it worked or was skipped). */
+export let webPushError: string | null = null;
+
 type Device = { endpoint: string; keys: { p256dh: string; auth: string }; at: number; tz?: number };
 
 /** Minutes behind UTC (e.g. 0 in UTC, -60 in UTC+1): lets the server send streak reminders at a sensible local hour. */
@@ -31,6 +34,7 @@ const timeZoneOffset = () => new Date().getTimezoneOffset();
 
 /** Registers this browser for push and saves it on the account (call when alerts are on). */
 export async function registerWebPush() {
+  webPushError = null;
   if (!supported() || emulator || Notification.permission !== 'granted') return false;
   // After a reload the signed-in user is restored a moment later; without waiting,
   // the phone was never re-registered and a rotated push address stayed dead.
@@ -39,7 +43,7 @@ export async function registerWebPush() {
   if (!uid) return false;
   try {
     const registration = await Promise.race([navigator.serviceWorker.ready, new Promise<null>((resolve) => setTimeout(() => resolve(null), 5000))]);
-    if (!registration) return false;
+    if (!registration) { webPushError = 'The background service is not ready yet. Close and reopen the app, then try again.'; return false; }
     const serverKey = keyBytes(VAPID_PUBLIC_KEY);
     let subscription = await registration.pushManager.getSubscription();
     // A subscription made with an older push key can never be reached by the server's current key,
@@ -55,7 +59,7 @@ export async function registerWebPush() {
     }
     subscription ??= await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: serverKey });
     const json = subscription.toJSON() as { endpoint?: string; keys?: { p256dh?: string; auth?: string } };
-    if (!json.endpoint || !json.keys?.p256dh || !json.keys?.auth) return false;
+    if (!json.endpoint || !json.keys?.p256dh || !json.keys?.auth) { webPushError = 'This device returned an incomplete push address.'; return false; }
     const ref = doc(db, 'users', uid);
     const existing = ((await getDoc(ref)).data()?.webPush ?? []) as Device[];
     // Already saved as this account's newest device: nothing to write.
@@ -63,7 +67,8 @@ export async function registerWebPush() {
     const devices = [{ endpoint: json.endpoint, keys: { p256dh: json.keys.p256dh, auth: json.keys.auth }, at: Date.now(), tz: timeZoneOffset() }, ...existing.filter((device) => device?.endpoint && device.endpoint !== json.endpoint)].slice(0, MAX_DEVICES);
     await setDoc(ref, { webPush: devices }, { merge: true });
     return true;
-  } catch {
+  } catch (error) {
+    webPushError = error instanceof Error ? error.message : 'Could not register this device for push.';
     return false;
   }
 }
@@ -135,5 +140,21 @@ async function announce(body: Record<string, string>) {
     await fetch(`${SERVER}/api/push`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` }, body: JSON.stringify(body) });
   } catch {
     // the in-app notification still reaches them when they open the app
+  }
+}
+/** Sends a test push to this account's devices; returns a plain-words result. */
+export async function sendTestPush(): Promise<string> {
+  try {
+    const token = await auth.currentUser?.getIdToken();
+    if (!token) return 'Please sign in again.';
+    const response = await fetch(`${SERVER}/api/push`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` }, body: JSON.stringify({ kind: 'test' }) });
+    const data = (await response.json().catch(() => ({}))) as { error?: string; sent?: number; registered?: number; devices?: { host: string; status: number; detail?: string }[] };
+    if (!response.ok) return data.error ?? `The server answered ${response.status}.`;
+    if (!data.registered) return 'No device is registered on your account yet. Turn notifications off and on again in this app.';
+    const failed = (data.devices ?? []).filter((device) => device.status < 200 || device.status >= 300);
+    if (!failed.length) return `Sent to ${data.sent} device(s). If nothing arrives within a minute, check iPhone Settings → Notifications → GrAte Apex Hub.`;
+    return `Push failed: ${failed.map((device) => `${device.host} ${device.status}${device.detail ? ` (${device.detail})` : ''}`).join('; ')}`;
+  } catch {
+    return 'Could not reach the server.';
   }
 }
